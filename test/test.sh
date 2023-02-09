@@ -14,14 +14,15 @@ docker build --platform linux/x86_64 -t srp33/f4_test .
 
 mkdir -p data
 
-rm -rf f4py
-cp -r ../f4py .
+rm -rf f4
+cp -r ../src/f4 .
 
 dockerCommand="docker run -i -t --rm --platform linux/x86_64 --user $(id -u):$(id -g) -v $(pwd):/sandbox -v $(pwd)/data:/data -v /tmp:/tmp --workdir=/sandbox srp33/f4_test"
 
-$dockerCommand bash -c "time python3 build_tsv.py 10 10 10 10000 data/medium.tsv"
+#$dockerCommand bash -c "time python3 build_tsv.py 10 10 10 10000 data/medium.tsv"
 
-#TODO: Integrate f4py into the analysis paper tests. Check speed and optimize more, if needed.
+#TODO: Create requirements.txt based on the packages in Dockerfile and then simplify Dockerfile.
+#TODO: Integrate f4 into the analysis paper tests. Check speed and optimize more, if needed.
 #TODO: Address remaining TODO items in the code, remove unnecessary commented code.
 #TODO: Remove class structure so object orientation is not used.
 #TODO: Combine all information into a single file.
@@ -43,4 +44,4 @@ $dockerCommand python3 test.py
 # Clean up
 #######################################################
 
-rm -rf f4py
+rm -rf f4
