@@ -6,7 +6,7 @@
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
-project = 'f4py'
+project = 'f4'
 copyright = '2023, Stephen Piccolo'
 author = 'Stephen Piccolo'
 

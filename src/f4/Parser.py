@@ -1,4 +1,4 @@
-import f4py
+import f4
 import fastnumbers
 import glob
 from itertools import chain
@@ -34,7 +34,7 @@ class Parser:
         # Cache statistics in a dictionary.
         self.__stats = {}
         for ext in stats_file_extensions:
-            self.__stats[ext] = f4py.read_int_from_file(data_file_path, ext)
+            self.__stats[ext] = f4.read_int_from_file(data_file_path, ext)
 
     def __enter__(self):
         return self
@@ -59,7 +59,7 @@ class Parser:
         if not fltr:
             raise Exception("A filter must be specified.")
 
-        if not isinstance(fltr, f4py.NoFilter):
+        if not isinstance(fltr, f4.NoFilter):
             raise Exception("An object that inherits from NoFilter must be specified.")
 
         if out_file_type != "tsv":
@@ -109,7 +109,7 @@ class Parser:
         select_column_coords = [column_coords_dict[name] for name in select_columns]
 
         # This avoids having to check the decompression type each time we parse a value.
-        decompressor = f4py.get_decompressor(decompression_type, decompressor)
+        decompressor = f4.get_decompressor(decompression_type, decompressor)
         parse_function = self._get_parse_row_values_function(decompression_type)
 
         if out_file_path:
@@ -141,12 +141,12 @@ class Parser:
     def head(self, n = 10, select_columns=None, out_file_path=None, out_file_type="tsv"):
         if not select_columns:
             select_columns = []
-        self.query_and_save(f4py.HeadFilter(n, select_columns), select_columns, out_file_path=out_file_path, out_file_type=out_file_type)
+        self.query_and_save(f4.HeadFilter(n, select_columns), select_columns, out_file_path=out_file_path, out_file_type=out_file_type)
 
     def tail(self, n = 10, select_columns=None, out_file_path=None, out_file_type="tsv"):
         if not select_columns:
             select_columns = []
-        self.query_and_save(f4py.TailFilter(n, select_columns), select_columns, out_file_path=out_file_path, out_file_type=out_file_type)
+        self.query_and_save(f4.TailFilter(n, select_columns), select_columns, out_file_path=out_file_path, out_file_type=out_file_type)
 
     def get_num_rows(self):
         return int(len(self.__file_handles[""]) / self.__stats[".ll"])
@@ -158,13 +158,13 @@ class Parser:
 
     def get_column_type_from_name(self, column_name):
         try:
-            with f4py.IndexSearcher._get_index_parser(f"{self.data_file_path}.cn") as index_parser:
+            with f4.IndexSearcher._get_index_parser(f"{self.data_file_path}.cn") as index_parser:
                 return self._get_column_type_from_index(self._get_column_index_from_name(index_parser, column_name))
         except:
             raise Exception(f"A column with the name {column_name} does not exist.")
 
     def _get_column_index_from_name(self, index_parser, column_name):
-        position = f4py.IndexSearcher._get_identifier_row_index(index_parser, column_name.encode(), self.get_num_cols())
+        position = f4.IndexSearcher._get_identifier_row_index(index_parser, column_name.encode(), self.get_num_cols())
 
         if position < 0:
             raise Exception(f"Could not retrieve index because column named {column_name} was not found.")
@@ -176,7 +176,7 @@ class Parser:
 
     def _set_file_handle(self, ext):
         if ext not in self.__file_handles:
-            self.__file_handles[ext] = f4py.open_read_file(self.data_file_path, ext)
+            self.__file_handles[ext] = f4.open_read_file(self.data_file_path, ext)
 
         return self._get_file_handle(ext)
 
@@ -198,7 +198,7 @@ class Parser:
         #column_name_index_dict = {} #TODO
 
         if len(select_columns) == 0:
-            with f4py.Parser(self.data_file_path + ".cn", fixed_file_extensions=["", ".cc"], stats_file_extensions=[".ll", ".mccl"]) as cn_parser:
+            with f4.Parser(self.data_file_path + ".cn", fixed_file_extensions=["", ".cc"], stats_file_extensions=[".ll", ".mccl"]) as cn_parser:
                 coords = cn_parser._parse_data_coords([0, 1])
 
                 for row_index in range(self.get_num_cols()):
@@ -219,7 +219,7 @@ class Parser:
             all_columns = [x[1] for x in sorted(column_index_name_dict.items())]
             select_columns = all_columns
         else:
-            with f4py.IndexSearcher._get_index_parser(f"{self.data_file_path}.cn") as index_parser:
+            with f4.IndexSearcher._get_index_parser(f"{self.data_file_path}.cn") as index_parser:
                 select_columns = [name.encode() for name in select_columns]
                 all_columns = list(filter_column_set | set(select_columns))
 
@@ -244,7 +244,7 @@ class Parser:
         decompressor_file_path = f"{self.data_file_path}.cmpr"
 
         if os.path.exists(decompressor_file_path):
-            decompression_text = f4py.read_str_from_file(decompressor_file_path)
+            decompression_text = f4.read_str_from_file(decompressor_file_path)
 
             if decompression_text == b"z":
                 decompression_type = "zstd"
@@ -256,7 +256,7 @@ class Parser:
                 #    select_compression_dict = self._invert_decompression_dict(decompression_dict, select_columns)
 
                 for column_name in all_columns:
-                    bigram_size_dict[column_name] = f4py.get_bigram_size(len(decompressor[column_name]["map"]))
+                    bigram_size_dict[column_name] = f4.get_bigram_size(len(decompressor[column_name]["map"]))
 
         return select_columns, column_type_dict, column_coords_dict, decompression_type, decompressor, bigram_size_dict
 
@@ -336,7 +336,7 @@ class Parser:
         #     value = self.__parse_data_value(row_index, line_length, column_coords, file_handle).rstrip(b" ")
         #
         #     if decompression_type == "dictionary":
-        #         value = f4py.decompress(value, decompressor[column_name], bigram_size_dict[column_name])
+        #         value = f4.decompress(value, decompressor[column_name], bigram_size_dict[column_name])
         #
         #     return value
 
@@ -349,7 +349,7 @@ class Parser:
         #     value = self.__parse_data_value(row_index, line_length, column_coords, file_handle).rstrip(b" ")
         #
         #     if decompression_type == "dictionary":
-        #         value = f4py.decompress(value, decompressor[column_name], bigram_size_dict[column_name])
+        #         value = f4.decompress(value, decompressor[column_name], bigram_size_dict[column_name])
         #
         #     return value
         line = self._parse_data_value(row_index, line_length, [0, line_length], file_handle)
@@ -358,7 +358,7 @@ class Parser:
 
     def _parse_dictionary_compressed_row_value(self, row_index, column_coords, line_length, file_handle, decompression_type=None, decompressor=None, bigram_size_dict=None, column_name=None):
         value = self._parse_data_value(row_index, line_length, column_coords, file_handle).rstrip(b" ")
-        return f4py.decompress(value, decompressor[column_name], bigram_size_dict[column_name])
+        return f4.decompress(value, decompressor[column_name], bigram_size_dict[column_name])
 
     def _get_parse_row_values_function(self, decompression_type):
         if not decompression_type:
@@ -380,11 +380,11 @@ class Parser:
 
     def _parse_dictionary_compressed_row_values(self, row_index, column_coords, decompression_type=None, decompressor=None, bigram_size_dict=None, column_names=None):
             values = list(self._parse_data_values(row_index, self.__stats[".ll"], column_coords, self.__file_handles[""]))
-            return [f4py.decompress(values.pop(0), decompressor[column_name], bigram_size_dict[column_name]) for column_name in column_names]
+            return [f4.decompress(values.pop(0), decompressor[column_name], bigram_size_dict[column_name]) for column_name in column_names]
 
     def _get_decompression_dict(self, file_path, column_index_name_dict):
         with open(file_path, "rb") as cmpr_file:
-            return f4py.deserialize(cmpr_file.read())
+            return f4.deserialize(cmpr_file.read())
 
     #     compression_dict = {}
     #     with open(file_path, "rb") as cmpr_file:
@@ -394,7 +394,7 @@ class Parser:
 
     #             if column_index in column_index_name_dict:
     #                 column_name = column_index_name_dict[column_index]
-    #                 compression_dict[column_name] = f4py.deserialize(line_items[1])
+    #                 compression_dict[column_name] = f4.deserialize(line_items[1])
 
     #     #for column_index in column_index_name_dict.keys():
     #     #     compression_dict[column_index_name_dict[column_index]] = {}
@@ -413,7 +413,7 @@ class Parser:
     #     #             column_index = fastnumbers.fast_int(values[0])
 
     #     #             if column_index in column_indices_set:
-    #     #                 compressed_value = f4py.convert_bytes_to_int(values[2])
+    #     #                 compressed_value = f4.convert_bytes_to_int(values[2])
 
     #     #                 compression_dict[column_index_name_dict[column_index]]["map"][compressed_value] = values[1]
 

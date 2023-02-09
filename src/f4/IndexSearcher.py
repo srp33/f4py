@@ -1,4 +1,4 @@
-import f4py
+import f4
 import fastnumbers
 from itertools import chain
 from joblib import Parallel, delayed
@@ -216,22 +216,22 @@ class IndexSearcher:
         return passing_row_indices
 
     def _get_passing_row_indices_with_filter(index_file_path, fltr, end_index, num_processes):
-        with f4py.IndexSearcher._get_index_parser(index_file_path) as index_parser:
+        with f4.IndexSearcher._get_index_parser(index_file_path) as index_parser:
             line_length = index_parser._get_stat(".ll")
             coords = index_parser._parse_data_coords([0, 1])
             file_handle = index_parser._get_file_handle("")
 
-            lower_range = f4py.IndexSearcher._find_positions_g(index_parser, line_length, coords[0], file_handle, fltr, 0, end_index, operator.lt)
+            lower_range = f4.IndexSearcher._find_positions_g(index_parser, line_length, coords[0], file_handle, fltr, 0, end_index, operator.lt)
 
             if lower_range[0] == end_index:
                 return set()
 
             upper_position = IndexSearcher._search_with_filter(index_parser, line_length, coords[0], file_handle, lower_range[0], lower_range[1], end_index, fltr)
 
-            return f4py.IndexSearcher._retrieve_matching_row_indices(index_parser, coords[1], (lower_range[0], upper_position), num_processes)
+            return f4.IndexSearcher._retrieve_matching_row_indices(index_parser, coords[1], (lower_range[0], upper_position), num_processes)
 
     def _get_two_column_index_name(filter1, filter2):
         return "____".join([filter1.column_name.decode(), filter2.column_name.decode()])
 
     def _get_index_parser(index_file_path):
-        return f4py.Parser(index_file_path, fixed_file_extensions=["", ".cc"], stats_file_extensions=[".ll", ".mccl"])
+        return f4.Parser(index_file_path, fixed_file_extensions=["", ".cc"], stats_file_extensions=[".ll", ".mccl"])
