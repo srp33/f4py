@@ -1,0 +1,45 @@
+#####################################################
+# For software release:
+#####################################################
+
+* Filters.py - Can we filter without decompressing by converting self.value in constructor?
+    Looks like we can do it for some filter classes (String, StartsWith, EndsWith, Head, Tail), but not others.
+      If you don't do it, remove select_compression_dict as a parameter from filter_column_values().
+* Compress values in index files using our dictionary compression technique.
+* Use more options for compression type and only store compression dictionary when more than 256 combinations (?).
+* Store individual, serialized compression dictionaries on one line, using .cc file to indicate where each starts and ends.
+* Do compression at the bigram level.
+* Do bit-packing (see to01() function in bitarray module). Also https://wiki.python.org/moin/BitManipulation
+* Pandas integration
+  Instead of And, Or, FloatRange, etc. classes, use the same syntax that they use?
+* Raise a friendly exception if the user tries to do an indexed query when the index has not been created.
+* Allow user to specify missing values in Builder.convert() function.
+    When inferring column sizes and types, store missing values using a single character and replace them when the values are queried?
+* Support compressed indexes?
+* The current design supports filtering on all non-indexed columns or all indexed columns but not a combination of both. What to do if the user violates this? Maybe if there is not an index for all filter columns, we revert to the slow version and just give them a warning.
+* Support in_file_delimiter="," and out_file_type="csv"
+    Change in_file_delimiter to in_file_type?
+    Make sure exception when invalid value specified.
+* Make sure all arguments to public functions are fully validated in tests.
+* If possible, move functions out of Utilities.py. If you keep any public ones, document them.
+* Make all code consistent with PEP8 spec (using PyCharm)?
+* Create a GitHub build for running the tests.
+* Add documentation for all public functions.
+    Mention .gz file support.
+    Mention that if they specify tmp_dir_path, we assume that it is empty. It will not work if it is not.
+* Set up readthedocs.
+
+#####################################################
+# May or may not do:
+#####################################################
+
+* Support date and string (has at least one non-number and more than 50% of values are unique?) columns.
+* Support joins?
+* zstandard compression: Record line indices and starts positions in .cmpr file (in msgpack format) instead of "z"?
+* Use 64 kb blocks for zstandard compression, similar to bgzip?
+* Add function to Parser.py to return all unique values for a discrete column
+* Add function to Parser.py to get summary statistics for a numeric column
+* Support conversion from pandas DataFrame to F4 and vice versa
+* Provide explicit support for VCF format? Other bio formats?
+* Provide a way to stream a file as input and/or output?
+* If you have a column that has mostly numeric data but has a few non-numeric values, the code to check the type might store tons of numbers as numeric values. Tweak the code to put a cap on how many can be stored in the set.
