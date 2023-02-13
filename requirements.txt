@@ -1,0 +1,4 @@
+fastnumbers==3.2.1
+joblib==1.1.0
+msgspec==0.12.0
+zstandard==0.17.0 
