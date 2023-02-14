@@ -6,7 +6,6 @@ from joblib import Parallel, delayed
 import math
 import os
 import sys
-import zstandard
 
 class Parser:
     """
@@ -19,7 +18,7 @@ class Parser:
         data_file_path (str): The path to an existing F4 file.
     """
     #def __init__(self, data_file_path, fixed_file_extensions=["", ".cc", ".ct"], stats_file_extensions=[".ll", ".mccl", ".nrow", ".ncol"]):
-    def __init__(self, data_file_path, fixed_file_extensions=["", ".cc", ".ct"], stats_file_extensions=[".ll", ".mccl"]):
+    def __init__(self, data_file_path, fixed_file_extensions=[".data", ".cc", ".ct"], stats_file_extensions=[".ll", ".mccl"]):
         #TODO: expand this out for the other parameters.
         if not isinstance(data_file_path, str):
             raise Exception("You must specify data_file_path as an str value.")
@@ -43,12 +42,12 @@ class Parser:
         for handle in self.__file_handles.values():
             handle.close()
 
-    def query_and_save(self, fltr, select_columns, out_file_path=None, out_file_type="tsv", num_processes=1, lines_per_chunk=10):
+    def query_and_write(self, fltr, select_columns, out_file_path=None, out_file_type="tsv", num_processes=1, lines_per_chunk=10):
         """
         Query the data file using zero or more filters.
 
         This function accepts filtering criteria, identifies matching rows,
-        and saves the output (for select columns) to an output file.
+        and writes the output (for select columns) to an output file or standard output.
 
         Args:
             fltr (BaseFilter): A filter.
@@ -116,7 +115,7 @@ class Parser:
             # Write output (in chunks)
             with open(out_file_path, 'wb') as out_file:
                 out_file.write(b"\t".join(select_columns) + b"\n") # Header line
-                
+
                 out_lines = []
                 for row_index in keep_row_indices:
                     out_values = parse_function(row_index, select_column_coords, decompression_type, decompressor, bigram_size_dict, select_columns)
@@ -141,15 +140,15 @@ class Parser:
     def head(self, n = 10, select_columns=None, out_file_path=None, out_file_type="tsv"):
         if not select_columns:
             select_columns = []
-        self.query_and_save(f4.HeadFilter(n, select_columns), select_columns, out_file_path=out_file_path, out_file_type=out_file_type)
+        self.query_and_write(f4.HeadFilter(n, select_columns), select_columns, out_file_path=out_file_path, out_file_type=out_file_type)
 
     def tail(self, n = 10, select_columns=None, out_file_path=None, out_file_type="tsv"):
         if not select_columns:
             select_columns = []
-        self.query_and_save(f4.TailFilter(n, select_columns), select_columns, out_file_path=out_file_path, out_file_type=out_file_type)
+        self.query_and_write(f4.TailFilter(n, select_columns), select_columns, out_file_path=out_file_path, out_file_type=out_file_type)
 
     def get_num_rows(self):
-        return int(len(self.__file_handles[""]) / self.__stats[".ll"])
+        return int(len(self.__file_handles[".data"]) / self.__stats[".ll"])
         #return self.__stats[".nrow"]
 
     def get_num_cols(self):
@@ -198,7 +197,7 @@ class Parser:
         #column_name_index_dict = {} #TODO
 
         if len(select_columns) == 0:
-            with f4.Parser(self.data_file_path + ".cn", fixed_file_extensions=["", ".cc"], stats_file_extensions=[".ll", ".mccl"]) as cn_parser:
+            with f4.Parser(self.data_file_path + ".cn", fixed_file_extensions=[".data", ".cc"], stats_file_extensions=[".ll", ".mccl"]) as cn_parser:
                 coords = cn_parser._parse_data_coords([0, 1])
 
                 for row_index in range(self.get_num_cols()):
@@ -369,17 +368,17 @@ class Parser:
             return self._parse_dictionary_compressed_row_values
 
     def _parse_row_values(self, row_index, column_coords, decompression_type=None, decompressor=None, bigram_size_dict=None, column_names=None):
-        return list(self._parse_data_values(row_index, self.__stats[".ll"], column_coords, self.__file_handles[""]))
+        return list(self._parse_data_values(row_index, self.__stats[".ll"], column_coords, self.__file_handles[".data"]))
 
     def _parse_zstd_compressed_row_values(self, row_index, column_coords, decompression_type=None, decompressor=None, bigram_size_dict=None, column_names=None):
         line_length = self.__stats[".ll"]
-        line = self._parse_data_value(row_index, line_length, [0, line_length], self.__file_handles[""])
+        line = self._parse_data_value(row_index, line_length, [0, line_length], self.__file_handles[".data"])
         line = decompressor.decompress(line)
 
         return list(self._parse_data_values(0, 0, column_coords, line))
 
     def _parse_dictionary_compressed_row_values(self, row_index, column_coords, decompression_type=None, decompressor=None, bigram_size_dict=None, column_names=None):
-            values = list(self._parse_data_values(row_index, self.__stats[".ll"], column_coords, self.__file_handles[""]))
+            values = list(self._parse_data_values(row_index, self.__stats[".ll"], column_coords, self.__file_handles[".data"]))
             return [f4.decompress(values.pop(0), decompressor[column_name], bigram_size_dict[column_name]) for column_name in column_names]
 
     def _get_decompression_dict(self, file_path, column_index_name_dict):
@@ -400,14 +399,14 @@ class Parser:
     #     #     compression_dict[column_index_name_dict[column_index]] = {}
     #     #     compression_dict[column_index_name_dict[column_index]]["map"] = {}
 
-    #     # with Parser(file_path, fixed_file_extensions=["", ".cc"], stats_file_extensions=[".ll", ".mccl"]) as parser:
+    #     # with Parser(file_path, fixed_file_extensions=[".data", ".cc"], stats_file_extensions=[".ll", ".mccl"]) as parser:
     #     #     coords = parser._parse_data_coords([0, 1, 2])
-    #     #     num_rows = fastnumbers.fast_int((len(parser.get_file_handle("")) + 1) / parser.get_stat(".ll"))
+    #     #     num_rows = fastnumbers.fast_int((len(parser.get_file_handle(".data")) + 1) / parser.get_stat(".ll"))
 
     #     #     # Use a set for performance reasons
     #     #     column_indices_set = set(column_index_name_dict.keys())
 
-    #     #     with Parser(f"{self.data_file_path}.cmpr", fixed_file_extensions=["", ".cc"], stats_file_extensions=[".ll", ".mccl"]) as parser:
+    #     #     with Parser(f"{self.data_file_path}.cmpr", fixed_file_extensions=[".data", ".cc"], stats_file_extensions=[".ll", ".mccl"]) as parser:
     #     #         for row_index in range(num_rows):
     #     #             values = parser.__parse_row_values(row_index, coords)
     #     #             column_index = fastnumbers.fast_int(values[0])
@@ -422,7 +421,7 @@ class Parser:
     #     # # for i, column_name in enumerate(column_names):
     #     # #     compression_dict2[column_name] = compression_dict[column_indices[i]]
 
-    #     # with Parser(f"{self.data_file_path}.cmprtype", fixed_file_extensions=[""], stats_file_extensions=[".ll"]) as parser:
+    #     # with Parser(f"{self.data_file_path}.cmprtype", fixed_file_extensions=[".data"], stats_file_extensions=[".ll"]) as parser:
     #     #     coords = [[0, 1]]
 
     #     #     for column_index in column_index_name_dict.keys():

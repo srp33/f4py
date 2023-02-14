@@ -1,6 +1,5 @@
 import f4
 import fastnumbers
-#from joblib import Parallel, delayed
 import operator
 import os
 import re
@@ -38,10 +37,10 @@ class __SimpleBaseFilter(NoFilter):
         return set([self.column_name])
 
     def _filter_column_values(self, data_file_path, row_indices, column_coords_dict, decompression_type, decompressor, bigram_size_dict):
-        with f4.Parser(data_file_path, fixed_file_extensions=[""], stats_file_extensions=[".ll"]) as parser:
+        with f4.Parser(data_file_path, fixed_file_extensions=[".data"], stats_file_extensions=[".ll"]) as parser:
             line_length = parser._get_stat(".ll")
             coords = column_coords_dict[self.column_name]
-            data_file_handle = parser._get_file_handle("")
+            data_file_handle = parser._get_file_handle(".data")
 
             # This avoids having to check the decompression type each time we parse a value.
             decompressor = f4.get_decompressor(decompression_type, decompressor)
@@ -142,7 +141,7 @@ class EndsWithFilter(StartsWithFilter):
             with f4.IndexSearcher._get_index_parser(index_file_path) as index_parser:
                 line_length = index_parser._get_stat(".ll")
                 coords = index_parser._parse_data_coords([0, 1])
-                file_handle = index_parser._get_file_handle("")
+                file_handle = index_parser._get_file_handle(".data")
 
                 return f4.IndexSearcher._get_passing_row_indices(self, index_parser, line_length, coords[0], coords[1], file_handle, 0, end_index)
 
@@ -159,7 +158,7 @@ class LikeFilter(__SimpleBaseFilter):
         with f4.IndexSearcher._get_index_parser(index_file_path) as index_parser:
             line_length = index_parser._get_stat(".ll")
             coords = index_parser._parse_data_coords([0, 1])
-            file_handle = index_parser._get_file_handle("")
+            file_handle = index_parser._get_file_handle(".data")
 
             return f4.IndexSearcher._get_passing_row_indices(self, index_parser, line_length, coords[0], coords[1], file_handle, 0, end_index)
 
@@ -179,8 +178,7 @@ class HeadFilter(NoFilter):
         return self.select_columns_set
 
     def _get_num_rows(self, data_file_path):
-        #with f4.Parser(data_file_path, fixed_file_extensions=[""], stats_file_extensions=[".nrow"]) as parser:
-        with f4.Parser(data_file_path, fixed_file_extensions=[""], stats_file_extensions=[".ll"]) as parser:
+        with f4.Parser(data_file_path, fixed_file_extensions=[".data"], stats_file_extensions=[".ll"]) as parser:
             return parser.get_num_rows()
 
     def _filter_column_values(self, data_file_path, row_indices, column_coords_dict, decompression_type, decompressor, bigram_size_dict):

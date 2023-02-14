@@ -11,7 +11,7 @@ class IndexSearcher:
             return -1
 
         line_length = index_parser._get_stat(".ll")
-        file_handle = index_parser._get_file_handle("")
+        file_handle = index_parser._get_file_handle(".data")
         value_coords = index_parser._parse_data_coords([0])[0]
         position_coords = index_parser._parse_data_coords([1])[0]
 
@@ -48,7 +48,7 @@ class IndexSearcher:
         with IndexSearcher._get_index_parser(index_file_path) as index_parser:
             line_length = index_parser._get_stat(".ll")
             coords = index_parser._parse_data_coords([0, 1])
-            file_handle = index_parser._get_file_handle("")
+            file_handle = index_parser._get_file_handle(".data")
 
             if fltr.oper == operator.eq:
                 return IndexSearcher._find_row_indices_for_range(index_parser, coords[0], coords[1], fltr, fltr, end_index, num_processes)
@@ -165,7 +165,7 @@ class IndexSearcher:
         # To make this paralellizable, we pass just a file path rather than index_parser.
         with IndexSearcher._get_index_parser(index_file_path) as index_parser:
             line_length = index_parser._get_stat(".ll")
-            file_handle = index_parser._get_file_handle("")
+            file_handle = index_parser._get_file_handle(".data")
 
             matching_row_indices = set()
             for i in range(positions[0], positions[1]):
@@ -191,7 +191,7 @@ class IndexSearcher:
 
     def _find_bounds_for_range(index_parser, value_coords, filter1, filter2, end_index, num_processes, start_index=0):
         line_length = index_parser._get_stat(".ll")
-        file_handle = index_parser._get_file_handle("")
+        file_handle = index_parser._get_file_handle(".data")
 
         lower_positions = IndexSearcher._find_positions_g(index_parser, line_length, value_coords, file_handle, filter1, start_index, end_index, operator.lt)
         upper_positions = IndexSearcher._find_positions_l(index_parser, line_length, value_coords, file_handle, filter2, lower_positions[0], lower_positions[1], operator.le)
@@ -219,7 +219,7 @@ class IndexSearcher:
         with f4.IndexSearcher._get_index_parser(index_file_path) as index_parser:
             line_length = index_parser._get_stat(".ll")
             coords = index_parser._parse_data_coords([0, 1])
-            file_handle = index_parser._get_file_handle("")
+            file_handle = index_parser._get_file_handle(".data")
 
             lower_range = f4.IndexSearcher._find_positions_g(index_parser, line_length, coords[0], file_handle, fltr, 0, end_index, operator.lt)
 
@@ -234,4 +234,4 @@ class IndexSearcher:
         return "____".join([filter1.column_name.decode(), filter2.column_name.decode()])
 
     def _get_index_parser(index_file_path):
-        return f4.Parser(index_file_path, fixed_file_extensions=["", ".cc"], stats_file_extensions=[".ll", ".mccl"])
+        return f4.Parser(index_file_path, fixed_file_extensions=[".data", ".cc"], stats_file_extensions=[".ll", ".mccl"])

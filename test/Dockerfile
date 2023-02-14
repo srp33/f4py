@@ -1,7 +1,4 @@
 FROM python:3.10.2-buster
 
 RUN python3 -m pip install --upgrade pip \
- && python3 -m pip install fastnumbers==3.2.1 msgspec==0.12.0 joblib==1.1.0 zstandard==0.17.0 
-
-#bitarray==2.5.1 
-#pynumparser==1.4.1
+ && python3 -m pip install fastnumbers==4.0.1 msgspec==0.13.1 joblib==1.2.0 zstandard==0.19.0 

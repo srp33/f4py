@@ -3,8 +3,6 @@ import gzip
 import fastnumbers
 import math
 import mmap
-#TODO
-#import msgpack
 import msgspec
 from operator import itemgetter
 import zstandard

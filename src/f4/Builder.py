@@ -1,5 +1,6 @@
 import f4
 import fastnumbers
+import glob
 from joblib import Parallel, delayed
 import math
 import os
@@ -11,7 +12,7 @@ class Builder:
     def __init__(self, verbose=False):
         self.__verbose = verbose
 
-    def convert_delimited_file(self, delimited_file_path, f4_file_path, index_columns=[], delimiter="\t", comment_prefix="#", compression_type=None, num_processes=1, num_cols_per_chunk=None, num_rows_per_save=100, tmp_dir_path=None):
+    def convert_delimited_file(self, delimited_file_path, f4_file_path, index_columns=[], delimiter="\t", comment_prefix="#", compression_type=None, num_processes=1, num_cols_per_chunk=None, num_rows_per_write=100, tmp_dir_path=None):
         if type(delimiter) != str:
             raise Exception("The delimiter value must be a string.")
 
@@ -31,7 +32,7 @@ class Builder:
 
         self._print_message(f"Converting from {delimited_file_path}")
 
-        tmp_dir_path2 = self._prepare_tmp_dir(tmp_dir_path)
+        tmp_dir_path_chunks, tmp_dir_path_outputs = self._prepare_tmp_dirs(tmp_dir_path)
 
         # Get column names. Remove any leading or trailing white space around the column names.
         with f4.get_delimited_file_handle(delimited_file_path) as in_file:
@@ -79,20 +80,19 @@ class Builder:
         if num_rows == 0:
             raise Exception(f"A header row but no data rows were detected in {delimited_file_path}")
 
-        ## Check whether we have enough data to train a compression dictionary.
-        #if compression_level != None:
-        #    if total_num_chars > 100000 and len(compression_training_set) > 0:
-        #        f4.CompressionHelper._save_training_dict(compression_training_set, f4_file_path, compression_level, num_processes)
-
-        #    f4.CompressionHelper._save_level_file(f4_file_path, compression_level)
-
-        line_length = self._save_output_file(delimited_file_path, f4_file_path, delimiter, comment_prefix, compression_type, column_sizes, column_compression_dicts, num_rows, num_processes, num_rows_per_save, tmp_dir_path2)
+        line_length = self._write_data_file(delimited_file_path, tmp_dir_path_chunks, tmp_dir_path_outputs, delimiter, comment_prefix, compression_type, column_sizes, column_compression_dicts, num_rows, num_processes, num_rows_per_write)
 
         self._print_message(f"Saving meta files for {f4_file_path}")
-        self._save_meta_files(f4_file_path, column_sizes, line_length, column_names, column_types, compression_type, column_compression_dicts, num_rows)
+        self._write_meta_files(tmp_dir_path_outputs, column_sizes, line_length, column_names, column_types, compression_type, column_compression_dicts, num_rows)
 
-        self._remove_tmp_dir(tmp_dir_path2)
+        self._remove_tmp_dir(tmp_dir_path_chunks)
         self._print_message(f"Done converting {delimited_file_path} to {f4_file_path}")
+
+        for file_path in glob.glob(f"{tmp_dir_path_outputs}*"):
+            destination_file_path = f"{f4_file_path}.{os.path.basename(file_path)}"
+            shutil.copy(file_path, destination_file_path)
+
+        self._remove_tmp_dir(tmp_dir_path_outputs)
 
         if index_columns:
             f4.IndexBuilder.build_indexes(f4_file_path, index_columns)
@@ -101,16 +101,15 @@ class Builder:
     # Non-public functions
     #####################################################
 
-    def _save_meta_files(self, f4_file_path, column_sizes, line_length, column_names=None, column_types=None, compression_type=None, column_compression_dicts=None, num_rows=None):
-        # Calculate and save the column coordinates and max length of these coordinates.
+    def _write_meta_files(self, tmp_dir_path_outputs, column_sizes, line_length, column_names=None, column_types=None, compression_type=None, column_compression_dicts=None, num_rows=None):
+        # Calculate and write the column coordinates and max length of these coordinates.
         column_start_coords = f4.get_column_start_coords(column_sizes)
         column_coords_string, max_column_coord_length = f4.build_string_map(column_start_coords)
-        f4.write_str_to_file(f4_file_path + ".cc", column_coords_string)
-        f4.write_str_to_file(f4_file_path + ".mccl", str(max_column_coord_length).encode())
+        f4.write_str_to_file(f"{tmp_dir_path_outputs}cc", column_coords_string)
+        f4.write_str_to_file(f"{tmp_dir_path_outputs}mccl", str(max_column_coord_length).encode())
 
-        # Find and save the line length.
-        #line_length = sum(column_sizes) + 1
-        f4.write_str_to_file(f4_file_path + ".ll", str(line_length).encode())
+        # Find and write the line length.
+        f4.write_str_to_file(f"{tmp_dir_path_outputs}ll", str(line_length).encode())
 
         column_index_name_dict = {}
         column_name_index_dict = {}
@@ -118,36 +117,37 @@ class Builder:
             column_index_name_dict[column_index] = column_name
             column_name_index_dict[column_name] = column_index
 
-        # Build an index of the column names and save this to a file.
+        # Build an index of the column names and write this to a file.
         sorted_column_names = sorted(column_names)
         values_positions = [[x.decode(), column_name_index_dict[x]] for x in sorted_column_names]
         f4.IndexBuilder._customize_values_positions(values_positions, ["n"], f4.sort_first_column, f4.do_nothing)
-        f4.IndexBuilder._save_index(values_positions, f"{f4_file_path}.cn")
+        f4.IndexBuilder._write_index(values_positions, f"{tmp_dir_path_outputs}cn")
 
         if column_types:
-            # Build a map of the column types and save this to a file.
+            # Build a map of the column types and write this to a file.
             column_types_string, max_col_type_length = f4.build_string_map(column_types)
-            f4.write_str_to_file(f4_file_path + ".ct", column_types_string)
-            f4.write_str_to_file(f4_file_path + ".mctl", str(max_col_type_length).encode())
+            f4.write_str_to_file(f"{tmp_dir_path_outputs}ct", column_types_string)
+            f4.write_str_to_file(f"{tmp_dir_path_outputs}mctl", str(max_col_type_length).encode())
 
-        self._save_compression_info(f4_file_path, compression_type, column_compression_dicts, column_index_name_dict)
+        self._write_compression_info(tmp_dir_path_outputs, compression_type, column_compression_dicts, column_index_name_dict)
 
-        # Save number of rows and columns.
-        #f4.write_str_to_file(f4_file_path + ".nrow", str(num_rows).encode())
-        #f4.write_str_to_file(f4_file_path + ".ncol", str(len(column_names)).encode())
-
-    def _prepare_tmp_dir(self, tmp_dir_path):
+    def _prepare_tmp_dirs(self, tmp_dir_path):
         # Figure out where temp files will be stored and create directory, if needed.
         if tmp_dir_path:
-            if not os.path.exists(tmp_dir_path):
-                os.makedirs(tmp_dir_path)
+            os.makedirs(tmp_dir_path, exist_ok=True)
         else:
             tmp_dir_path = tempfile.mkdtemp()
 
         if not tmp_dir_path.endswith("/"):
             tmp_dir_path += "/"
 
-        return tmp_dir_path
+        tmp_dir_path_chunks = f"{tmp_dir_path}chunks/"
+        tmp_dir_path_outputs = f"{tmp_dir_path}outputs/"
+
+        os.makedirs(tmp_dir_path_chunks, exist_ok=True)
+        os.makedirs(tmp_dir_path_outputs, exist_ok=True)
+
+        return tmp_dir_path_chunks, tmp_dir_path_outputs
 
     def _remove_tmp_dir(self, tmp_dir_path):
         # Remove the temp directory if it was generated by the code (not the user).
@@ -162,8 +162,6 @@ class Builder:
                 pass
 
     def _parse_columns_chunk(self, delimited_file_path, delimiter, comment_prefix, start_index, end_index, compression_type):
-        #compression_training_set = set()
-
         with f4.get_delimited_file_handle(delimited_file_path) as in_file:
             self._exclude_comments_and_header(in_file, comment_prefix)
 
@@ -187,9 +185,6 @@ class Builder:
                     inferred_type = _infer_type(line_items[i])
 
                     column_types_values_dict[i][inferred_type].add(line_items[i])
-
-                    #if build_compression_dictionary and inferred_type == b"s":
-                        #compression_training_set.add(line_items[i])
 
                 num_rows += 1
 
@@ -235,31 +230,31 @@ class Builder:
 
         return column_sizes_dict, column_types_dict, column_compression_dicts, num_rows
 
-    def _save_output_file(self, delimited_file_path, f4_file_path, delimiter, comment_prefix, compression_type, column_sizes, compression_dicts, num_rows, num_processes, num_rows_per_save, tmp_dir_path):
-        self._print_message(f"Parsing chunks of {delimited_file_path} and saving to temp directory ({tmp_dir_path})")
+    def _write_data_file(self, delimited_file_path, tmp_dir_path_chunks, tmp_dir_path_outputs, delimiter, comment_prefix, compression_type, column_sizes, compression_dicts, num_rows, num_processes, num_rows_per_write):
+        self._print_message(f"Parsing chunks of {delimited_file_path} and saving to temp directory ({tmp_dir_path_chunks})")
 
         if num_processes == 1:
-            line_length = self._save_rows_chunk(delimited_file_path, delimiter, comment_prefix, compression_type, column_sizes, compression_dicts, 0, 0, num_rows, num_rows_per_save, tmp_dir_path)
+            line_length = self._write_rows_chunk(delimited_file_path, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes, compression_dicts, 0, 0, num_rows, num_rows_per_write)
         else:
             row_chunk_indices = _generate_chunk_ranges(num_rows, math.ceil(num_rows / num_processes) + 1)
 
             # Find the line length.
-            max_line_sizes = Parallel(n_jobs=num_processes)(delayed(self._save_rows_chunk)(delimited_file_path, delimiter, comment_prefix, compression_type, column_sizes, compression_dicts, i, row_chunk[0], row_chunk[1], num_rows_per_save, tmp_dir_path) for i, row_chunk in enumerate(row_chunk_indices))
+            max_line_sizes = Parallel(n_jobs=num_processes)(delayed(self._write_rows_chunk)(delimited_file_path, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes, compression_dicts, i, row_chunk[0], row_chunk[1], num_rows_per_write) for i, row_chunk in enumerate(row_chunk_indices))
             line_length = max(max_line_sizes)
 
         # Merge the file chunks. This dictionary enables us to sort them properly.
         self._print_message(f"Merging the file chunks for {delimited_file_path}")
-        self._merge_chunk_files(f4_file_path, num_processes, num_rows_per_save, tmp_dir_path)
+        self._merge_chunk_files(tmp_dir_path_chunks, tmp_dir_path_outputs, num_processes, num_rows_per_write)
 
         return line_length
 
-    def _save_rows_chunk(self, delimited_file_path, delimiter, comment_prefix, compression_type, column_sizes, compression_dicts, chunk_number, start_index, end_index, num_rows_per_save, tmp_dir_path):
+    def _write_rows_chunk(self, delimited_file_path, tmp_dir_path, delimiter, comment_prefix, compression_type, column_sizes, compression_dicts, chunk_number, start_index, end_index, num_rows_per_write):
         max_line_size = 0
 
         if compression_type == "zstd":
             compressor = zstandard.ZstdCompressor(level = 0)
 
-        # Save the data to output file. Ignore the header line.
+        # Write the data to output file. Ignore the header line.
         with f4.get_delimited_file_handle(delimited_file_path) as in_file:
             self._exclude_comments_and_header(in_file, comment_prefix)
 
@@ -277,15 +272,6 @@ class Builder:
 
                     # Parse the data from the input file.
                     line_items = line.rstrip(b"\n").split(delimiter)
-
-                    # Replace values with compressed versions and update column sizes.
-#                    for column_index, compression_dict in compression_dicts.items():
-#                        line_items[column_index] = compression_dict[line_items[column_index]]
-                        #column_sizes[column_index] = len(line_items[column_index])
-
-                    # Format the column sizes using fixed widths.
-                    # out_items = [f4.format_string_as_fixed_width(line_items[i], size) for i, size in enumerate(column_sizes)]
-                    # out_line = b"".join(out_items)
 
                     out_items = []
 
@@ -307,7 +293,7 @@ class Builder:
 
                     out_lines.append(out_line)
 
-                    if len(out_lines) % num_rows_per_save == 0:
+                    if len(out_lines) % num_rows_per_write == 0:
                         self._print_message(f"Processed chunk of {delimited_file_path} at line {line_index} (start_index = {start_index}, end_index = {end_index})")
                         chunk_file.write(b"".join(out_lines))
                         out_lines = []
@@ -326,12 +312,12 @@ class Builder:
         else:
             in_file.readline()
 
-    def _merge_chunk_files(self, f4_file_path, num_processes, num_rows_per_save, tmp_dir_path):
-        with open(f4_file_path, "wb") as f4_file:
+    def _merge_chunk_files(self, tmp_dir_path_chunks, tmp_dir_path_outputs, num_processes, num_rows_per_write):
+        with open(f"{tmp_dir_path_outputs}data", "wb") as data_file:
             out_lines = []
 
             for i in range(num_processes):
-                chunk_file_path = f"{tmp_dir_path}{i}"
+                chunk_file_path = f"{tmp_dir_path_chunks}{i}"
 
                 if not os.path.exists(chunk_file_path):
                     continue
@@ -340,41 +326,20 @@ class Builder:
                     for line in chunk_file:
                         out_lines.append(line)
 
-                        if len(out_lines) % num_rows_per_save == 0:
-                            f4_file.write(b"".join(out_lines))
+                        if len(out_lines) % num_rows_per_write == 0:
+                            data_file.write(b"".join(out_lines))
                             out_lines = []
-
-                    #size_file_path = f"{tmp_dir_path}{i}_linesizes"
-
-#                    with open(size_file_path, 'rb') as size_file:
-#                    position = 0
-
-#                        for size_line in size_file:
-                            #TODO
-                            #size = fastnumbers.fast_int(size_line.rstrip(b"\n"))
-#                            print(line_length)
-
-                            #out_line = chunk_file[position:(position + size)]
-#                            out_line = chunk_file[position:(position + line_length - 1)]
-                            #out_line = f4._format_string_as_fixed_width(out_line, line_length)
-#                            out_lines.append(out_line)
-                            #position += size
-#                            position += line_length
-
-#                            if len(out_lines) % num_rows_per_save == 0:
-#                                f4_file.write(b"".join(out_lines))
-#                                out_lines = []
 
                 os.remove(chunk_file_path)
 
             if len(out_lines) > 0:
-                f4_file.write(b"".join(out_lines))
+                data_file.write(b"".join(out_lines))
 
-    def _save_compression_info(self, f4_file_path, compression_type, column_compression_dicts, column_index_name_dict):
+    def _write_compression_info(self, tmp_dir_path_outputs, compression_type, column_compression_dicts, column_index_name_dict):
         if not compression_type:
             return
 
-        with open(f"{f4_file_path}.cmpr", "wb") as cmpr_file:
+        with open(f"{tmp_dir_path_outputs}cmpr", "wb") as cmpr_file:
             if compression_type == "dictionary":
                 column_decompression_dicts = {}
                 # To enable decompression, we need to invert the column indices and column names.
@@ -392,59 +357,6 @@ class Builder:
                 cmpr_file.write(f4.serialize(column_decompression_dicts))
             else:
                 cmpr_file.write(b"z")
-
-        #cmpr_file.write((f"{column_index}\t").encode() + f4.serialize(decompression_dict) + b"\n")
-
-        # column_indices = []
-        # values = []
-        # compressed_values = []
-
-        # for i, column_compression_dict in column_compression_dicts.items():
-        #     for value, compressed_value in column_compression_dict["map"].items():
-        #         column_indices.append(str(i).encode())
-        #         values.append(value)
-        #         compressed_values.append(compressed_value)
-
-        # mcil = f4.get_max_string_length(column_indices)
-        # mvl = f4.get_max_string_length(values)
-        # mcvl = f4.get_max_string_length(compressed_values)
-
-        # column_indices = f4.format_column_items(column_indices, mcil)
-        # values = f4.format_column_items(values, mvl)
-        # print(compressed_values)
-        # print(mcvl)
-        # import sys
-        # sys.exit()
-        #compressed_values = f4.format_column_items(compressed_values, mcvl)
-
-        # table = b""
-        # for i in range(len(column_indices)):
-        #     #table += (f"{column_indices[i].decode()}{values[i].decode()}{compressed_values[i].decode()}").encode()
-        #     table += column_indices[i] + values[i] + compressed_values[i]
-
-        #     if i != (len(column_indices) - 1):
-        #         table += b"\n"
-
-        # f4.write_str_to_file(f4_file_path + ".cmpr", table)
-
-        # column_start_coords = f4.get_column_start_coords([mcil, mvl, mcvl])
-        # column_coords_string, max_column_coord_length = f4.build_string_map(column_start_coords)
-        # f4.write_str_to_file(f4_file_path + ".cmpr.cc", column_coords_string)
-        # f4.write_str_to_file(f4_file_path + ".cmpr.mccl", str(max_column_coord_length).encode())
-        # #TODO: Remove the following line?
-        # f4.write_str_to_file(f4_file_path + ".cmpr.ll", str(mcil + mvl + mcvl + 1).encode())
-
-        # # Save compression type information
-        # compression_types = []
-        # for i, column_compression_dict in column_compression_dicts.items():
-        #     compression_types.append(column_compression_dict["compression_type"])
-
-        # mctl = f4.get_max_string_length(compression_types)
-        # compression_types = f4.format_column_items(compression_types, mctl)
-        # table = b"\n".join(compression_types)
-
-        # f4.write_str_to_file(f4_file_path + ".cmprtype", table)
-        # f4.write_str_to_file(f4_file_path + ".cmprtype.ll", str(mctl + 1).encode())
 
     def _print_message(self, message):
         f4.print_message(message, self.__verbose)
@@ -465,8 +377,6 @@ def _generate_chunk_ranges(num_cols, num_cols_per_chunk):
         yield [0, num_cols]
 
 def _infer_type(value):
-    #if not value or f4.is_missing_value(value):
-    #    return None
     if fastnumbers.isint(value):
         return b"i"
     if fastnumbers.isfloat(value):

@@ -6,7 +6,7 @@ set -o errexit
 # Build the Docker image
 #######################################################
 
-docker build --platform linux/x86_64 -t srp33/f4_test .
+#docker build --platform linux/x86_64 -t srp33/f4_test .
 
 #######################################################
 # Run preparatory steps
@@ -21,10 +21,11 @@ dockerCommand="docker run -i -t --rm --platform linux/x86_64 --user $(id -u):$(i
 
 #$dockerCommand bash -c "time python3 build_tsv.py 10 10 10 10000 data/medium.tsv"
 
-#TODO: Create requirements.txt based on the packages in Dockerfile and then simplify Dockerfile.
+#TODO: Reduce the imports to just use the specific functions we need.
+#TODO: Change imports in __init__.py to be lazy? See if there's a way to speed up Parallel, delayed.
 #TODO: Integrate f4 into the analysis paper tests. Check speed and optimize more, if needed.
-#TODO: Address remaining TODO items in the code, remove unnecessary commented code.
 #TODO: Remove class structure so object orientation is not used.
+#TODO: Address remaining TODO items in the code, remove unnecessary commented code.
 #TODO: Combine all information into a single file.
 #        Use this spec? https://tools.ietf.org/id/draft-kunze-bagit-16.html
 #TODO: Try potential speed improvements:
@@ -38,7 +39,9 @@ dockerCommand="docker run -i -t --rm --platform linux/x86_64 --user $(id -u):$(i
 #######################################################
 
 #python3 test.py
-$dockerCommand python3 test.py
+time python3 test.py
+#time python3 delete_me.py
+#$dockerCommand python3 test.py
 
 #######################################################
 # Clean up
