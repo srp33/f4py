@@ -4,6 +4,7 @@ import gzip
 from io import TextIOWrapper, BytesIO
 import operator
 import os
+import shutil
 import sys
 
 def get_delimited_file_handle(file_path):
@@ -581,14 +582,17 @@ def run_medium_tests(num_processes):
     print(f"Running all tests for {in_file_path} - with indexing")
     print("-------------------------------------------------------")
 
-    f4.IndexBuilder.build_indexes(f4_file_path, ["ID", "Categorical1", "Discrete1", "Numeric1"])
+    index_tmp_dir_path = "/tmp/indexes"
+    shutil.rmtree(index_tmp_dir_path, ignore_errors = True)
+    os.makedirs(index_tmp_dir_path)
+    f4.IndexBuilder.build_indexes(f4_file_path, ["ID", "Categorical1", "Discrete1", "Numeric1"], index_tmp_dir_path)
     run_medium_tests2(f4_file_path, out_file_path, medium_ID, medium_Categorical1, medium_Discrete1, medium_Numeric1, num_processes)
 
     print("-------------------------------------------------------")
     print(f"Running all tests for {in_file_path} - custom indexing")
     print("-------------------------------------------------------")
 
-    f4.IndexBuilder.build_endswith_index(f4_file_path, "Discrete1")
+    f4.IndexBuilder.build_endswith_index(f4_file_path, "Discrete1", index_tmp_dir_path)
     run_medium_tests2(f4_file_path, out_file_path, medium_ID, medium_Categorical1, medium_Discrete1, medium_Numeric1, num_processes)
 
     # Clean up data files

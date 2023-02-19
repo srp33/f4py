@@ -1,3 +1,4 @@
+import copy
 import f4
 import fastnumbers
 import glob
@@ -32,7 +33,7 @@ class Builder:
 
         self._print_message(f"Converting from {delimited_file_path}")
 
-        tmp_dir_path_chunks, tmp_dir_path_outputs = self._prepare_tmp_dirs(tmp_dir_path)
+        tmp_dir_path_chunks, tmp_dir_path_outputs, tmp_dir_path_indexes = f4.prepare_tmp_dirs(tmp_dir_path)
 
         # Get column names. Remove any leading or trailing white space around the column names.
         with f4.get_delimited_file_handle(delimited_file_path) as in_file:
@@ -80,28 +81,34 @@ class Builder:
         if num_rows == 0:
             raise Exception(f"A header row but no data rows were detected in {delimited_file_path}")
 
+        # TODO: Rework this so that it's part of combining into single file.
+        #       To get line length, maybe just read one line of first chunk file.
         line_length = self._write_data_file(delimited_file_path, tmp_dir_path_chunks, tmp_dir_path_outputs, delimiter, comment_prefix, compression_type, column_sizes, column_compression_dicts, num_rows, num_processes, num_rows_per_write)
 
         self._print_message(f"Saving meta files for {f4_file_path}")
-        self._write_meta_files(tmp_dir_path_outputs, column_sizes, line_length, column_names, column_types, compression_type, column_compression_dicts, num_rows)
+        self._write_meta_files(tmp_dir_path_outputs, tmp_dir_path_indexes, column_sizes, line_length, column_names, column_types, compression_type, column_compression_dicts, num_rows)
 
-        self._remove_tmp_dir(tmp_dir_path_chunks)
         self._print_message(f"Done converting {delimited_file_path} to {f4_file_path}")
 
-        for file_path in glob.glob(f"{tmp_dir_path_outputs}*"):
-            destination_file_path = f"{f4_file_path}.{os.path.basename(file_path)}"
-            shutil.copy(file_path, destination_file_path)
+        #TODO: Copy straight from chunk files into combined file.
+        # for file_path in glob.glob(f"{tmp_dir_path_outputs}*"):
+        #     destination_file_path = f"{f4_file_path}.{os.path.basename(file_path)}"
+        #     shutil.copy(file_path, destination_file_path)
 
-        self._remove_tmp_dir(tmp_dir_path_outputs)
+        f4.combine_into_single_file(tmp_dir_path_chunks, tmp_dir_path_outputs, f4_file_path)
 
         if index_columns:
-            f4.IndexBuilder.build_indexes(f4_file_path, index_columns)
+            f4.IndexBuilder.build_indexes(f4_file_path, index_columns, tmp_dir_path_indexes)
+
+        f4.remove_tmp_dir(tmp_dir_path_chunks)
+        f4.remove_tmp_dir(tmp_dir_path_outputs)
+        f4.remove_tmp_dir(tmp_dir_path_indexes)
 
     #####################################################
     # Non-public functions
     #####################################################
 
-    def _write_meta_files(self, tmp_dir_path_outputs, column_sizes, line_length, column_names=None, column_types=None, compression_type=None, column_compression_dicts=None, num_rows=None):
+    def _write_meta_files(self, tmp_dir_path_outputs, tmp_dir_path_indexes, column_sizes, line_length, column_names=None, column_types=None, compression_type=None, column_compression_dicts=None, num_rows=None):
         # Calculate and write the column coordinates and max length of these coordinates.
         column_start_coords = f4.get_column_start_coords(column_sizes)
         column_coords_string, max_column_coord_length = f4.build_string_map(column_start_coords)
@@ -121,7 +128,7 @@ class Builder:
         sorted_column_names = sorted(column_names)
         values_positions = [[x.decode(), column_name_index_dict[x]] for x in sorted_column_names]
         f4.IndexBuilder._customize_values_positions(values_positions, ["n"], f4.sort_first_column, f4.do_nothing)
-        f4.IndexBuilder._write_index(values_positions, f"{tmp_dir_path_outputs}cn")
+        f4.IndexBuilder._write_index_files(values_positions, f"{tmp_dir_path_outputs}cn")
 
         if column_types:
             # Build a map of the column types and write this to a file.
@@ -130,36 +137,6 @@ class Builder:
             f4.write_str_to_file(f"{tmp_dir_path_outputs}mctl", str(max_col_type_length).encode())
 
         self._write_compression_info(tmp_dir_path_outputs, compression_type, column_compression_dicts, column_index_name_dict)
-
-    def _prepare_tmp_dirs(self, tmp_dir_path):
-        # Figure out where temp files will be stored and create directory, if needed.
-        if tmp_dir_path:
-            os.makedirs(tmp_dir_path, exist_ok=True)
-        else:
-            tmp_dir_path = tempfile.mkdtemp()
-
-        if not tmp_dir_path.endswith("/"):
-            tmp_dir_path += "/"
-
-        tmp_dir_path_chunks = f"{tmp_dir_path}chunks/"
-        tmp_dir_path_outputs = f"{tmp_dir_path}outputs/"
-
-        os.makedirs(tmp_dir_path_chunks, exist_ok=True)
-        os.makedirs(tmp_dir_path_outputs, exist_ok=True)
-
-        return tmp_dir_path_chunks, tmp_dir_path_outputs
-
-    def _remove_tmp_dir(self, tmp_dir_path):
-        # Remove the temp directory if it was generated by the code (not the user).
-        if tmp_dir_path:
-            try:
-                shutil.rmtree(tmp_dir_path)
-                self._print_message(f"Removed {tmp_dir_path} directory")
-            except Exception as e:
-                # Don't throw an exception if we can't delete the directory.
-                self._print_message(f"Warning: {tmp_dir_path} directory could not be removed")
-                print(e)
-                pass
 
     def _parse_columns_chunk(self, delimited_file_path, delimiter, comment_prefix, start_index, end_index, compression_type):
         with f4.get_delimited_file_handle(delimited_file_path) as in_file:

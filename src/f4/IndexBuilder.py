@@ -5,29 +5,32 @@ class IndexBuilder:
     # Class (static) functions
     #####################################################
     # index_columns should be a list. Elements within it can be two-element lists.
-    def build_indexes(f4_file_path, index_columns, verbose=False):
+
+    def build_indexes(f4_file_path, index_columns, tmp_dir_path, verbose=False):
         if isinstance(index_columns, str):
-            IndexBuilder._build_one_column_index(f4_file_path, index_columns, verbose)
+            IndexBuilder._build_one_column_index(f4_file_path, index_columns, tmp_dir_path, verbose)
         elif isinstance(index_columns, list):
             for index_column in index_columns:
                 if isinstance(index_column, list):
                     if len(index_column) != 2:
                         raise Exception("If you pass a list as an index_column, it must have exactly two elements.")
 
-                    IndexBuilder._build_two_column_index(f4_file_path, index_column[0], index_column[1], verbose)
+                    IndexBuilder._build_two_column_index(f4_file_path, index_column[0], index_column[1], tmp_dir_path, verbose)
                 else:
                     if not isinstance(index_column, str):
                         raise Exception("When specifying an index column name, it must be a string.")
 
-                    IndexBuilder._build_one_column_index(f4_file_path, index_column, verbose, f4.do_nothing)
+                    IndexBuilder._build_one_column_index(f4_file_path, index_column, tmp_dir_path, verbose, f4.do_nothing)
         else:
             raise Exception("When specifying index_columns, it must either be a string or a list.")
 
     # This function is specifically for the EndsWithFilter.
-    def build_endswith_index(f4_file_path, index_column, verbose=False):
-        IndexBuilder._build_one_column_index(f4_file_path, index_column, verbose, f4.reverse_string)
+    def build_endswith_index(f4_file_path, index_column, tmp_dir_path, verbose=False):
+        IndexBuilder._build_one_column_index(f4_file_path, index_column, tmp_dir_path, verbose, f4.reverse_string)
 
-    def _build_one_column_index(f4_file_path, index_column, verbose, custom_index_function):
+    def _build_one_column_index(f4_file_path, index_column, tmp_dir_path, verbose, custom_index_function):
+        tmp_dir_path = f4.fix_dir_path_ending(tmp_dir_path)
+
         # TODO: Add logic to verify that index_column is valid. But where?
         f4.print_message(f"Saving index for {index_column}.", verbose)
         index_column_encoded = index_column.encode()
@@ -36,8 +39,8 @@ class IndexBuilder:
             f4.print_message(f"Getting column meta information for {index_column} index for {f4_file_path}.", verbose)
             select_columns, column_type_dict, column_coords_dict, decompression_type, decompressor, bigram_size_dict = parser._get_column_meta(set([index_column_encoded]), [])
 
-            file_handle = parser._get_file_handle(".data")
-            line_length = parser._get_stat(".ll")
+            #file_handle = parser._get_file_handle(".data")
+            line_length = parser._get_stat("ll")
             index_column_type = column_type_dict[index_column_encoded]
             coords = column_coords_dict[index_column_encoded]
             values_positions = []
@@ -47,19 +50,24 @@ class IndexBuilder:
 
             f4.print_message(f"Parsing values and positions for {index_column} index for {f4_file_path}.", verbose)
             for row_index in range(parser.get_num_rows()):
-                value = parse_function(row_index, coords, line_length, file_handle, decompression_type, decompressor, bigram_size_dict, index_column_encoded)
+                #value = parse_function(row_index, coords, line_length, file_handle, decompression_type, decompressor, bigram_size_dict, index_column_encoded)
+                value = parse_function(row_index, coords, line_length, decompression_type=decompression_type, decompressor=decompressor, bigram_size_dict=bigram_size_dict, column_name=index_column_encoded)
                 values_positions.append([value, row_index])
 
             f4.print_message(f"Building index file for {index_column} index for {f4_file_path}.", verbose)
             IndexBuilder._customize_values_positions(values_positions, [index_column_type], f4.sort_first_column, custom_index_function)
 
             index_file_path = IndexBuilder._get_index_file_path(parser.data_file_path, index_column, custom_index_function)
-            IndexBuilder._write_index(values_positions, index_file_path)
+            IndexBuilder._write_index_files(values_positions, tmp_dir_path)
+
+        f4.combine_into_single_file(None, tmp_dir_path, index_file_path)
 
         f4.print_message(f"Done building index file for {index_column} index for {f4_file_path}.", verbose)
 
     # TODO: Combine this function with the above one and make it generic enough to handle indexes with more columns.
-    def _build_two_column_index(f4_file_path, index_column_1, index_column_2, verbose):
+    def _build_two_column_index(f4_file_path, index_column_1, index_column_2, tmp_dir_path, verbose):
+        tmp_dir_path = f4.fix_dir_path_ending(tmp_dir_path)
+
         if not isinstance(index_column_1, str) or not isinstance(index_column_2, str):
             raise Exception("When specifying an index column name, it must be a string.")
 
@@ -74,8 +82,8 @@ class IndexBuilder:
             select_columns, column_type_dict, column_coords_dict, decompression_type, decompressor, bigram_size_dict = parser._get_column_meta(set([index_column_1_encoded, index_column_2_encoded]), [])
             # TODO: Add logic to verify that index_column_1 and index_column_2 are valid.
 
-            file_handle = parser._get_file_handle(".data")
-            line_length = parser._get_stat(".ll")
+            #file_handle = parser._get_file_handle(".data")
+            line_length = parser._get_stat("ll")
             index_column_1_type = column_type_dict[index_column_1_encoded]
             index_column_2_type = column_type_dict[index_column_2_encoded]
             coords_1 = column_coords_dict[index_column_1_encoded]
@@ -87,8 +95,10 @@ class IndexBuilder:
             values_positions = []
             f4.print_message(f"Parsing values and positions for {index_name} index.", verbose)
             for row_index in range(parser.get_num_rows()):
-                value_1 = parse_function(row_index, coords_1, line_length, file_handle, decompression_type, decompressor, bigram_size_dict, index_column_1_encoded)
-                value_2 = parse_function(row_index, coords_2, line_length, file_handle, decompression_type, decompressor, bigram_size_dict, index_column_2_encoded)
+                # value_1 = parse_function(row_index, coords_1, line_length, file_handle, decompression_type, decompressor, bigram_size_dict, index_column_1_encoded)
+                # value_2 = parse_function(row_index, coords_2, line_length, file_handle, decompression_type, decompressor, bigram_size_dict, index_column_2_encoded)
+                value_1 = parse_function(row_index, coords_1, line_length, decompression_type=decompression_type, decompressor=decompressor, bigram_size_dict=bigram_size_dict, column_name=index_column_1_encoded)
+                value_2 = parse_function(row_index, coords_2, line_length, decompression_type=decompression_type, decompressor=decompressor, bigram_size_dict=bigram_size_dict, column_name=index_column_2_encoded)
 
                 values_positions.append([value_1, value_2, row_index])
 
@@ -96,7 +106,10 @@ class IndexBuilder:
             IndexBuilder._customize_values_positions(values_positions, [index_column_1_type, index_column_2_type], f4.sort_first_two_columns, f4.do_nothing)
 
             index_file_path = IndexBuilder._get_index_file_path(parser.data_file_path, index_name)
-            IndexBuilder._write_index(values_positions, index_file_path)
+            IndexBuilder._write_index_files(values_positions, tmp_dir_path)
+
+        #TODO
+        f4.combine_into_single_file(None, tmp_dir_path, index_file_path)
 
         f4.print_message(f"Done building two-column index file for {index_name}.", verbose)
 
@@ -113,7 +126,7 @@ class IndexBuilder:
         # Sort the rows.
         sort_function(values_positions)
 
-    def _write_index(values_positions, index_file_path):
+    def _write_index_files(values_positions, tmp_dir_path_prefix):
         column_dict = {}
         for i in range(len(values_positions[0])):
             column_dict[i] = [x[i] if isinstance(x[i], bytes) else str(x[i]).encode() for x in values_positions]
@@ -135,15 +148,15 @@ class IndexBuilder:
             rows.append(row_value)
 
         column_coords_string, rows_max_length = f4.build_string_map(rows)
-        f4.write_str_to_file(f"{index_file_path}.data", column_coords_string)
+        f4.write_str_to_file(f"{tmp_dir_path_prefix}data", column_coords_string)
 
         column_start_coords = f4.get_column_start_coords(max_lengths)
         column_coords_string, max_column_coord_length = f4.build_string_map(column_start_coords)
-        f4.write_str_to_file(f"{index_file_path}.cc", column_coords_string)
-        f4.write_str_to_file(f"{index_file_path}.mccl", str(max_column_coord_length).encode())
+        f4.write_str_to_file(f"{tmp_dir_path_prefix}cc", column_coords_string)
+        f4.write_str_to_file(f"{tmp_dir_path_prefix}mccl", str(max_column_coord_length).encode())
 
         # Find and write the line length.
-        f4.write_str_to_file(f"{index_file_path}.ll", str(rows_max_length).encode())
+        f4.write_str_to_file(f"{tmp_dir_path_prefix}ll", str(rows_max_length).encode())
 
     def _get_index_file_path(data_file_path, index_name, custom_index_function=f4.do_nothing):
         index_file_path_extension = f".idx_{index_name}"
