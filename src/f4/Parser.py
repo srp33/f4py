@@ -34,6 +34,12 @@ class Parser:
         file_map_length = fastnumbers.fast_int(file_map_length_string.rstrip(b"\n"))
         self.__file_map_dict = f4.deserialize(self.__file_handle[len(file_map_length_string):(len(file_map_length_string) + file_map_length)])
 
+        # Invert the abbreviations used for file keys in the dictionary so they are more human readable.
+        for file_name, abbreviation in f4.FILE_KEY_ABBREVIATIONS.items():
+            if abbreviation in self.__file_map_dict:
+                self.__file_map_dict[file_name] = self.__file_map_dict[abbreviation]
+                del self.__file_map_dict[abbreviation]
+
         # Cache statistics in a dictionary.
         self.__stats = {}
 

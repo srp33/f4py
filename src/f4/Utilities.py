@@ -12,6 +12,10 @@ import shutil
 import tempfile
 import zstandard
 
+# We use these dictionaries so that when we store the file map, it takes less space on disk.
+FILE_KEY_ABBREVIATIONS = {"data": 1, "cc": 2, "mccl": 3, "ll": 4, "ct": 5, "mctl": 6, "cmpr": 7, "cndata": 8, "cncc": 9, "cnmccl": 10, "cnll": 11}
+#FILE_KEY_ABBREVIATIONS_INVERSE = {y: x for x, y in FILE_KEY_ABBREVIATIONS.items()}
+
 def open_read_file(file_path, file_extension=""):
     the_file = open(file_path + file_extension, 'rb')
     return mmap.mmap(the_file.fileno(), 0, prot=mmap.PROT_READ)
@@ -174,7 +178,9 @@ def combine_into_single_file(tmp_dir_path_chunks, tmp_dir_path_outputs, f4_file_
         start_end_dict = {}
 
         for x in start_end_positions:
-            start_end_dict[x[0]] = x[1:]
+            file_name = x[0]
+            start_end_dict[FILE_KEY_ABBREVIATIONS[file_name]] = x[1:]
+            #start_end_dict[file_name] = x[1:]
 
         serialized = serialize(start_end_dict)
 
