@@ -21,12 +21,12 @@ dockerCommand="docker run -i -t --rm --platform linux/x86_64 --user $(id -u):$(i
 
 #$dockerCommand bash -c "time python3 build_tsv.py 10 10 10 10000 data/medium.tsv"
 
-#TODO: Combine all information into a single file.
-#        Use tmp_dir_path_chunks in combine_into_single_file.
 #TODO: Address remaining TODO items in the code, remove unnecessary commented code.
 #TODO: Reduce the imports to just use the specific functions we need.
 #TODO: Change imports in __init__.py to be lazy? See if there's a way to speed up Parallel, delayed.
 #TODO: Integrate f4 into the analysis paper tests. Check speed and optimize more, if needed.
+#TODO: Cache the cc coordinates in a dictionary within Parser and no longer store ll information?
+#        See _parse_data_coords() function.
 #TODO: Remove class structure so object orientation is not used.
 #TODO: Address remaining TODO items in the code, remove unnecessary commented code.
 #TODO: Try potential speed improvements:

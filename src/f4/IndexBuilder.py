@@ -44,7 +44,6 @@ class IndexBuilder:
             f4.print_message(f"Getting column meta information for {index_column} index for {f4_file_path}.", verbose)
             select_columns, column_type_dict, column_coords_dict, decompression_type, decompressor, bigram_size_dict = parser._get_column_meta(set([index_column_encoded]), [])
 
-            #file_handle = parser._get_file_handle(".data")
             line_length = parser._get_stat("ll")
             index_column_type = column_type_dict[index_column_encoded]
             coords = column_coords_dict[index_column_encoded]
@@ -55,7 +54,6 @@ class IndexBuilder:
 
             f4.print_message(f"Parsing values and positions for {index_column} index for {f4_file_path}.", verbose)
             for row_index in range(parser.get_num_rows()):
-                #value = parse_function(row_index, coords, line_length, file_handle, decompression_type, decompressor, bigram_size_dict, index_column_encoded)
                 value = parse_function(row_index, coords, line_length, decompression_type=decompression_type, decompressor=decompressor, bigram_size_dict=bigram_size_dict, column_name=index_column_encoded)
                 values_positions.append([value, row_index])
 
@@ -66,13 +64,6 @@ class IndexBuilder:
 
         index_file_path = IndexBuilder._get_index_file_path(parser.data_file_path, index_column, custom_index_function)
         f4.combine_into_single_file(tmp_dir_path_data, tmp_dir_path_other, index_file_path)
-
-        # if index_column == "Categorical1":
-        #     print(tmp_dir_path_data)
-        #     print(tmp_dir_path_other)
-        #     print(index_file_path)
-        #     import sys
-        #     sys.exit()
 
         f4.print_message(f"Done building index file for {index_column} index for {f4_file_path}.", verbose)
 
@@ -98,7 +89,6 @@ class IndexBuilder:
             select_columns, column_type_dict, column_coords_dict, decompression_type, decompressor, bigram_size_dict = parser._get_column_meta(set([index_column_1_encoded, index_column_2_encoded]), [])
             # TODO: Add logic to verify that index_column_1 and index_column_2 are valid.
 
-            #file_handle = parser._get_file_handle(".data")
             line_length = parser._get_stat("ll")
             index_column_1_type = column_type_dict[index_column_1_encoded]
             index_column_2_type = column_type_dict[index_column_2_encoded]
@@ -111,8 +101,6 @@ class IndexBuilder:
             values_positions = []
             f4.print_message(f"Parsing values and positions for {index_name} index.", verbose)
             for row_index in range(parser.get_num_rows()):
-                # value_1 = parse_function(row_index, coords_1, line_length, file_handle, decompression_type, decompressor, bigram_size_dict, index_column_1_encoded)
-                # value_2 = parse_function(row_index, coords_2, line_length, file_handle, decompression_type, decompressor, bigram_size_dict, index_column_2_encoded)
                 value_1 = parse_function(row_index, coords_1, line_length, decompression_type=decompression_type, decompressor=decompressor, bigram_size_dict=bigram_size_dict, column_name=index_column_1_encoded)
                 value_2 = parse_function(row_index, coords_2, line_length, decompression_type=decompression_type, decompressor=decompressor, bigram_size_dict=bigram_size_dict, column_name=index_column_2_encoded)
 

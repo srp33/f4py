@@ -1,12 +1,7 @@
-import copy
 import f4
 import fastnumbers
-import glob
 from joblib import Parallel, delayed
 import math
-import os
-import shutil
-import tempfile
 import zstandard
 
 class Builder:
@@ -81,7 +76,7 @@ class Builder:
         if num_rows == 0:
             raise Exception(f"A header row but no data rows were detected in {delimited_file_path}")
 
-        line_length = self._get_line_length(delimited_file_path, tmp_dir_path_chunks, tmp_dir_path_outputs, delimiter, comment_prefix, compression_type, column_sizes, column_compression_dicts, num_rows, num_processes, num_rows_per_write)
+        line_length = self._get_line_length(delimited_file_path, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes, column_compression_dicts, num_rows, num_processes, num_rows_per_write)
 
         self._print_message(f"Saving meta files for {f4_file_path}")
         self._write_meta_files(tmp_dir_path_outputs, tmp_dir_path_indexes, column_sizes, line_length, column_names, column_types, compression_type, column_compression_dicts, num_rows)
@@ -152,9 +147,7 @@ class Builder:
                 line_items = line.split(delimiter)
                 for i in range(start_index, end_index):
                     column_sizes_dict[i] = max([column_sizes_dict[i], len(line_items[i])])
-
                     inferred_type = _infer_type(line_items[i])
-
                     column_types_values_dict[i][inferred_type].add(line_items[i])
 
                 num_rows += 1
@@ -201,7 +194,7 @@ class Builder:
 
         return column_sizes_dict, column_types_dict, column_compression_dicts, num_rows
 
-    def _get_line_length(self, delimited_file_path, tmp_dir_path_chunks, tmp_dir_path_outputs, delimiter, comment_prefix, compression_type, column_sizes, compression_dicts, num_rows, num_processes, num_rows_per_write):
+    def _get_line_length(self, delimited_file_path, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes, compression_dicts, num_rows, num_processes, num_rows_per_write):
         self._print_message(f"Parsing chunks of {delimited_file_path} and saving to temp directory ({tmp_dir_path_chunks})")
 
         if num_processes == 1:

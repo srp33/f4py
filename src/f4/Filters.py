@@ -37,11 +37,9 @@ class __SimpleBaseFilter(NoFilter):
         return set([self.column_name])
 
     def _filter_column_values(self, data_file_path, row_indices, column_coords_dict, decompression_type, decompressor, bigram_size_dict):
-        #with f4.Parser(data_file_path, fixed_file_extensions=[".data"], stats_file_extensions=[".ll"]) as parser:
         with f4.Parser(data_file_path) as parser:
             line_length = parser._get_stat("ll")
             coords = column_coords_dict[self.column_name]
-            #data_file_handle = parser._get_file_handle(".data")
 
             # This avoids having to check the decompression type each time we parse a value.
             decompressor = f4.get_decompressor(decompression_type, decompressor)
@@ -49,7 +47,6 @@ class __SimpleBaseFilter(NoFilter):
 
             passing_row_indices = set()
             for i in row_indices:
-                #if self.passes(parse_function(i, coords, line_length, data_file_handle, decompression_type, decompressor, bigram_size_dict, self.column_name))
                 if self.passes(parse_function(i, coords, line_length, decompression_type=decompression_type, decompressor=decompressor, bigram_size_dict=bigram_size_dict, column_name=self.column_name)):
                     passing_row_indices.add(i)
 
@@ -140,11 +137,9 @@ class EndsWithFilter(StartsWithFilter):
         else:
             index_file_path = f4.IndexBuilder._get_index_file_path(data_file_path, self.column_name.decode())
 
-            #with f4.IndexSearcher._get_index_parser(index_file_path) as index_parser:
             with f4.Parser(index_file_path) as index_parser:
                 line_length = index_parser._get_stat("ll")
                 coords = index_parser._parse_data_coords([0, 1])
-                #file_handle = index_parser._get_file_handle(".data")
 
                 return f4.IndexSearcher._get_passing_row_indices(self, index_parser, line_length, coords[0], coords[1], 0, end_index)
 
@@ -158,11 +153,9 @@ class LikeFilter(__SimpleBaseFilter):
     def _filter_indexed_column_values(self, data_file_path, end_index, num_processes):
         index_file_path = f4.IndexBuilder._get_index_file_path(data_file_path, self.column_name.decode())
 
-        #with f4.IndexSearcher._get_index_parser(index_file_path) as index_parser:
         with f4.Parser(index_file_path) as index_parser:
             line_length = index_parser._get_stat("ll")
             coords = index_parser._parse_data_coords([0, 1])
-            #file_handle = index_parser._get_file_handle(".data")
 
             return f4.IndexSearcher._get_passing_row_indices(self, index_parser, line_length, coords[0], coords[1], 0, end_index)
 
@@ -182,7 +175,6 @@ class HeadFilter(NoFilter):
         return self.select_columns_set
 
     def _get_num_rows(self, data_file_path):
-        #with f4.Parser(data_file_path, fixed_file_extensions=[".data"], stats_file_extensions=[".ll"]) as parser:
         with f4.Parser(data_file_path) as parser:
             return parser.get_num_rows()
 
@@ -254,7 +246,6 @@ class AndFilter(__CompositeFilter):
                 two_column_index_file_path = f4.IndexBuilder._get_index_file_path(data_file_path, two_column_index_name)
 
                 if os.path.exists(two_column_index_file_path):
-                    #with f4.IndexSearcher._get_index_parser(two_column_index_file_path) as index_parser:
                     with f4.Parser(two_column_index_file_path) as index_parser:
                         coords = index_parser._parse_data_coords([0, 1, 2])
 
@@ -317,7 +308,6 @@ class __RangeFilter(__CompositeFilter):
     def _filter_indexed_column_values(self, data_file_path, end_index, num_processes):
         index_file_path = f4.IndexBuilder._get_index_file_path(data_file_path, self.filter1.column_name.decode())
 
-        #with f4.IndexSearcher._get_index_parser(index_file_path) as index_parser:
         with f4.Parser(index_file_path) as index_parser:
             coords = index_parser._parse_data_coords([0, 1])
 
