@@ -14,7 +14,6 @@ import zstandard
 
 # We use these dictionaries so that when we store the file map, it takes less space on disk.
 FILE_KEY_ABBREVIATIONS = {"data": 1, "cc": 2, "mccl": 3, "ll": 4, "ct": 5, "mctl": 6, "cmpr": 7, "cndata": 8, "cncc": 9, "cnmccl": 10, "cnll": 11}
-#FILE_KEY_ABBREVIATIONS_INVERSE = {y: x for x, y in FILE_KEY_ABBREVIATIONS.items()}
 
 def open_read_file(file_path, file_extension=""):
     the_file = open(file_path + file_extension, 'rb')
@@ -173,7 +172,7 @@ def remove_tmp_dir(tmp_dir_path):
             print(e)
             pass
 
-def combine_into_single_file(tmp_dir_path_chunks, tmp_dir_path_outputs, f4_file_path):
+def combine_into_single_file(tmp_dir_path_chunks, tmp_dir_path_outputs, f4_file_path, num_processes=1, num_rows_per_write=1):
     def _create_file_map(start_end_positions):
         start_end_dict = {}
 
@@ -186,14 +185,17 @@ def combine_into_single_file(tmp_dir_path_chunks, tmp_dir_path_outputs, f4_file_
 
         return str(len(serialized)).encode() + b"\n" + serialized
 
-    # Figure out which files we have
-    #data_files = [x for x in glob.glob(f"{tmp_dir_path_chunks}*")]
+    # Find out which files we have
+    data_files = [x for x in glob.glob(f"{tmp_dir_path_chunks}*")]
     other_files = [x for x in glob.glob(f"{tmp_dir_path_outputs}*")]
 
+    # Find out how much data we have
+    data_size = sum([os.path.getsize(f) for f in data_files])
+
     # Determine start and end position of each file within the combined file
-    start_end_positions = []
+    start_end_positions = [["data", 0, data_size]]
     for f in other_files:
-        start = 0 if len(start_end_positions) == 0 else start_end_positions[-1][-1]
+        start = start_end_positions[-1][-1]
         end = start + os.path.getsize(f)
         start_end_positions.append([os.path.basename(f), start, end])
 
@@ -217,5 +219,27 @@ def combine_into_single_file(tmp_dir_path_chunks, tmp_dir_path_outputs, f4_file_
     with open(f4_file_path, "wb") as f4_file:
         f4_file.write(file_map_serialized)
 
+        _add_data_chunks(tmp_dir_path_chunks, f4_file, num_processes, num_rows_per_write)
+
         for other_file_path in other_files:
             f4_file.write(read_str_from_file(other_file_path))
+
+def _add_data_chunks(tmp_dir_path_chunks, out_file_handle, num_processes, num_rows_per_write):
+    out_lines = []
+
+    for i in range(num_processes):
+        chunk_file_path = f"{tmp_dir_path_chunks}{i}"
+
+        if not os.path.exists(chunk_file_path):
+            continue
+
+        with open(chunk_file_path, "rb") as chunk_file:
+            for line in chunk_file:
+                out_lines.append(line)
+
+                if len(out_lines) % num_rows_per_write == 0:
+                    out_file_handle.write(b"".join(out_lines))
+                    out_lines = []
+
+    if len(out_lines) > 0:
+        out_file_handle.write(b"".join(out_lines))

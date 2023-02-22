@@ -1,4 +1,5 @@
 import f4
+import os
 
 class IndexBuilder:
     #####################################################
@@ -30,6 +31,10 @@ class IndexBuilder:
 
     def _build_one_column_index(f4_file_path, index_column, tmp_dir_path, verbose, custom_index_function):
         tmp_dir_path = f4.fix_dir_path_ending(tmp_dir_path)
+        tmp_dir_path_data = f"{tmp_dir_path}data/"
+        tmp_dir_path_other = f"{tmp_dir_path}other/"
+        os.makedirs(tmp_dir_path_data, exist_ok=True)
+        os.makedirs(tmp_dir_path_other, exist_ok=True)
 
         # TODO: Add logic to verify that index_column is valid. But where?
         f4.print_message(f"Saving index for {index_column}.", verbose)
@@ -57,16 +62,27 @@ class IndexBuilder:
             f4.print_message(f"Building index file for {index_column} index for {f4_file_path}.", verbose)
             IndexBuilder._customize_values_positions(values_positions, [index_column_type], f4.sort_first_column, custom_index_function)
 
-            index_file_path = IndexBuilder._get_index_file_path(parser.data_file_path, index_column, custom_index_function)
-            IndexBuilder._write_index_files(values_positions, tmp_dir_path)
+            IndexBuilder._write_index_files(values_positions, tmp_dir_path_data, tmp_dir_path_other)
 
-        f4.combine_into_single_file(None, tmp_dir_path, index_file_path)
+        index_file_path = IndexBuilder._get_index_file_path(parser.data_file_path, index_column, custom_index_function)
+        f4.combine_into_single_file(tmp_dir_path_data, tmp_dir_path_other, index_file_path)
+
+        # if index_column == "Categorical1":
+        #     print(tmp_dir_path_data)
+        #     print(tmp_dir_path_other)
+        #     print(index_file_path)
+        #     import sys
+        #     sys.exit()
 
         f4.print_message(f"Done building index file for {index_column} index for {f4_file_path}.", verbose)
 
     # TODO: Combine this function with the above one and make it generic enough to handle indexes with more columns.
     def _build_two_column_index(f4_file_path, index_column_1, index_column_2, tmp_dir_path, verbose):
         tmp_dir_path = f4.fix_dir_path_ending(tmp_dir_path)
+        tmp_dir_path_data = f"{tmp_dir_path}data/"
+        tmp_dir_path_other = f"{tmp_dir_path}other/"
+        os.makedirs(tmp_dir_path_data, exist_ok=True)
+        os.makedirs(tmp_dir_path_other, exist_ok=True)
 
         if not isinstance(index_column_1, str) or not isinstance(index_column_2, str):
             raise Exception("When specifying an index column name, it must be a string.")
@@ -105,11 +121,10 @@ class IndexBuilder:
             f4.print_message(f"Building index file for {index_name}.", verbose)
             IndexBuilder._customize_values_positions(values_positions, [index_column_1_type, index_column_2_type], f4.sort_first_two_columns, f4.do_nothing)
 
-            index_file_path = IndexBuilder._get_index_file_path(parser.data_file_path, index_name)
-            IndexBuilder._write_index_files(values_positions, tmp_dir_path)
+            IndexBuilder._write_index_files(values_positions, tmp_dir_path_data, tmp_dir_path_other)
 
-        #TODO
-        f4.combine_into_single_file(None, tmp_dir_path, index_file_path)
+        index_file_path = IndexBuilder._get_index_file_path(parser.data_file_path, index_name)
+        f4.combine_into_single_file(tmp_dir_path_data, tmp_dir_path_other, index_file_path)
 
         f4.print_message(f"Done building two-column index file for {index_name}.", verbose)
 
@@ -126,7 +141,7 @@ class IndexBuilder:
         # Sort the rows.
         sort_function(values_positions)
 
-    def _write_index_files(values_positions, tmp_dir_path_prefix):
+    def _write_index_files(values_positions, tmp_dir_path_data, tmp_dir_path_prefix_other):
         column_dict = {}
         for i in range(len(values_positions[0])):
             column_dict[i] = [x[i] if isinstance(x[i], bytes) else str(x[i]).encode() for x in values_positions]
@@ -148,15 +163,19 @@ class IndexBuilder:
             rows.append(row_value)
 
         column_coords_string, rows_max_length = f4.build_string_map(rows)
-        f4.write_str_to_file(f"{tmp_dir_path_prefix}data", column_coords_string)
+
+        if tmp_dir_path_data:
+            f4.write_str_to_file(f"{tmp_dir_path_data}0", column_coords_string)
+        else:
+            f4.write_str_to_file(f"{tmp_dir_path_prefix_other}data", column_coords_string)
 
         column_start_coords = f4.get_column_start_coords(max_lengths)
         column_coords_string, max_column_coord_length = f4.build_string_map(column_start_coords)
-        f4.write_str_to_file(f"{tmp_dir_path_prefix}cc", column_coords_string)
-        f4.write_str_to_file(f"{tmp_dir_path_prefix}mccl", str(max_column_coord_length).encode())
+        f4.write_str_to_file(f"{tmp_dir_path_prefix_other}cc", column_coords_string)
+        f4.write_str_to_file(f"{tmp_dir_path_prefix_other}mccl", str(max_column_coord_length).encode())
 
         # Find and write the line length.
-        f4.write_str_to_file(f"{tmp_dir_path_prefix}ll", str(rows_max_length).encode())
+        f4.write_str_to_file(f"{tmp_dir_path_prefix_other}ll", str(rows_max_length).encode())
 
     def _get_index_file_path(data_file_path, index_name, custom_index_function=f4.do_nothing):
         index_file_path_extension = f".idx_{index_name}"

@@ -81,21 +81,13 @@ class Builder:
         if num_rows == 0:
             raise Exception(f"A header row but no data rows were detected in {delimited_file_path}")
 
-        # TODO: Rework this so that it's part of combining into single file.
-        #       To get line length, maybe just read one line of first chunk file.
-        line_length = self._write_data_file(delimited_file_path, tmp_dir_path_chunks, tmp_dir_path_outputs, delimiter, comment_prefix, compression_type, column_sizes, column_compression_dicts, num_rows, num_processes, num_rows_per_write)
+        line_length = self._get_line_length(delimited_file_path, tmp_dir_path_chunks, tmp_dir_path_outputs, delimiter, comment_prefix, compression_type, column_sizes, column_compression_dicts, num_rows, num_processes, num_rows_per_write)
 
         self._print_message(f"Saving meta files for {f4_file_path}")
         self._write_meta_files(tmp_dir_path_outputs, tmp_dir_path_indexes, column_sizes, line_length, column_names, column_types, compression_type, column_compression_dicts, num_rows)
 
-        self._print_message(f"Done converting {delimited_file_path} to {f4_file_path}")
-
-        #TODO: Copy straight from chunk files into combined file.
-        # for file_path in glob.glob(f"{tmp_dir_path_outputs}*"):
-        #     destination_file_path = f"{f4_file_path}.{os.path.basename(file_path)}"
-        #     shutil.copy(file_path, destination_file_path)
-
-        f4.combine_into_single_file(tmp_dir_path_chunks, tmp_dir_path_outputs, f4_file_path)
+        self._print_message(f"Combining all data into a single file for {delimited_file_path}")
+        f4.combine_into_single_file(tmp_dir_path_chunks, tmp_dir_path_outputs, f4_file_path, num_processes, num_rows_per_write)
 
         if index_columns:
             f4.IndexBuilder.build_indexes(f4_file_path, index_columns, tmp_dir_path_indexes)
@@ -103,6 +95,8 @@ class Builder:
         f4.remove_tmp_dir(tmp_dir_path_chunks)
         f4.remove_tmp_dir(tmp_dir_path_outputs)
         f4.remove_tmp_dir(tmp_dir_path_indexes)
+
+        self._print_message(f"Done converting {delimited_file_path} to {f4_file_path}")
 
     #####################################################
     # Non-public functions
@@ -128,7 +122,7 @@ class Builder:
         sorted_column_names = sorted(column_names)
         values_positions = [[x.decode(), column_name_index_dict[x]] for x in sorted_column_names]
         f4.IndexBuilder._customize_values_positions(values_positions, ["n"], f4.sort_first_column, f4.do_nothing)
-        f4.IndexBuilder._write_index_files(values_positions, f"{tmp_dir_path_outputs}cn")
+        f4.IndexBuilder._write_index_files(values_positions, None, f"{tmp_dir_path_outputs}cn")
 
         if column_types:
             # Build a map of the column types and write this to a file.
@@ -207,7 +201,7 @@ class Builder:
 
         return column_sizes_dict, column_types_dict, column_compression_dicts, num_rows
 
-    def _write_data_file(self, delimited_file_path, tmp_dir_path_chunks, tmp_dir_path_outputs, delimiter, comment_prefix, compression_type, column_sizes, compression_dicts, num_rows, num_processes, num_rows_per_write):
+    def _get_line_length(self, delimited_file_path, tmp_dir_path_chunks, tmp_dir_path_outputs, delimiter, comment_prefix, compression_type, column_sizes, compression_dicts, num_rows, num_processes, num_rows_per_write):
         self._print_message(f"Parsing chunks of {delimited_file_path} and saving to temp directory ({tmp_dir_path_chunks})")
 
         if num_processes == 1:
@@ -218,10 +212,6 @@ class Builder:
             # Find the line length.
             max_line_sizes = Parallel(n_jobs=num_processes)(delayed(self._write_rows_chunk)(delimited_file_path, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes, compression_dicts, i, row_chunk[0], row_chunk[1], num_rows_per_write) for i, row_chunk in enumerate(row_chunk_indices))
             line_length = max(max_line_sizes)
-
-        # Merge the file chunks. This dictionary enables us to sort them properly.
-        self._print_message(f"Merging the file chunks for {delimited_file_path}")
-        self._merge_chunk_files(tmp_dir_path_chunks, tmp_dir_path_outputs, num_processes, num_rows_per_write)
 
         return line_length
 
@@ -288,29 +278,6 @@ class Builder:
                     break
         else:
             in_file.readline()
-
-    def _merge_chunk_files(self, tmp_dir_path_chunks, tmp_dir_path_outputs, num_processes, num_rows_per_write):
-        with open(f"{tmp_dir_path_outputs}data", "wb") as data_file:
-            out_lines = []
-
-            for i in range(num_processes):
-                chunk_file_path = f"{tmp_dir_path_chunks}{i}"
-
-                if not os.path.exists(chunk_file_path):
-                    continue
-
-                with open(chunk_file_path, "rb") as chunk_file:
-                    for line in chunk_file:
-                        out_lines.append(line)
-
-                        if len(out_lines) % num_rows_per_write == 0:
-                            data_file.write(b"".join(out_lines))
-                            out_lines = []
-
-                os.remove(chunk_file_path)
-
-            if len(out_lines) > 0:
-                data_file.write(b"".join(out_lines))
 
     def _write_compression_info(self, tmp_dir_path_outputs, compression_type, column_compression_dicts, column_index_name_dict):
         if not compression_type:

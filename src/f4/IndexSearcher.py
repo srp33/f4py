@@ -86,7 +86,7 @@ class IndexSearcher:
         if largest_value == b"":
             return start_index, start_index
 
-        matching_position = IndexSearcher._search(index_parser, line_length, value_coords, fltr, 0, end_index, all_false_operator)
+        matching_position = IndexSearcher._search(index_parser, line_length, value_coords, fltr, 0, end_index, end_index, all_false_operator)
 
         return matching_position + 1, end_index
 
@@ -105,33 +105,40 @@ class IndexSearcher:
         if all_true_operator(fltr._get_conversion_function()(largest_value), fltr.value):
             return start_index, end_index
 
-        matching_position = IndexSearcher._search(index_parser, line_length, value_coords, fltr, 0, end_index, all_true_operator)
+        matching_position = IndexSearcher._search(index_parser, line_length, value_coords, fltr, 0, end_index, end_index, all_true_operator)
 
         return start_index, matching_position + 1
 
-    # TODO: It should be feasible to combine this function with _search_with_filter
+    # TODO: It might make sense to combine this function with _search_with_filter
     #      to avoid duplicating similar code.
-    def _search(index_parser, line_length, value_coords, fltr, l, r, search_operator):
-        mid = l + (r - l) // 2
+    def _search(index_parser, line_length, value_coords, fltr, left_index, right_index, overall_end_index, search_operator):
+        mid_index = left_index + (right_index - left_index) // 2
 
         conversion_function = fltr._get_conversion_function()
-        mid_value = conversion_function(index_parser._parse_row_value(mid, value_coords, line_length))
+        mid_value = conversion_function(index_parser._parse_row_value(mid_index, value_coords, line_length))
 
         if search_operator(mid_value, fltr.value):
-            next_value = index_parser._parse_row_value(mid + 1, value_coords, line_length)
+            next_index = mid_index + 1
 
-            # TODO: Does this work if we have a blank data value? Modify to be like search_with_filter?
+            if next_index == overall_end_index:
+                return mid_index
+
+            next_value = index_parser._parse_row_value(mid_index + 1, value_coords, line_length)
+
+            # TODO: Does this work if we have a blank data value? Perhaps we can remove it?
+            #       Modify to be like _search_with_filter?
             if next_value == b"":
-                return mid
+               return mid_index
             elif not search_operator(conversion_function(next_value), fltr.value):
-                return mid
+                return mid_index
             else:
-                return IndexSearcher._search(index_parser, line_length, value_coords, fltr, mid, r, search_operator)
+                return IndexSearcher._search(index_parser, line_length, value_coords, fltr, mid_index, right_index, overall_end_index, search_operator)
         else:
-            return IndexSearcher._search(index_parser, line_length, value_coords, fltr, l, mid, search_operator)
+            return IndexSearcher._search(index_parser, line_length, value_coords, fltr, left_index, mid_index, overall_end_index, search_operator)
 
     def _search_with_filter(index_parser, line_length, value_coords, left_index, right_index, overall_end_index, fltr):
         mid_index = (left_index + right_index) // 2
+        #print(left_index, right_index, mid_index, overall_end_index)
 
         if mid_index == 0:
             return 0
