@@ -3,12 +3,17 @@ import datetime
 import glob
 import gzip
 import fastnumbers
+from itertools import chain
+from joblib import Parallel, delayed
 import math
 import mmap
 import msgspec
+import operator
 from operator import itemgetter
 import os
+import re
 import shutil
+import sys
 import tempfile
 import zstandard
 
@@ -243,3 +248,11 @@ def _add_data_chunks(tmp_dir_path_chunks, out_file_handle, num_processes, num_ro
 
     if len(out_lines) > 0:
         out_file_handle.write(b"".join(out_lines))
+
+def get_index_file_path(data_file_path, index_name, custom_index_function=do_nothing):
+    index_file_path_extension = f".idx_{index_name}"
+
+    if custom_index_function != do_nothing:
+        index_file_path_extension = f"{index_file_path_extension}_{custom_index_function.__name__}"
+
+    return f"{data_file_path}{index_file_path_extension}"

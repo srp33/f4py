@@ -78,7 +78,7 @@ def run_small_tests(in_file_path, f4_file_path, out_file_path, num_processes = 1
     for file_path in glob.glob(f"{f4_file_path}*"):
         os.unlink(file_path)
 
-    f4.Builder().convert_delimited_file(in_file_path, f4_file_path, compression_type=compression_type, num_processes=num_processes, num_cols_per_chunk=num_cols_per_chunk, index_columns=index_columns)
+    f4.convert_delimited_file(in_file_path, f4_file_path, compression_type=compression_type, num_processes=num_processes, num_cols_per_chunk=num_cols_per_chunk, index_columns=index_columns)
 
     try:
         parser = Parser("bogus_file_path")
@@ -570,7 +570,7 @@ def run_medium_tests(num_processes):
     for file_path in glob.glob(f"{f4_file_path}*"):
         os.unlink(file_path)
 
-    f4.Builder().convert_delimited_file(in_file_path, f4_file_path, compression_type=None, num_processes=num_processes, num_cols_per_chunk=1)
+    f4.convert_delimited_file(in_file_path, f4_file_path, compression_type=None, num_processes=num_processes, num_cols_per_chunk=1)
 
     print("-------------------------------------------------------")
     print(f"Running all tests for {in_file_path} - no indexing")
@@ -585,14 +585,14 @@ def run_medium_tests(num_processes):
     index_tmp_dir_path = "/tmp/indexes"
     shutil.rmtree(index_tmp_dir_path, ignore_errors = True)
     os.makedirs(index_tmp_dir_path)
-    f4.IndexBuilder.build_indexes(f4_file_path, ["ID", "Categorical1", "Discrete1", "Numeric1"], index_tmp_dir_path)
+    f4.build_indexes(f4_file_path, ["ID", "Categorical1", "Discrete1", "Numeric1"], index_tmp_dir_path)
     run_medium_tests2(f4_file_path, out_file_path, medium_ID, medium_Categorical1, medium_Discrete1, medium_Numeric1, num_processes)
 
     print("-------------------------------------------------------")
     print(f"Running all tests for {in_file_path} - custom indexing")
     print("-------------------------------------------------------")
 
-    f4.IndexBuilder.build_endswith_index(f4_file_path, "Discrete1", index_tmp_dir_path)
+    f4.build_endswith_index(f4_file_path, "Discrete1", index_tmp_dir_path)
     run_medium_tests2(f4_file_path, out_file_path, medium_ID, medium_Categorical1, medium_Discrete1, medium_Numeric1, num_processes)
 
     # Clean up data files
@@ -678,7 +678,7 @@ run_small_tests("data/small.tsv.gz", f4_file_path, out_file_path, num_processes 
 run_small_tests("data/small.tsv.gz", f4_file_path, out_file_path, num_processes = 2, num_cols_per_chunk = 2, lines_per_chunk = 2)
 
 # Make sure we print to standard out properly (this code does not work inside a function).
-f4.Builder().convert_delimited_file("data/small.tsv", f4_file_path)
+f4.convert_delimited_file("data/small.tsv", f4_file_path)
 old_stdout = sys.stdout
 sys.stdout = TextIOWrapper(BytesIO(), sys.stdout.encoding)
 parser = f4.Parser(f4_file_path)
