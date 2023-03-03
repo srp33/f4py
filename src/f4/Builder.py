@@ -42,10 +42,10 @@ def convert_delimited_file(delimited_file_path, f4_file_path, index_columns=[], 
     # Iterate through the lines to summarize each column.
     print_message(f"Summarizing each column in {delimited_file_path}", verbose)
     if num_processes == 1:
-        chunk_results = [_parse_columns_chunk(delimited_file_path, delimiter, comment_prefix, 0, num_cols, compression_type, verbose)]
+        chunk_results = [_parse_columns_chunk(delimited_file_path, delimiter, comment_prefix, 0, num_cols, num_rows_per_write, compression_type, verbose)]
     else:
         column_chunk_indices = _generate_chunk_ranges(num_cols, num_cols_per_chunk)
-        chunk_results = Parallel(n_jobs=num_processes)(delayed(_parse_columns_chunk)(delimited_file_path, delimiter, comment_prefix, column_chunk[0], column_chunk[1], compression_type, verbose) for column_chunk in column_chunk_indices)
+        chunk_results = Parallel(n_jobs=num_processes)(delayed(_parse_columns_chunk)(delimited_file_path, delimiter, comment_prefix, column_chunk[0], column_chunk[1], num_rows_per_write, compression_type, verbose) for column_chunk in column_chunk_indices)
 
     # Summarize the column sizes and types across the chunks.
     column_sizes = []
@@ -69,6 +69,7 @@ def convert_delimited_file(delimited_file_path, f4_file_path, index_columns=[], 
     if num_rows == 0:
         raise Exception(f"A header row but no data rows were detected in {delimited_file_path}")
 
+    print_message(f"Parsing chunks of {delimited_file_path} and saving to temp directory ({tmp_dir_path_chunks})", verbose)
     line_length = _get_line_length(delimited_file_path, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes, column_compression_dicts, num_rows, num_processes, num_rows_per_write, verbose)
 
     print_message(f"Saving meta files for {f4_file_path}", verbose)
@@ -120,7 +121,7 @@ def _write_meta_files(tmp_dir_path_outputs, tmp_dir_path_indexes, column_sizes, 
 
     _write_compression_info(tmp_dir_path_outputs, compression_type, column_compression_dicts, column_index_name_dict)
 
-def _parse_columns_chunk(delimited_file_path, delimiter, comment_prefix, start_index, end_index, compression_type, verbose):
+def _parse_columns_chunk(delimited_file_path, delimiter, comment_prefix, start_index, end_index, num_rows_per_write, compression_type, verbose):
     with get_delimited_file_handle(delimited_file_path) as in_file:
         _exclude_comments_and_header(in_file, comment_prefix)
 
@@ -147,7 +148,7 @@ def _parse_columns_chunk(delimited_file_path, delimiter, comment_prefix, start_i
 
             num_rows += 1
 
-            if num_rows % 100000 == 0:
+            if num_rows > 0 and num_rows % num_rows_per_write == 0:
                 print_message(f"Processed line {num_rows} of {delimited_file_path} for columns {start_index} - {end_index - 1}", verbose)
 
     column_types_dict = {}
@@ -219,8 +220,6 @@ def _parse_columns_chunk(delimited_file_path, delimiter, comment_prefix, start_i
     return column_sizes_dict, column_types_dict, column_compression_dicts, num_rows
 
 def _get_line_length(delimited_file_path, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes, compression_dicts, num_rows, num_processes, num_rows_per_write, verbose):
-    print_message(f"Parsing chunks of {delimited_file_path} and saving to temp directory ({tmp_dir_path_chunks})", verbose)
-
     if num_processes == 1:
         line_length = _write_rows_chunk(delimited_file_path, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes, compression_dicts, 0, 0, num_rows, num_rows_per_write, verbose)
     else:
