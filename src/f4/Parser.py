@@ -1,16 +1,4 @@
-#from .Filters import *
-#from .IndexBuilder import *
-# from .IndexSearcher import *
 from .Utilities import *
-# import f4
-# import fastnumbers
-# import glob
-# from itertools import chain
-# from joblib import Parallel, delayed
-# import math
-# import operator
-# import re
-# import sys
 
 class Parser:
     """

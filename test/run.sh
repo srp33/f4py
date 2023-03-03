@@ -21,11 +21,12 @@ dockerCommand="docker run -i -t --rm --platform linux/x86_64 --user $(id -u):$(i
 
 #$dockerCommand bash -c "time python3 build_tsv.py 10 10 10 10000 data/medium.tsv"
 
-#TODO: Change imports in __init__.py to be lazy? See if there's a way to speed up Parallel, delayed.
-#TODO: Reduce the imports to just use the specific functions we need.
+#TODO: See if there's a way to speed up Parallel, delayed.
+#TODO:   Change from joblib to multiprocessing?
+#          https://superfastpython.com/multiprocessing-for-loop/
+#          https://docs.python.org/3.7/library/multiprocessing.html
+#TODO: Reduce the Parser imports to just use the specific functions we need.
 #TODO: Integrate f4 into the analysis paper tests. Check speed and optimize more, if needed.
-#TODO: Change from joblib to multiprocessing or asyncio?
-#        https://superfastpython.com/multiprocessing-for-loop/
 #TODO: Cache the cc coordinates in a dictionary within Parser and no longer store ll information?
 #        See _parse_data_coords() function.
 #TODO: Remove class structure so object orientation is not used.
@@ -41,7 +42,6 @@ dockerCommand="docker run -i -t --rm --platform linux/x86_64 --user $(id -u):$(i
 #######################################################
 
 #python3 test.py
-pwd
 time python3 test.py
 #time python3 delete_me.py
 #$dockerCommand python3 test.py

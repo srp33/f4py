@@ -42,10 +42,10 @@ def convert_delimited_file(delimited_file_path, f4_file_path, index_columns=[], 
     # Iterate through the lines to summarize each column.
     print_message(f"Summarizing each column in {delimited_file_path}", verbose)
     if num_processes == 1:
-        chunk_results = [_parse_columns_chunk(delimited_file_path, delimiter, comment_prefix, 0, num_cols, compression_type)]
+        chunk_results = [_parse_columns_chunk(delimited_file_path, delimiter, comment_prefix, 0, num_cols, compression_type, verbose)]
     else:
         column_chunk_indices = _generate_chunk_ranges(num_cols, num_cols_per_chunk)
-        chunk_results = Parallel(n_jobs=num_processes)(delayed(_parse_columns_chunk)(delimited_file_path, delimiter, comment_prefix, column_chunk[0], column_chunk[1], compression_type) for column_chunk in column_chunk_indices)
+        chunk_results = Parallel(n_jobs=num_processes)(delayed(_parse_columns_chunk)(delimited_file_path, delimiter, comment_prefix, column_chunk[0], column_chunk[1], compression_type, verbose) for column_chunk in column_chunk_indices)
 
     # Summarize the column sizes and types across the chunks.
     column_sizes = []
@@ -120,17 +120,18 @@ def _write_meta_files(tmp_dir_path_outputs, tmp_dir_path_indexes, column_sizes, 
 
     _write_compression_info(tmp_dir_path_outputs, compression_type, column_compression_dicts, column_index_name_dict)
 
-def _parse_columns_chunk(delimited_file_path, delimiter, comment_prefix, start_index, end_index, compression_type):
+def _parse_columns_chunk(delimited_file_path, delimiter, comment_prefix, start_index, end_index, compression_type, verbose):
     with get_delimited_file_handle(delimited_file_path) as in_file:
         _exclude_comments_and_header(in_file, comment_prefix)
 
         # Initialize the column sizes and types.
+        # We will count how many there are of each type.
         column_sizes_dict = {}
-        column_types_values_dict = {} # TODO: This dictionary could get really large. Could modify the code to use sqlitedict or https://stackoverflow.com/questions/47233562/key-value-store-in-python-for-possibly-100-gb-of-data-without-client-server.
-        column_types_dict = {}
+        column_types_values_dict = {}
+
         for i in range(start_index, end_index):
             column_sizes_dict[i] = 0
-            column_types_values_dict[i] = {b"i": set(), b"f": set(), b"s": set()}
+            column_types_values_dict[i] = {b"i": 0, b"f": 0, b"s": 0}
 
         # Loop through the file for the specified columns.
         num_rows = 0
@@ -140,30 +141,60 @@ def _parse_columns_chunk(delimited_file_path, delimiter, comment_prefix, start_i
             line_items = line.split(delimiter)
             for i in range(start_index, end_index):
                 column_sizes_dict[i] = max([column_sizes_dict[i], len(line_items[i])])
+
                 inferred_type = _infer_type(line_items[i])
-                column_types_values_dict[i][inferred_type].add(line_items[i])
+                column_types_values_dict[i][inferred_type] += 1
 
             num_rows += 1
 
             if num_rows % 100000 == 0:
                 print_message(f"Processed line {num_rows} of {delimited_file_path} for columns {start_index} - {end_index - 1}", verbose)
 
+    column_types_dict = {}
     for i in range(start_index, end_index):
         column_types_dict[i] = _infer_type_for_column(column_types_values_dict[i])
 
     column_compression_dicts = {}
 
     if compression_type == "dictionary":
+        # Figure out whether we should use categorical compression.
+        # If there are more than 100 unique values, do not use categorical compression.
+        # This is a rough threshold. It also means that files with few rows will almost always use categorical compression.
+        # TODO: Consider refining this approach.
+        UNIQUE_THRESHOLD = 100
+
+        # Specify the default compression information for each column.
+        # The default is categorical.
         for i in range(start_index, end_index):
-            unique_values = list(column_types_values_dict[i][b"s"] | column_types_values_dict[i][b"i"] | column_types_values_dict[i][b"f"])
-            unique_values = sorted(unique_values)
+            column_compression_dicts[i] = {"compression_type": b"c", "map": {}}
 
-            use_categorical_compression = (len(unique_values) / num_rows) <= 0.1
-            column_compression_dicts[i] = {}
-            column_compression_dicts[i]["map"] = {}
+        column_unique_dict = {i: set() for i in range(start_index, end_index)}
+        column_max_length_dict = {i: 0 for i in range(start_index, end_index)}
+        column_bigrams_dict = {i: set() for i in range(start_index, end_index)}
 
-            if use_categorical_compression:
-                column_compression_dicts[i]["compression_type"] = b"c"
+        with get_delimited_file_handle(delimited_file_path) as in_file:
+            _exclude_comments_and_header(in_file, comment_prefix)
+
+            for line in in_file:
+                line_items = line.rstrip(b"\n").split(delimiter)
+
+                for i in range(start_index, end_index):
+                    value = line_items[i]
+                    column_max_length_dict[i] = max(column_max_length_dict[i], len(value))
+
+                    for bigram in _find_unique_bigrams(value):
+                        column_bigrams_dict[i].add(bigram)
+
+                    if column_compression_dicts[i]["compression_type"] == b"c":
+                        column_unique_dict[i].add(value)
+
+                        if len(column_unique_dict[i]) >= UNIQUE_THRESHOLD:
+                            column_compression_dicts[i]["compression_type"] = column_types_dict[i]
+                            column_unique_dict[i] = None
+
+        for i in range(start_index, end_index):
+            if column_compression_dicts[i]["compression_type"] == b"c":
+                unique_values = sorted(column_unique_dict[i])
                 num_bytes = get_bigram_size(len(unique_values))
 
                 for j, value in _enumerate_for_compression(unique_values):
@@ -172,18 +203,18 @@ def _parse_columns_chunk(delimited_file_path, delimiter, comment_prefix, start_i
 
                 column_sizes_dict[i] = num_bytes
             else:
-                column_compression_dicts[i]["compression_type"] = column_types_dict[i]
-                bigrams = _find_unique_bigrams(unique_values)
+                bigrams = sorted(column_bigrams_dict[i])
                 num_bytes = get_bigram_size(len(bigrams))
 
-                for j, gram in _enumerate_for_compression(bigrams):
-                    #column_compression_dicts[i]["map"][gram] = int2ba(j, length = length).to01()
-                    column_compression_dicts[i]["map"][gram] = j.to_bytes(length = num_bytes, byteorder = "big")
+                for j, bigram in _enumerate_for_compression(bigrams):
+                    #column_compression_dicts[i]["map"][bigram] = int2ba(j, length = length).to01()
+                    column_compression_dicts[i]["map"][bigram] = j.to_bytes(length = num_bytes, byteorder = "big")
 
-                column_sizes_dict[i] = 0
-                for unique_value in unique_values:
-                    compressed_length = len(compress_using_2_grams(unique_value, column_compression_dicts[i]["map"]))
-                    column_sizes_dict[i] = max(column_sizes_dict[i], compressed_length)
+                #TODO: Does this work? If not, do we need to iterate the file again?
+                column_sizes_dict[i] = column_max_length_dict[i] * num_bytes
+                # for unique_value in unique_values:
+                #     compressed_length = len(compress_using_2_grams(unique_value, column_compression_dicts[i]["map"]))
+                #     column_sizes_dict[i] = max(column_sizes_dict[i], compressed_length)
 
     return column_sizes_dict, column_types_dict, column_compression_dicts, num_rows
 
@@ -230,7 +261,11 @@ def _write_rows_chunk(delimited_file_path, tmp_dir_path, delimiter, comment_pref
 
                 if compression_type == "dictionary":
                     for i, size in enumerate(column_sizes):
-                        compressed_value = compress_using_2_grams(line_items[i], compression_dicts[i]["map"])
+                        if compression_dicts[i]["compression_type"] == b"c":
+                            compressed_value = compression_dicts[i]["map"][line_items[i]]
+                        else:
+                            compressed_value = compress_using_2_grams(line_items[i], compression_dicts[i]["map"])
+
                         out_items.append(format_string_as_fixed_width(compressed_value, size))
                 else:
                     for i, size in enumerate(column_sizes):
@@ -310,22 +345,32 @@ def _infer_type_for_column(types_dict):
     if len(types_dict) == 0:
         return None
 
-    if len(types_dict[b"s"]) > 0:
+    if types_dict[b"s"] > 0:
         return b"s"
-    elif len(types_dict[b"f"]) > 0:
+    elif types_dict[b"f"] > 0:
         return b"f"
 
     return b"i"
 
-def _find_unique_bigrams(values):
+# def _infer_type_for_column(types_dict):
+#     if len(types_dict) == 0:
+#         return None
+#
+#     if len(types_dict[b"s"]) > 0:
+#         return b"s"
+#     elif len(types_dict[b"f"]) > 0:
+#         return b"f"
+#
+#     return b"i"
+
+def _find_unique_bigrams(value):
     grams = set()
 
-    for value in values:
-        for start_i in range(0, len(value), 2):
-            end_i = (start_i + 2)
-            grams.add(value[start_i:end_i])
+    for start_i in range(0, len(value), 2):
+        end_i = (start_i + 2)
+        grams.add(value[start_i:end_i])
 
-    return sorted(list(grams))
+    return grams
 
 # We skip the space character because it causes a problem when we parse from a file.
 def _enumerate_for_compression(values):
