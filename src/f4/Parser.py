@@ -34,6 +34,8 @@ class Parser:
         self.__stats["nrow"] = fastnumbers.fast_int(data_size / self._get_stat("ll"))
 
         cc_size = self.__file_map_dict["cc"][1] - self.__file_map_dict["cc"][0]
+        print(cc_size)
+        print(self._get_stat("mccl"))
         self.__stats["ncol"] = fastnumbers.fast_int(cc_size / self._get_stat("mccl")) - 1
 
     def __enter__(self):
@@ -200,7 +202,7 @@ class Parser:
                 column_index_name_dict[column_index] = column_name
 
                 if column_name in filter_column_set:
-                    column_type_dict[column_name] = row_index
+                    column_type_dict[column_name] = self._get_column_type_from_index(row_index)
 
             all_coords = self._parse_data_coords(range(self.get_num_cols()))
             for row_index in range(self.get_num_cols()):
@@ -490,7 +492,7 @@ class StringFilter(__OperatorFilter):
 
     def _check_types(self, column_type_dict):
         if column_type_dict[self.column_name] != "s":
-            raise Exception(f"A StringFilter may only be used with string columns, and {self.column_name.decode()} is not a string.")
+            raise Exception(f"A StringFilter may only be used with string columns, and {self.column_name.decode()} is not a string ({column_type_dict[self.column_name]}).")
 
 class FloatFilter(__OperatorFilter):
     def __init__(self, column_name, oper, value):
