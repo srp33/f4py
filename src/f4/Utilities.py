@@ -220,6 +220,12 @@ def combine_into_single_file(tmp_dir_path_chunks, tmp_dir_path_outputs, f4_file_
 
         file_map_serialized = _create_file_map(start_end_positions)
 
+    #print(tmp_dir_path_chunks)
+    #print(tmp_dir_path_outputs)
+    #print(file_map_serialized)
+    #import sys
+    #sys.exit()
+
     # Write the output file
     with open(f4_file_path, "wb") as f4_file:
         f4_file.write(file_map_serialized)

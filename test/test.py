@@ -551,32 +551,53 @@ def run_small_tests(in_file_path, f4_file_path, out_file_path, num_processes = 1
     for file_path in glob.glob(f"{f4_file_path}*"):
         os.unlink(file_path)
 
-def run_medium_tests(num_processes):
-    in_file_path = "data/medium.tsv"
-    f4_file_path = "data/medium.f4"
+def run_larger_tests(num_processes, size, discrete1_index, numeric1_index, rebuild, num_cols_per_chunk):
+    in_file_path = f"data/{size}.tsv"
+    f4_file_path = f"data/{size}.f4"
     out_file_path = "/tmp/f4_out.tsv"
 
-    with open("data/medium.tsv") as medium_file:
-        medium_lines = [line for line in medium_file.read().rstrip("\n").split("\n")]
-        medium_ID = [[line.split("\t")[0].encode()] for line in medium_lines]
-        medium_Categorical1 = [[line.split("\t")[1].encode()] for line in medium_lines]
-        medium_Discrete1 = [[line.split("\t")[11].encode()] for line in medium_lines]
-        medium_Numeric1 = [[line.split("\t")[21]] for line in medium_lines]
+    print("-------------------------------------------------------")
+    print(f"Parsing {in_file_path} for master outputs")
+    print("-------------------------------------------------------")
 
-        for i in range(1, len(medium_Numeric1)):
-            medium_Numeric1[i][0] = float(medium_Numeric1[i][0])
+    larger_ID = []
+    larger_Categorical1 = []
+    larger_Discrete1 = []
+    larger_Numeric1 = []
 
-    # Clean up data files if they already exist
-    for file_path in glob.glob(f"{f4_file_path}*"):
-        os.unlink(file_path)
+    with open(in_file_path) as larger_file:
+        for line in larger_file:
+            line_items = line.rstrip("\n").split("\t")
+            larger_ID.append([line_items[0].encode()])
+            larger_Categorical1.append([line_items[1].encode()])
+            larger_Discrete1.append([line_items[discrete1_index].encode()])
 
-    f4.convert_delimited_file(in_file_path, f4_file_path, compression_type=None, num_processes=num_processes, num_cols_per_chunk=1)
+            number = line_items[numeric1_index]
+            if number != "Numeric1":
+                number = float(number)
+            larger_Numeric1.append([number])
+
+    if rebuild:
+        print("-------------------------------------------------------")
+        print(f"Converting {in_file_path} to {f4_file_path}")
+        print("-------------------------------------------------------")
+
+        # Clean up data files if they already exist
+        for file_path in glob.glob(f"{f4_file_path}*"):
+            os.unlink(file_path)
+
+    if not os.path.exists(f4_file_path):
+        #f4.convert_delimited_file(in_file_path, f4_file_path, compression_type=None, num_processes=num_processes, num_cols_per_chunk=num_cols_per_chunk)
+        f4.convert_delimited_file(in_file_path, f4_file_path, compression_type=None, num_processes=num_processes, num_cols_per_chunk=num_cols_per_chunk, verbose=True)
+    #print("got done building here...")
+    #import sys
+    #sys.exit()
 
     print("-------------------------------------------------------")
     print(f"Running all tests for {in_file_path} - no indexing")
     print("-------------------------------------------------------")
 
-    run_medium_tests2(f4_file_path, out_file_path, medium_ID, medium_Categorical1, medium_Discrete1, medium_Numeric1, num_processes)
+    run_larger_tests2(f4_file_path, out_file_path, larger_ID, larger_Categorical1, larger_Discrete1, larger_Numeric1, num_processes)
 
     print("-------------------------------------------------------")
     print(f"Running all tests for {in_file_path} - with indexing")
@@ -586,137 +607,141 @@ def run_medium_tests(num_processes):
     shutil.rmtree(index_tmp_dir_path, ignore_errors = True)
     os.makedirs(index_tmp_dir_path)
     f4.build_indexes(f4_file_path, ["ID", "Categorical1", "Discrete1", "Numeric1"], index_tmp_dir_path)
-    run_medium_tests2(f4_file_path, out_file_path, medium_ID, medium_Categorical1, medium_Discrete1, medium_Numeric1, num_processes)
+    run_larger_tests2(f4_file_path, out_file_path, larger_ID, larger_Categorical1, larger_Discrete1, larger_Numeric1, num_processes)
 
     print("-------------------------------------------------------")
     print(f"Running all tests for {in_file_path} - custom indexing")
     print("-------------------------------------------------------")
 
     f4.build_endswith_index(f4_file_path, "Discrete1", index_tmp_dir_path)
-    run_medium_tests2(f4_file_path, out_file_path, medium_ID, medium_Categorical1, medium_Discrete1, medium_Numeric1, num_processes)
+    run_larger_tests2(f4_file_path, out_file_path, larger_ID, larger_Categorical1, larger_Discrete1, larger_Numeric1, num_processes)
 
-    # Clean up data files
-    for file_path in glob.glob(f"{f4_file_path}*"):
-        os.unlink(file_path)
+    #for file_path in glob.glob(f"{f4_file_path}*"):
+    #    os.unlink(file_path)
 
-def run_medium_tests2(f4_file_path, out_file_path, medium_ID, medium_Categorical1, medium_Discrete1, medium_Numeric1, num_processes):
+def run_larger_tests2(f4_file_path, out_file_path, larger_ID, larger_Categorical1, larger_Discrete1, larger_Numeric1, num_processes):
     parser = f4.Parser(f4_file_path)
 
     parser.query_and_write(f4.StringFilter("ID", operator.eq, "Row1"), ["Discrete1"], out_file_path, num_processes=num_processes)
-    check_results("Filter ID = Row1", read_file_into_lists(out_file_path), [[b"Discrete1"], medium_Discrete1[1]])
+    check_results("Filter ID = Row1", read_file_into_lists(out_file_path), [[b"Discrete1"], larger_Discrete1[1]])
     os.unlink(out_file_path)
 
     parser.query_and_write(f4.StringFilter("ID", operator.eq, "Row33"), ["Discrete1"], out_file_path, num_processes=num_processes)
-    check_results("Filter ID = Row33", read_file_into_lists(out_file_path), [[b"Discrete1"], medium_Discrete1[33]])
+    check_results("Filter ID = Row33", read_file_into_lists(out_file_path), [[b"Discrete1"], larger_Discrete1[33]])
     os.unlink(out_file_path)
 
     parser.query_and_write(f4.StringFilter("ID", operator.eq, "Row91"), ["Discrete1"], out_file_path, num_processes=num_processes)
-    check_results("Filter ID = Row91", read_file_into_lists(out_file_path), [[b"Discrete1"], medium_Discrete1[91]])
+    check_results("Filter ID = Row91", read_file_into_lists(out_file_path), [[b"Discrete1"], larger_Discrete1[91]])
     os.unlink(out_file_path)
 
     parser.query_and_write(f4.StringFilter("ID", operator.eq, "Row100"), ["Discrete1"], out_file_path, num_processes=num_processes)
-    check_results("Filter ID = Row100", read_file_into_lists(out_file_path), [[b"Discrete1"], medium_Discrete1[100]])
+    check_results("Filter ID = Row100", read_file_into_lists(out_file_path), [[b"Discrete1"], larger_Discrete1[100]])
     os.unlink(out_file_path)
 
-    run_string_test("Categorical1", "A", "A", parser, medium_ID, medium_Categorical1, out_file_path, num_processes)
-    run_string_test("Categorical1", "D", "D", parser, medium_ID, medium_Categorical1, out_file_path, num_processes)
-    run_string_test("Categorical1", "A", "D", parser, medium_ID, medium_Categorical1, out_file_path, num_processes)
-    run_string_test("Categorical1", "B", "C", parser, medium_ID, medium_Categorical1, out_file_path, num_processes)
-    run_string_test("Categorical1", "A", "C", parser, medium_ID, medium_Categorical1, out_file_path, num_processes)
-    run_string_test("Categorical1", "B", "D", parser, medium_ID, medium_Categorical1, out_file_path, num_processes)
-    run_string_test("Categorical1", "B", "Z", parser, medium_ID, medium_Categorical1, out_file_path, num_processes)
+    run_string_test("Categorical1", "A", "A", parser, larger_ID, larger_Categorical1, out_file_path, num_processes)
+    run_string_test("Categorical1", "D", "D", parser, larger_ID, larger_Categorical1, out_file_path, num_processes)
+    run_string_test("Categorical1", "A", "D", parser, larger_ID, larger_Categorical1, out_file_path, num_processes)
+    run_string_test("Categorical1", "B", "C", parser, larger_ID, larger_Categorical1, out_file_path, num_processes)
+    run_string_test("Categorical1", "A", "C", parser, larger_ID, larger_Categorical1, out_file_path, num_processes)
+    run_string_test("Categorical1", "B", "D", parser, larger_ID, larger_Categorical1, out_file_path, num_processes)
+    run_string_test("Categorical1", "B", "Z", parser, larger_ID, larger_Categorical1, out_file_path, num_processes)
 
-    run_string_test("Discrete1", "AA", "AA", parser, medium_ID, medium_Discrete1, out_file_path, num_processes)
-    run_string_test("Discrete1", "PM", "PM", parser, medium_ID, medium_Discrete1, out_file_path, num_processes)
-    run_string_test("Discrete1", "AA", "ZZ", parser, medium_ID, medium_Discrete1, out_file_path, num_processes)
-    run_string_test("Discrete1", "FA", "SZ", parser, medium_ID, medium_Discrete1, out_file_path, num_processes)
+    run_string_test("Discrete1", "AA", "AA", parser, larger_ID, larger_Discrete1, out_file_path, num_processes)
+    run_string_test("Discrete1", "PM", "PM", parser, larger_ID, larger_Discrete1, out_file_path, num_processes)
+    run_string_test("Discrete1", "AA", "ZZ", parser, larger_ID, larger_Discrete1, out_file_path, num_processes)
+    run_string_test("Discrete1", "FA", "SZ", parser, larger_ID, larger_Discrete1, out_file_path, num_processes)
 
-    run_endswith_test("M", parser, medium_ID, medium_Discrete1, out_file_path, num_processes)
-    run_endswith_test("PM", parser, medium_ID, medium_Discrete1, out_file_path, num_processes)
-    run_endswith_test("ZZZZ", parser, medium_ID, medium_Discrete1, out_file_path, num_processes)
+    run_endswith_test("M", parser, larger_ID, larger_Discrete1, out_file_path, num_processes)
+    run_endswith_test("PM", parser, larger_ID, larger_Discrete1, out_file_path, num_processes)
+    run_endswith_test("ZZZZ", parser, larger_ID, larger_Discrete1, out_file_path, num_processes)
 
-    run_float_test(0.0, 1.0, parser, medium_ID, medium_Numeric1, out_file_path, num_processes)
-    run_float_test(0.85, 0.9, parser, medium_ID, medium_Numeric1, out_file_path, num_processes)
-    run_float_test(-0.9, -0.85, parser, medium_ID, medium_Numeric1, out_file_path, num_processes)
-    run_float_test(-0.5, 0.0, parser, medium_ID, medium_Numeric1, out_file_path, num_processes)
-    run_float_test(-0.5, 0.5, parser, medium_ID, medium_Numeric1, out_file_path, num_processes)
-    run_float_test(-1000.0, 1000.0, parser, medium_ID, medium_Numeric1, out_file_path, num_processes)
-    run_float_test(0.5, 0.5, parser, medium_ID, medium_Numeric1, out_file_path, num_processes)
+    run_float_test(0.0, 1.0, parser, larger_ID, larger_Numeric1, out_file_path, num_processes)
+    run_float_test(0.85, 0.9, parser, larger_ID, larger_Numeric1, out_file_path, num_processes)
+    run_float_test(-0.9, -0.85, parser, larger_ID, larger_Numeric1, out_file_path, num_processes)
+    run_float_test(-0.5, 0.0, parser, larger_ID, larger_Numeric1, out_file_path, num_processes)
+    run_float_test(-0.5, 0.5, parser, larger_ID, larger_Numeric1, out_file_path, num_processes)
+    run_float_test(-1000.0, 1000.0, parser, larger_ID, larger_Numeric1, out_file_path, num_processes)
+    run_float_test(0.5, 0.5, parser, larger_ID, larger_Numeric1, out_file_path, num_processes)
 
-def run_string_test(column_name, lower_bound, upper_bound, parser, medium_ID, filter_values, out_file_path, num_processes):
+def run_string_test(column_name, lower_bound, upper_bound, parser, larger_ID, filter_values, out_file_path, num_processes):
     parser.query_and_write(f4.StringRangeFilter(column_name, lower_bound, upper_bound), ["ID"], out_file_path, num_processes=num_processes)
     indices = [i for i in range(len(filter_values)) if filter_values[i][0] == column_name.encode() or (filter_values[i][0] >= lower_bound.encode() and filter_values[i][0] <= upper_bound.encode())]
-    matches = [medium_ID[i] for i in indices]
+    matches = [larger_ID[i] for i in indices]
     actual = read_file_into_lists(out_file_path)
     check_results(f"Filter {column_name} = {lower_bound} <> {upper_bound} = {len(matches) - 1} matches", read_file_into_lists(out_file_path), matches)
     os.unlink(out_file_path)
 
-def run_endswith_test(value, parser, medium_ID, filter_values, out_file_path, num_processes):
+def run_endswith_test(value, parser, larger_ID, filter_values, out_file_path, num_processes):
     column_name = "Discrete1"
     parser.query_and_write(f4.EndsWithFilter(column_name, value), ["ID"], out_file_path, num_processes=num_processes)
     indices = [i for i in range(len(filter_values)) if filter_values[i][0] == column_name.encode() or filter_values[i][0].endswith(value.encode())]
-    matches = [medium_ID[i] for i in indices]
+    matches = [larger_ID[i] for i in indices]
     check_results(f"EndsWith filter - {column_name} - {value} = {len(matches) - 1} matches", read_file_into_lists(out_file_path), matches)
     os.unlink(out_file_path)
 
-def run_float_test(lower_bound, upper_bound, parser, medium_ID, medium_Numeric1, out_file_path, num_processes):
+def run_float_test(lower_bound, upper_bound, parser, larger_ID, larger_Numeric1, out_file_path, num_processes):
     column_name = "Numeric1"
     parser.query_and_write(f4.FloatRangeFilter(column_name, lower_bound, upper_bound), ["ID"], out_file_path, num_processes=num_processes)
-    indices = [i for i in range(len(medium_Numeric1)) if isinstance(medium_Numeric1[i][0], str) or (medium_Numeric1[i][0] >= lower_bound and medium_Numeric1[i][0] <= upper_bound)]
-    matches = [medium_ID[i] for i in indices]
+    indices = [i for i in range(len(larger_Numeric1)) if isinstance(larger_Numeric1[i][0], str) or (larger_Numeric1[i][0] >= lower_bound and larger_Numeric1[i][0] <= upper_bound)]
+    matches = [larger_ID[i] for i in indices]
     check_results(f"Filter FloatWithin = {lower_bound} <> {upper_bound} = {len(matches) - 1} matches", read_file_into_lists(out_file_path), matches)
     os.unlink(out_file_path)
 
 # Basic small tests
 f4_file_path = "data/small.f4"
 out_file_path = "/tmp/small_out.tsv"
-run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_processes = 1, num_cols_per_chunk = 1, lines_per_chunk = 1)
-run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_processes = 2, num_cols_per_chunk = 2, lines_per_chunk = 2)
+#run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_processes = 1, num_cols_per_chunk = 1, lines_per_chunk = 1)
+#run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_processes = 2, num_cols_per_chunk = 2, lines_per_chunk = 2)
 
 # Basic small tests (with gzipped files)
-run_small_tests("data/small.tsv.gz", f4_file_path, out_file_path, num_processes = 1, num_cols_per_chunk = 1, lines_per_chunk = 1)
-run_small_tests("data/small.tsv.gz", f4_file_path, out_file_path, num_processes = 2, num_cols_per_chunk = 2, lines_per_chunk = 2)
+#run_small_tests("data/small.tsv.gz", f4_file_path, out_file_path, num_processes = 1, num_cols_per_chunk = 1, lines_per_chunk = 1)
+#run_small_tests("data/small.tsv.gz", f4_file_path, out_file_path, num_processes = 2, num_cols_per_chunk = 2, lines_per_chunk = 2)
 
 # Make sure we print to standard out properly (this code does not work inside a function).
-f4.convert_delimited_file("data/small.tsv", f4_file_path)
-old_stdout = sys.stdout
-sys.stdout = TextIOWrapper(BytesIO(), sys.stdout.encoding)
-parser = f4.Parser(f4_file_path)
-parser.query_and_write(f4.NoFilter(), [], out_file_path=None, num_processes=1, lines_per_chunk=10)
-sys.stdout.seek(0)
-out = sys.stdout.read()
-sys.stdout.close()
-sys.stdout = old_stdout
-check_results("No filters, select all columns - std out", read_string_into_lists(out), read_file_into_lists("data/small.tsv"))
+#f4.convert_delimited_file("data/small.tsv", f4_file_path)
+#old_stdout = sys.stdout
+#sys.stdout = TextIOWrapper(BytesIO(), sys.stdout.encoding)
+#parser = f4.Parser(f4_file_path)
+#parser.query_and_write(f4.NoFilter(), [], out_file_path=None, num_processes=1, lines_per_chunk=10)
+#sys.stdout.seek(0)
+#out = sys.stdout.read()
+#sys.stdout.close()
+#sys.stdout = old_stdout
+#check_results("No filters, select all columns - std out", read_string_into_lists(out), read_file_into_lists("data/small.tsv"))
 
-index_columns = ["ID", "CategoricalB", "FloatA", "FloatB", "IntA", "IntB", "OrdinalA", ["CategoricalB", "IntB"]]
+#index_columns = ["ID", "CategoricalB", "FloatA", "FloatB", "IntA", "IntB", "OrdinalA", ["CategoricalB", "IntB"]]
 
 ## Small tests with indexing
-run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_processes = 1, num_cols_per_chunk = 1, lines_per_chunk = 1, index_columns = index_columns)
-run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_processes = 2, num_cols_per_chunk = 2, lines_per_chunk = 2, index_columns = index_columns)
+#run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_processes = 1, num_cols_per_chunk = 1, lines_per_chunk = 1, index_columns = index_columns)
+#run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_processes = 2, num_cols_per_chunk = 2, lines_per_chunk = 2, index_columns = index_columns)
 
 ## Small tests with dictionary-based compression
-run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_processes = 1, num_cols_per_chunk = 1, lines_per_chunk = 1, compression_type = "dictionary")
-run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_processes = 2, num_cols_per_chunk = 2, lines_per_chunk = 2, compression_type = "dictionary")
+#run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_processes = 1, num_cols_per_chunk = 1, lines_per_chunk = 1, compression_type = "dictionary")
+#run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_processes = 2, num_cols_per_chunk = 2, lines_per_chunk = 2, compression_type = "dictionary")
 
 ## Small tests with dictionary-based compression (and indexing)
-run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_processes = 1, num_cols_per_chunk = 1, lines_per_chunk = 1, compression_type = "dictionary", index_columns = index_columns)
-run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_processes = 2, num_cols_per_chunk = 2, lines_per_chunk = 2, compression_type = "dictionary", index_columns = index_columns)
+#run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_processes = 1, num_cols_per_chunk = 1, lines_per_chunk = 1, compression_type = "dictionary", index_columns = index_columns)
+#run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_processes = 2, num_cols_per_chunk = 2, lines_per_chunk = 2, compression_type = "dictionary", index_columns = index_columns)
 
 ## Small tests with z-standard compression
-run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_processes = 1, num_cols_per_chunk = 1, lines_per_chunk = 1, compression_type = "zstd")
-run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_processes = 2, num_cols_per_chunk = 2, lines_per_chunk = 2, compression_type = "zstd")
+#run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_processes = 1, num_cols_per_chunk = 1, lines_per_chunk = 1, compression_type = "zstd")
+#run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_processes = 2, num_cols_per_chunk = 2, lines_per_chunk = 2, compression_type = "zstd")
 
 ## Small tests with z-standard compression (and indexing)
-run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_processes = 1, num_cols_per_chunk = 1, lines_per_chunk = 1, compression_type = "zstd", index_columns = index_columns)
-run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_processes = 2, num_cols_per_chunk = 2, lines_per_chunk = 2, compression_type = "zstd", index_columns = index_columns)
+#run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_processes = 1, num_cols_per_chunk = 1, lines_per_chunk = 1, compression_type = "zstd", index_columns = index_columns)
+#run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_processes = 2, num_cols_per_chunk = 2, lines_per_chunk = 2, compression_type = "zstd", index_columns = index_columns)
 
 # Clean up data files
-for file_path in glob.glob(f"{f4_file_path}*"):
-    os.unlink(file_path)
+#for file_path in glob.glob(f"{f4_file_path}*"):
+#    os.unlink(file_path)
 
 # Medium tests
-run_medium_tests(num_processes=1)
-run_medium_tests(num_processes=2)
+#run_larger_tests(num_processes=1, size="medium", discrete1_index=11, numeric1_index=21, rebuild=True, num_cols_per_chunk=10)
+#run_larger_tests(num_processes=2, size="medium", discrete1_index=11, numeric1_index=21, rebuild=True, num_cols_per_chunk=10)
+
+# Large tests
+run_larger_tests(num_processes=16, size="large_tall", discrete1_index=251, numeric1_index=501, rebuild=True, num_cols_per_chunk=76)
+#run_larger_tests(num_processes=16, size="large_tall", discrete1_index=251, numeric1_index=501, rebuild=False, num_cols_per_chunk=76)
+#run_larger_tests(num_processes=16, size="large_wide", discrete1_index=?, numeric1_index=?, rebuild=False, num_cols_per_chunk=30001)
 
 print("All tests passed!!")

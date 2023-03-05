@@ -34,8 +34,8 @@ class Parser:
         self.__stats["nrow"] = fastnumbers.fast_int(data_size / self._get_stat("ll"))
 
         cc_size = self.__file_map_dict["cc"][1] - self.__file_map_dict["cc"][0]
-        print(cc_size)
-        print(self._get_stat("mccl"))
+        #print(cc_size)
+        #print(self._get_stat("mccl"))
         self.__stats["ncol"] = fastnumbers.fast_int(cc_size / self._get_stat("mccl")) - 1
 
     def __enter__(self):

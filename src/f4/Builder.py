@@ -1,7 +1,7 @@
 from .Parser import *
 from .Utilities import *
 
-def convert_delimited_file(delimited_file_path, f4_file_path, index_columns=[], delimiter="\t", comment_prefix="#", compression_type=None, num_processes=1, num_cols_per_chunk=None, num_rows_per_write=100, tmp_dir_path=None, verbose=False):
+def convert_delimited_file(delimited_file_path, f4_file_path, index_columns=[], delimiter="\t", comment_prefix="#", compression_type=None, num_processes=1, num_cols_per_chunk=10, num_rows_per_write=100, tmp_dir_path=None, verbose=False):
     if type(delimiter) != str:
         raise Exception("The delimiter value must be a string.")
 
