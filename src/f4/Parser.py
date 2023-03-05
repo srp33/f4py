@@ -34,8 +34,6 @@ class Parser:
         self.__stats["nrow"] = fastnumbers.fast_int(data_size / self._get_stat("ll"))
 
         cc_size = self.__file_map_dict["cc"][1] - self.__file_map_dict["cc"][0]
-        #print(cc_size)
-        #print(self._get_stat("mccl"))
         self.__stats["ncol"] = fastnumbers.fast_int(cc_size / self._get_stat("mccl")) - 1
 
     def __enter__(self):
@@ -44,7 +42,7 @@ class Parser:
     def __exit__(self, the_type, value, traceback):
         self.__file_handle.close()
 
-    def query_and_write(self, fltr, select_columns, out_file_path=None, out_file_type="tsv", num_processes=1, lines_per_chunk=10):
+    def query_and_write(self, fltr, select_columns, out_file_path=None, out_file_type="tsv", num_threads=1, lines_per_chunk=10):
         """
         Query the data file using zero or more filters.
 
@@ -84,28 +82,28 @@ class Parser:
 #TODO: Remove this stuff if we don't need it after testing on huge files.
 #            sub_filters = fltr.get_sub_filters()
 
-#            if num_processes == 1 or len(sub_filters) == 1:
-            keep_row_indices = sorted(fltr._filter_indexed_column_values(self.data_file_path, self.get_num_rows(), num_processes))
+#            if num_threads == 1 or len(sub_filters) == 1:
+            keep_row_indices = sorted(fltr._filter_indexed_column_values(self.data_file_path, self.get_num_rows(), num_threads))
 #            else:
 #                fltr_results_dict = {}
 
 ##                for f in sub_filters:
-##                    fltr_results_dict[str(f)] = f.filter_indexed_column_values(self.data_file_path, self.compression_level, column_index_dict, column_type_dict, column_coords_dict, self.get_num_rows(), num_processes)
+##                    fltr_results_dict[str(f)] = f.filter_indexed_column_values(self.data_file_path, self.compression_level, column_index_dict, column_type_dict, column_coords_dict, self.get_num_rows(), num_threads)
 
                 # This is a parallelization of the above code.
                 # At least in some cases, it slows things down more than it speeds things up.
-#                fltr_results = Parallel(n_jobs = num_processes)(delayed(f.filter_indexed_column_values)(self.data_file_path, self.compression_level, column_index_dict, column_type_dict, column_coords_dict, self.get_num_rows(), num_processes) for f in sub_filters)
+#                fltr_results = Parallel(n_jobs = num_threads)(delayed(f.filter_indexed_column_values)(self.data_file_path, self.compression_level, column_index_dict, column_type_dict, column_coords_dict, self.get_num_rows(), num_threads) for f in sub_filters)
 #                for i in range(len(sub_filters)):
 #                    fltr_results_dict[str(sub_filters[i])] = fltr_results[i]
 #
 #                keep_row_indices = sorted(fltr.filter_indexed_column_values_parallel(fltr_results_dict))
         else:
-            if num_processes == 1:
+            if num_threads == 1:
                 row_indices = set(range(self.get_num_rows()))
                 keep_row_indices = sorted(fltr._filter_column_values(self.data_file_path, row_indices, column_coords_dict, decompression_type, decompressor, bigram_size_dict))
             else:
                 # Loop through the rows in parallel and find matching row indices.
-                keep_row_indices = sorted(chain.from_iterable(Parallel(n_jobs = num_processes)(delayed(fltr._filter_column_values)(self.data_file_path, row_indices, column_coords_dict, decompression_type, decompressor, bigram_size_dict) for row_indices in self._generate_row_chunks(num_processes))))
+                keep_row_indices = sorted(chain.from_iterable(Parallel(n_jobs = num_threads)(delayed(fltr._filter_column_values)(self.data_file_path, row_indices, column_coords_dict, decompression_type, decompressor, bigram_size_dict) for row_indices in self._generate_row_chunks(num_threads))))
 
         select_column_coords = [column_coords_dict[name] for name in select_columns]
 
@@ -248,8 +246,8 @@ class Parser:
 
         return select_columns, column_type_dict, column_coords_dict, decompression_type, decompressor, bigram_size_dict
 
-    def _generate_row_chunks(self, num_processes):
-        rows_per_chunk = math.ceil(self.get_num_rows() / num_processes)
+    def _generate_row_chunks(self, num_threads):
+        rows_per_chunk = math.ceil(self.get_num_rows() / num_threads)
 
         row_indices = set()
 
@@ -426,7 +424,7 @@ class NoFilter:
     def _filter_column_values(self, data_file_path, row_indices, column_coords_dict, decompression_type, decompressor, bigram_size_dict):
         return row_indices
 
-    def _filter_indexed_column_values(self, data_file_path, end_index, num_processes):
+    def _filter_indexed_column_values(self, data_file_path, end_index, num_threads):
         return set(range(end_index))
 
 class __SimpleBaseFilter(NoFilter):
@@ -473,10 +471,10 @@ class __OperatorFilter(__SimpleBaseFilter):
 
         self.oper = oper
 
-    def _filter_indexed_column_values(self, data_file_path, end_index, num_processes):
+    def _filter_indexed_column_values(self, data_file_path, end_index, num_threads):
         index_file_path = get_index_file_path(data_file_path, self.column_name.decode())
 
-        return IndexSearcher._filter_using_operator(index_file_path, self, end_index, num_processes)
+        return IndexSearcher._filter_using_operator(index_file_path, self, end_index, num_threads)
 
     def _check_column_types(self, column_index_dict, column_type_dict, expected_column_type, expected_column_type_description):
         if column_type_dict[column_index_dict[self.column_name]] != expected_column_type:
@@ -523,10 +521,10 @@ class StartsWithFilter(__SimpleBaseFilter):
         self.check_argument(value, "value", str)
         super().__init__(column_name, value.encode())
 
-    def _filter_indexed_column_values(self, data_file_path, end_index, num_processes):
+    def _filter_indexed_column_values(self, data_file_path, end_index, num_threads):
         index_file_path = get_index_file_path(data_file_path, self.column_name.decode())
 
-        return IndexSearcher._get_passing_row_indices_with_filter(index_file_path, self, end_index, num_processes)
+        return IndexSearcher._get_passing_row_indices_with_filter(index_file_path, self, end_index, num_threads)
 
     def passes(self, value):
         return value.startswith(self.value)
@@ -535,14 +533,14 @@ class EndsWithFilter(StartsWithFilter):
     def passes(self, value):
         return value.endswith(self.value)
 
-    def _filter_indexed_column_values(self, data_file_path, end_index, num_processes):
+    def _filter_indexed_column_values(self, data_file_path, end_index, num_threads):
         custom_index_function = reverse_string
         custom_index_file_path = get_index_file_path(data_file_path, self.column_name.decode(), custom_index_function)
 
         if os.path.exists(custom_index_file_path):
             custom_fltr = StartsWithFilter(self.column_name.decode(), custom_index_function(self.value).decode())
 
-            return IndexSearcher._get_passing_row_indices_with_filter(custom_index_file_path, custom_fltr, end_index, num_processes)
+            return IndexSearcher._get_passing_row_indices_with_filter(custom_index_file_path, custom_fltr, end_index, num_threads)
         else:
             index_file_path = get_index_file_path(data_file_path, self.column_name.decode())
 
@@ -559,7 +557,7 @@ class LikeFilter(__SimpleBaseFilter):
         self.check_argument(regular_expression, "regular_expression", str)
         self.value = re.compile(self.value)
 
-    def _filter_indexed_column_values(self, data_file_path, end_index, num_processes):
+    def _filter_indexed_column_values(self, data_file_path, end_index, num_threads):
         index_file_path = get_index_file_path(data_file_path, self.column_name.decode())
 
         with Parser(index_file_path) as index_parser:
@@ -590,7 +588,7 @@ class HeadFilter(NoFilter):
     def _filter_column_values(self, data_file_path, row_indices, column_coords_dict, decompression_type, decompressor, bigram_size_dict):
         return set(range(min(self._get_num_rows(data_file_path), self.n))) & row_indices
 
-    def _filter_indexed_column_values(self, data_file_path, end_index, num_processes):
+    def _filter_indexed_column_values(self, data_file_path, end_index, num_threads):
         return set(range(min(self._get_num_rows(data_file_path), self.n)))
 
 class TailFilter(HeadFilter):
@@ -598,7 +596,7 @@ class TailFilter(HeadFilter):
         num_rows = self._get_num_rows(data_file_path)
         return set(range(num_rows - self.n, num_rows)) & row_indices
 
-    def _filter_indexed_column_values(self, data_file_path, end_index, num_processes):
+    def _filter_indexed_column_values(self, data_file_path, end_index, num_threads):
         num_rows = self._get_num_rows(data_file_path)
         return set(range(num_rows - self.n, num_rows))
 
@@ -647,7 +645,7 @@ class AndFilter(__CompositeFilter):
         row_indices_1 = self.filter1._filter_column_values(data_file_path, row_indices, column_coords_dict, decompression_type, decompressor, bigram_size_dict)
         return self.filter2._filter_column_values(data_file_path, row_indices_1, column_coords_dict, decompression_type, decompressor, bigram_size_dict)
 
-    def _filter_indexed_column_values(self, data_file_path, end_index, num_processes):
+    def _filter_indexed_column_values(self, data_file_path, end_index, num_threads):
         # Currently, this combination of two-column filters is supported. Add more later.
         if isinstance(self.filter1, StringFilter) and self.filter1.oper == operator.eq:
             if isinstance(self.filter2, IntRangeFilter):
@@ -659,16 +657,16 @@ class AndFilter(__CompositeFilter):
                         coords = index_parser._parse_data_coords([0, 1, 2])
 
                         # Find range for string column
-                        lower_position, upper_position = IndexSearcher._find_bounds_for_range(index_parser, coords[0], self.filter1, self.filter1, end_index, num_processes)
+                        lower_position, upper_position = IndexSearcher._find_bounds_for_range(index_parser, coords[0], self.filter1, self.filter1, end_index, num_threads)
 
                         # Find range for int column
-                        lower_position, upper_position = IndexSearcher._find_bounds_for_range(index_parser, coords[1], self.filter2.filter1, self.filter2.filter2, upper_position, num_processes, lower_position)
+                        lower_position, upper_position = IndexSearcher._find_bounds_for_range(index_parser, coords[1], self.filter2.filter1, self.filter2.filter2, upper_position, num_threads, lower_position)
 
                         # Get row indices for the overlapping range
-                        return IndexSearcher._retrieve_matching_row_indices(index_parser, coords[2], (lower_position, upper_position), num_processes)
+                        return IndexSearcher._retrieve_matching_row_indices(index_parser, coords[2], (lower_position, upper_position), num_threads)
 
-        row_indices_1 = self.filter1._filter_indexed_column_values(data_file_path, end_index, num_processes)
-        row_indices_2 = self.filter2._filter_indexed_column_values(data_file_path, end_index, num_processes)
+        row_indices_1 = self.filter1._filter_indexed_column_values(data_file_path, end_index, num_threads)
+        row_indices_2 = self.filter2._filter_indexed_column_values(data_file_path, end_index, num_threads)
 
         return row_indices_1 & row_indices_2
 
@@ -694,9 +692,9 @@ class OrFilter(__CompositeFilter):
 
         return row_indices_1 | row_indices_2
 
-    def _filter_indexed_column_values(self, data_file_path, end_index, num_processes):
-        row_indices_1 = self.filter1._filter_indexed_column_values(data_file_path, end_index, num_processes)
-        row_indices_2 = self.filter2._filter_indexed_column_values(data_file_path, end_index, num_processes)
+    def _filter_indexed_column_values(self, data_file_path, end_index, num_threads):
+        row_indices_1 = self.filter1._filter_indexed_column_values(data_file_path, end_index, num_threads)
+        row_indices_2 = self.filter2._filter_indexed_column_values(data_file_path, end_index, num_threads)
 
         return row_indices_1 | row_indices_2
 
@@ -714,13 +712,13 @@ class __RangeFilter(__CompositeFilter):
     def _filter_column_values(self, data_file_path, row_indices, column_coords_dict, decompression_type, decompressor, bigram_size_dict):
         return AndFilter(self.filter1, self.filter2)._filter_column_values(data_file_path, row_indices, column_coords_dict, decompression_type, decompressor, bigram_size_dict)
 
-    def _filter_indexed_column_values(self, data_file_path, end_index, num_processes):
+    def _filter_indexed_column_values(self, data_file_path, end_index, num_threads):
         index_file_path = get_index_file_path(data_file_path, self.filter1.column_name.decode())
 
         with Parser(index_file_path) as index_parser:
             coords = index_parser._parse_data_coords([0, 1])
 
-            return IndexSearcher._find_row_indices_for_range(index_parser, coords[0], coords[1], self.filter1, self.filter2, end_index, num_processes)
+            return IndexSearcher._find_row_indices_for_range(index_parser, coords[0], coords[1], self.filter1, self.filter2, end_index, num_threads)
 
     def _get_conversion_function(self):
         return do_nothing
@@ -785,7 +783,7 @@ class IndexSearcher:
             # Else the element can only be present in right subarray
             return IndexSearcher._binary_identifier_search(parser, data_prefix, line_length, value_coords, value_to_find, mid + 1, r)
 
-    def _filter_using_operator(index_file_path, fltr, end_index, num_processes):
+    def _filter_using_operator(index_file_path, fltr, end_index, num_threads):
         if end_index == 0:
             return set()
 
@@ -794,16 +792,16 @@ class IndexSearcher:
             coords = index_parser._parse_data_coords([0, 1])
 
             if fltr.oper == operator.eq:
-                return IndexSearcher._find_row_indices_for_range(index_parser, coords[0], coords[1], fltr, fltr, end_index, num_processes)
+                return IndexSearcher._find_row_indices_for_range(index_parser, coords[0], coords[1], fltr, fltr, end_index, num_threads)
             else:
                 if fltr.oper == operator.ne:
-                    lower_position, upper_position = IndexSearcher._find_bounds_for_range(index_parser, coords[0], fltr, fltr, end_index, num_processes)
+                    lower_position, upper_position = IndexSearcher._find_bounds_for_range(index_parser, coords[0], fltr, fltr, end_index, num_threads)
 
                     lower_positions = (0, lower_position)
                     upper_positions = (upper_position, end_index)
 
-                    lower_row_indices = IndexSearcher._retrieve_matching_row_indices(index_parser, coords[1], lower_positions, num_processes)
-                    upper_row_indices = IndexSearcher._retrieve_matching_row_indices(index_parser, coords[1], upper_positions, num_processes)
+                    lower_row_indices = IndexSearcher._retrieve_matching_row_indices(index_parser, coords[1], lower_positions, num_threads)
+                    upper_row_indices = IndexSearcher._retrieve_matching_row_indices(index_parser, coords[1], upper_positions, num_threads)
 
                     return lower_row_indices | upper_row_indices
                 else:
@@ -816,7 +814,7 @@ class IndexSearcher:
                     elif fltr.oper == operator.le:
                         positions = IndexSearcher._find_positions_l(index_parser, line_length, coords[0], fltr, 0, end_index, fltr.oper)
 
-                    return IndexSearcher._retrieve_matching_row_indices(index_parser, coords[1], positions, num_processes)
+                    return IndexSearcher._retrieve_matching_row_indices(index_parser, coords[1], positions, num_threads)
 
     def _find_positions_g(index_parser, line_length, value_coords, fltr, start_index, end_index, all_false_operator):
         smallest_value = index_parser._parse_row_value(start_index, value_coords, line_length)
@@ -921,23 +919,23 @@ class IndexSearcher:
 
             return matching_row_indices
 
-    def _retrieve_matching_row_indices(index_parser, position_coords, positions, num_processes):
+    def _retrieve_matching_row_indices(index_parser, position_coords, positions, num_threads):
         # This is a rough threshold for determine whether it is worth the overhead to parallelize.
         num_indices = positions[1] - positions[0]
 
-        if num_processes == 1 or num_indices < 100:
+        if num_threads == 1 or num_indices < 100:
             return IndexSearcher._find_matching_row_indices(index_parser.data_file_path, position_coords, positions)
         else:
-            chunk_size = math.ceil(num_indices / num_processes)
+            chunk_size = math.ceil(num_indices / num_threads)
             position_chunks = []
             for i in range(positions[0], positions[1], chunk_size):
                 position_chunks.append((i, min(positions[1], i + chunk_size)))
 
-            return set(chain.from_iterable(Parallel(n_jobs=num_processes)(
+            return set(chain.from_iterable(Parallel(n_jobs=num_threads)(
                 delayed(IndexSearcher._find_matching_row_indices)(index_parser.data_file_path, position_coords, position_chunk)
                 for position_chunk in position_chunks)))
 
-    def _find_bounds_for_range(index_parser, value_coords, filter1, filter2, end_index, num_processes, start_index=0):
+    def _find_bounds_for_range(index_parser, value_coords, filter1, filter2, end_index, num_threads, start_index=0):
         line_length = index_parser._get_stat("ll")
 
         lower_positions = IndexSearcher._find_positions_g(index_parser, line_length, value_coords, filter1, start_index, end_index, operator.lt)
@@ -948,10 +946,10 @@ class IndexSearcher:
 
         return lower_position, upper_position
 
-    def _find_row_indices_for_range(index_parser, value_coords, position_coords, filter1, filter2, end_index, num_processes):
-        lower_position, upper_position = IndexSearcher._find_bounds_for_range(index_parser, value_coords, filter1, filter2, end_index, num_processes)
+    def _find_row_indices_for_range(index_parser, value_coords, position_coords, filter1, filter2, end_index, num_threads):
+        lower_position, upper_position = IndexSearcher._find_bounds_for_range(index_parser, value_coords, filter1, filter2, end_index, num_threads)
 
-        return IndexSearcher._retrieve_matching_row_indices(index_parser, position_coords, (lower_position, upper_position), num_processes)
+        return IndexSearcher._retrieve_matching_row_indices(index_parser, position_coords, (lower_position, upper_position), num_threads)
 
     def _get_passing_row_indices(fltr, parser, line_length, coords_value, coords_position, start_index, end_index):
         passing_row_indices = set()
@@ -962,7 +960,7 @@ class IndexSearcher:
 
         return passing_row_indices
 
-    def _get_passing_row_indices_with_filter(index_file_path, fltr, end_index, num_processes):
+    def _get_passing_row_indices_with_filter(index_file_path, fltr, end_index, num_threads):
         with Parser(index_file_path) as index_parser:
             line_length = index_parser._get_stat("ll")
             coords = index_parser._parse_data_coords([0, 1])
@@ -974,7 +972,7 @@ class IndexSearcher:
 
             upper_position = IndexSearcher._search_with_filter(index_parser, line_length, coords[0], lower_range[0], lower_range[1], end_index, fltr)
 
-            return IndexSearcher._retrieve_matching_row_indices(index_parser, coords[1], (lower_range[0], upper_position), num_processes)
+            return IndexSearcher._retrieve_matching_row_indices(index_parser, coords[1], (lower_range[0], upper_position), num_threads)
 
     def _get_two_column_index_name(filter1, filter2):
         return "____".join([filter1.column_name.decode(), filter2.column_name.decode()])

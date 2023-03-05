@@ -1,7 +1,7 @@
 from .Parser import *
 from .Utilities import *
 
-def convert_delimited_file(delimited_file_path, f4_file_path, index_columns=[], delimiter="\t", comment_prefix="#", compression_type=None, num_processes=1, num_cols_per_chunk=10, num_rows_per_write=100, tmp_dir_path=None, verbose=False):
+def convert_delimited_file(delimited_file_path, f4_file_path, index_columns=[], delimiter="\t", comment_prefix="#", compression_type=None, num_threads=1, num_cols_per_chunk=10, num_rows_per_write=100, tmp_dir_path=None, verbose=False):
     if type(delimiter) != str:
         raise Exception("The delimiter value must be a string.")
 
@@ -41,11 +41,11 @@ def convert_delimited_file(delimited_file_path, f4_file_path, index_columns=[], 
 
     # Iterate through the lines to summarize each column.
     print_message(f"Summarizing each column in {delimited_file_path}", verbose)
-    if num_processes == 1:
+    if num_threads == 1:
         chunk_results = [_parse_columns_chunk(delimited_file_path, delimiter, comment_prefix, 0, num_cols, num_rows_per_write, compression_type, verbose)]
     else:
         column_chunk_indices = _generate_chunk_ranges(num_cols, num_cols_per_chunk)
-        chunk_results = Parallel(n_jobs=num_processes)(delayed(_parse_columns_chunk)(delimited_file_path, delimiter, comment_prefix, column_chunk[0], column_chunk[1], num_rows_per_write, compression_type, verbose) for column_chunk in column_chunk_indices)
+        chunk_results = Parallel(n_jobs=num_threads)(delayed(_parse_columns_chunk)(delimited_file_path, delimiter, comment_prefix, column_chunk[0], column_chunk[1], num_rows_per_write, compression_type, verbose) for column_chunk in column_chunk_indices)
 
     # Summarize the column sizes and types across the chunks.
     column_sizes = []
@@ -70,13 +70,13 @@ def convert_delimited_file(delimited_file_path, f4_file_path, index_columns=[], 
         raise Exception(f"A header row but no data rows were detected in {delimited_file_path}")
 
     print_message(f"Parsing chunks of {delimited_file_path} and saving to temp directory ({tmp_dir_path_chunks})", verbose)
-    line_length = _get_line_length(delimited_file_path, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes, column_compression_dicts, num_rows, num_processes, num_rows_per_write, verbose)
+    line_length = _get_line_length(delimited_file_path, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes, column_compression_dicts, num_rows, num_threads, num_rows_per_write, verbose)
 
     print_message(f"Saving meta files for {f4_file_path}", verbose)
     _write_meta_files(tmp_dir_path_outputs, tmp_dir_path_indexes, column_sizes, line_length, column_names, column_types, compression_type, column_compression_dicts, num_rows)
 
     print_message(f"Combining all data into a single file for {delimited_file_path}", verbose)
-    combine_into_single_file(tmp_dir_path_chunks, tmp_dir_path_outputs, f4_file_path, num_processes, num_rows_per_write)
+    combine_into_single_file(tmp_dir_path_chunks, tmp_dir_path_outputs, f4_file_path, num_threads, num_rows_per_write)
 
     if index_columns:
         build_indexes(f4_file_path, index_columns, tmp_dir_path_indexes, verbose)
@@ -219,14 +219,14 @@ def _parse_columns_chunk(delimited_file_path, delimiter, comment_prefix, start_i
 
     return column_sizes_dict, column_types_dict, column_compression_dicts, num_rows
 
-def _get_line_length(delimited_file_path, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes, compression_dicts, num_rows, num_processes, num_rows_per_write, verbose):
-    if num_processes == 1:
+def _get_line_length(delimited_file_path, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes, compression_dicts, num_rows, num_threads, num_rows_per_write, verbose):
+    if num_threads == 1:
         line_length = _write_rows_chunk(delimited_file_path, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes, compression_dicts, 0, 0, num_rows, num_rows_per_write, verbose)
     else:
-        row_chunk_indices = _generate_chunk_ranges(num_rows, math.ceil(num_rows / num_processes) + 1)
+        row_chunk_indices = _generate_chunk_ranges(num_rows, math.ceil(num_rows / num_threads) + 1)
 
         # Find the line length.
-        max_line_sizes = Parallel(n_jobs=num_processes)(delayed(_write_rows_chunk)(delimited_file_path, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes, compression_dicts, i, row_chunk[0], row_chunk[1], num_rows_per_write, verbose) for i, row_chunk in enumerate(row_chunk_indices))
+        max_line_sizes = Parallel(n_jobs=num_threads)(delayed(_write_rows_chunk)(delimited_file_path, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes, compression_dicts, i, row_chunk[0], row_chunk[1], num_rows_per_write, verbose) for i, row_chunk in enumerate(row_chunk_indices))
         line_length = max(max_line_sizes)
 
     return line_length

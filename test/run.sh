@@ -21,7 +21,6 @@ dockerCommand="docker run -i -t --rm --platform linux/x86_64 --user $(id -u):$(i
 ##dockerCommand="docker run -d --rm --platform linux/x86_64 --user $(id -u):$(id -g) -v $(pwd):/sandbox -v $(pwd)/data:/data -v /tmp:/tmp --workdir=/sandbox srp33/f4_test"
 
 #$dockerCommand bash -c "time python3 build_tsv.py 10 10 10 10000 data/medium.tsv"
-$dockerCommand bash -c "time python3 build_tsv.py 250 250 500 2 data/large_tall.tsv"
 #$dockerCommand bash -c "time python3 build_tsv.py 250 250 500 1000000 data/large_tall.tsv"
 #$dockerCommand bash -c "time python3 build_tsv.py 250000 250000 500000 1000 data/large_wide.tsv"
 
@@ -46,8 +45,6 @@ $dockerCommand bash -c "time python3 build_tsv.py 250 250 500 2 data/large_tall.
 #######################################################
 
 #python3 test.py
-#time python3 test.py
-#time python3 delete_me.py
 $dockerCommand python3 test.py
 
 #######################################################
