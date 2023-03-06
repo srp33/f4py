@@ -21,14 +21,17 @@ dockerCommand="docker run -i -t --rm --platform linux/x86_64 --user $(id -u):$(i
 ##dockerCommand="docker run -d --rm --platform linux/x86_64 --user $(id -u):$(id -g) -v $(pwd):/sandbox -v $(pwd)/data:/data -v /tmp:/tmp --workdir=/sandbox srp33/f4_test"
 
 #$dockerCommand bash -c "time python3 build_tsv.py 10 10 10 10000 data/medium.tsv"
+
 #$dockerCommand bash -c "time python3 build_tsv.py 250 250 500 1000000 data/large_tall.tsv"
 #$dockerCommand bash -c "time python3 build_tsv.py 250000 250000 500000 1000 data/large_wide.tsv"
 
+#TODO: By default, num_cols_per_chunk is the number of columns divided by the number of threads + 1?
+#TODO: By default, num_rows_per_write is the number of rows divided by the number of threads + 1?
 #TODO: See if there's a way to speed up Parallel, delayed.
 #TODO:   Change from joblib to asyncio.
 #          See ChatGPT conversation. And/or https://builtin.com/data-science/asyncio-python.
 #          https://superfastpython.com/multiprocessing-for-loop
-#TODO: Reduce the Parser imports to just use the specific functions we need.
+#TODO: Reduce the imports to just use the specific functions we need?
 #TODO: Integrate f4 into the analysis paper tests. Check speed and optimize more, if needed.
 #TODO: Cache the cc coordinates in a dictionary within Parser and no longer store ll information?
 #        See _parse_data_coords() function.
