@@ -1,419 +1,5 @@
 from .Utilities import *
 
-class Parser:
-    """
-    This class is used for querying F4 files and saving the output to new files.
-
-    Args:
-        data_file_path (str): The path to an existing F4 file.
-
-    Attributes:
-        data_file_path (str): The path to an existing F4 file.
-    """
-    def __init__(self, data_file_path):
-        if not isinstance(data_file_path, str):
-            raise Exception("You must specify data_file_path as an str value.")
-
-        self.data_file_path = data_file_path
-        self.__file_handle = open_read_file(self.data_file_path)
-
-        file_map_length_string = self.__file_handle.readline()
-        file_map_length = fastnumbers.fast_int(file_map_length_string.rstrip(b"\n"))
-        self.__file_map_dict = deserialize(self.__file_handle[len(file_map_length_string):(len(file_map_length_string) + file_map_length)])
-
-        # Invert the abbreviations used for file keys in the dictionary so they are more human readable.
-        for file_name, abbreviation in FILE_KEY_ABBREVIATIONS.items():
-            if abbreviation in self.__file_map_dict:
-                self.__file_map_dict[file_name] = self.__file_map_dict[abbreviation]
-                del self.__file_map_dict[abbreviation]
-
-        # Cache statistics in a dictionary.
-        self.__stats = {}
-
-        data_size =  self.__file_map_dict["data"][1] - self.__file_map_dict["data"][0]
-        self.__stats["nrow"] = fastnumbers.fast_int(data_size / self._get_stat("ll"))
-
-        cc_size = self.__file_map_dict["cc"][1] - self.__file_map_dict["cc"][0]
-        self.__stats["ncol"] = fastnumbers.fast_int(cc_size / self._get_stat("mccl")) - 1
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, the_type, value, traceback):
-        self.__file_handle.close()
-
-    def query_and_write(self, fltr, select_columns, out_file_path=None, out_file_type="tsv", num_threads=1, lines_per_chunk=10):
-        """
-        Query the data file using zero or more filters.
-
-        This function accepts filtering criteria, identifies matching rows,
-        and writes the output (for select columns) to an output file or standard output.
-
-        Args:
-            fltr (BaseFilter): A filter.
-            select_columns (list): A list of strings that indicate the names of columns that should be selected. If this is an empty list, all columns will be selected.
-            out_file_path(str): A path to a file that will store the output data. If None is specified, the data will be directed to standard output.
-            out_file_type (str): The output file type. Currently, the only supported value is tsv.
-        """
-        if not fltr:
-            raise Exception("A filter must be specified.")
-
-        if not isinstance(fltr, NoFilter):
-            raise Exception("An object that inherits from NoFilter must be specified.")
-
-        if out_file_type != "tsv":
-            raise Exception("The only out_file_type currently supported is tsv.")
-
-        if select_columns:
-            if not isinstance(select_columns, list):
-                raise Exception("You must specify select_column as a list.")
-        else:
-            select_columns = []
-
-        # Store column indices and types in dictionaries so we only have to retrieve
-        # each once, even if we use the same column in multiple filters.
-        select_columns, column_type_dict, column_coords_dict, decompression_type, decompressor, bigram_size_dict = self._get_column_meta(fltr._get_column_name_set(), select_columns)
-
-        fltr._check_types(column_type_dict)
-
-        has_index = len(glob.glob(self.data_file_path + ".idx_*")) > 0
-
-        if has_index:
-#TODO: Remove this stuff if we don't need it after testing on huge files.
-#            sub_filters = fltr.get_sub_filters()
-
-#            if num_threads == 1 or len(sub_filters) == 1:
-            keep_row_indices = sorted(fltr._filter_indexed_column_values(self.data_file_path, self.get_num_rows(), num_threads))
-#            else:
-#                fltr_results_dict = {}
-
-##                for f in sub_filters:
-##                    fltr_results_dict[str(f)] = f.filter_indexed_column_values(self.data_file_path, self.compression_level, column_index_dict, column_type_dict, column_coords_dict, self.get_num_rows(), num_threads)
-
-                # This is a parallelization of the above code.
-                # At least in some cases, it slows things down more than it speeds things up.
-#                fltr_results = Parallel(n_jobs = num_threads)(delayed(f.filter_indexed_column_values)(self.data_file_path, self.compression_level, column_index_dict, column_type_dict, column_coords_dict, self.get_num_rows(), num_threads) for f in sub_filters)
-#                for i in range(len(sub_filters)):
-#                    fltr_results_dict[str(sub_filters[i])] = fltr_results[i]
-#
-#                keep_row_indices = sorted(fltr.filter_indexed_column_values_parallel(fltr_results_dict))
-        else:
-            if num_threads == 1:
-                row_indices = set(range(self.get_num_rows()))
-                keep_row_indices = sorted(fltr._filter_column_values(self.data_file_path, row_indices, column_coords_dict, decompression_type, decompressor, bigram_size_dict))
-            else:
-                # Loop through the rows in parallel and find matching row indices.
-                keep_row_indices = sorted(chain.from_iterable(Parallel(n_jobs = num_threads)(delayed(fltr._filter_column_values)(self.data_file_path, row_indices, column_coords_dict, decompression_type, decompressor, bigram_size_dict) for row_indices in self._generate_row_chunks(num_threads))))
-
-        select_column_coords = [column_coords_dict[name] for name in select_columns]
-
-        # This avoids having to check the decompression type each time we parse a value.
-        decompressor = get_decompressor(decompression_type, decompressor)
-        parse_function = self._get_parse_row_values_function(decompression_type)
-
-        if out_file_path:
-            # Write output (in chunks)
-            with open(out_file_path, 'wb') as out_file:
-                out_file.write(b"\t".join(select_columns) + b"\n") # Header line
-
-                out_lines = []
-                for row_index in keep_row_indices:
-                    out_values = parse_function(row_index, select_column_coords, decompression_type=decompression_type, decompressor=decompressor, bigram_size_dict=bigram_size_dict, column_names=select_columns)
-                    out_lines.append(b"\t".join(out_values))
-
-                    if len(out_lines) % lines_per_chunk == 0:
-                        out_file.write(b"\n".join(out_lines) + b"\n")
-                        out_lines = []
-
-                if len(out_lines) > 0:
-                    out_file.write(b"\n".join(out_lines) + b"\n")
-        else:
-            sys.stdout.buffer.write(b"\t".join(select_columns) + b"\n") # Header line
-
-            for row_index in keep_row_indices:
-                out_values = parse_function(row_index, select_column_coords, decompression_type=decompression_type, decompressor=decompressor, bigram_size_dict=bigram_size_dict, column_names=select_columns)
-                sys.stdout.buffer.write(b"\t".join(out_values))
-
-                if row_index != keep_row_indices[-1]:
-                    sys.stdout.buffer.write(b"\n")
-
-    def head(self, n = 10, select_columns=None, out_file_path=None, out_file_type="tsv"):
-        if not select_columns:
-            select_columns = []
-        self.query_and_write(HeadFilter(n, select_columns), select_columns, out_file_path=out_file_path, out_file_type=out_file_type)
-
-    def tail(self, n = 10, select_columns=None, out_file_path=None, out_file_type="tsv"):
-        if not select_columns:
-            select_columns = []
-        self.query_and_write(TailFilter(n, select_columns), select_columns, out_file_path=out_file_path, out_file_type=out_file_type)
-
-    def get_num_rows(self):
-        return self._get_stat("nrow")
-
-    def get_num_cols(self):
-        return self._get_stat("ncol")
-
-    def get_column_type_from_name(self, column_name):
-        try:
-            return self._get_column_type_from_index(self._get_column_index_from_name(column_name))
-        except:
-            raise Exception(f"A column with the name {column_name} does not exist.")
-
-    ##############################################
-    # Non-public functions
-    ##############################################
-
-    def _get_column_index_from_name(self, column_name):
-        position = IndexSearcher._get_identifier_row_index(self, column_name.encode(), self.get_num_cols(), data_prefix="cn")
-
-        if position < 0:
-            raise Exception(f"Could not retrieve index because column named {column_name} was not found.")
-
-        return position
-
-    def _get_stat(self, stat):
-        if stat not in self.__stats:
-            self.__stats[stat] = fastnumbers.fast_int(self._get_stat_from_file(stat))
-
-        return self.__stats[stat]
-
-    def _get_stat_from_file(self, key):
-        coordinates = self.__file_map_dict[key]
-        return self.__file_handle[coordinates[0]:coordinates[1]]
-
-    def _get_column_type_from_index(self, column_index):
-        return next(self._parse_data_values_from_file(column_index, 1, [[0, 1]], "", "ct")).decode()
-
-    def _get_column_meta(self, filter_column_set, select_columns):
-        column_type_dict = {}
-        column_coords_dict = {}
-        column_index_name_dict = {}
-
-        if len(select_columns) == 0:
-            coords = self._parse_data_coords([0, 1], data_prefix="cn")
-
-            for row_index in range(self.get_num_cols()):
-                values = self._parse_row_values(row_index, coords, data_prefix="cn")
-                column_name = values[0]
-                column_index = fastnumbers.fast_int(values[1])
-
-                column_index_name_dict[column_index] = column_name
-
-                if column_name in filter_column_set:
-                    column_type_dict[column_name] = self._get_column_type_from_index(row_index)
-
-            all_coords = self._parse_data_coords(range(self.get_num_cols()))
-            for row_index in range(self.get_num_cols()):
-                column_coords_dict[column_index_name_dict[row_index]] = all_coords[row_index]
-
-            all_columns = [x[1] for x in sorted(column_index_name_dict.items())]
-            select_columns = all_columns
-        else:
-            select_columns = [name.encode() for name in select_columns]
-            all_columns = list(filter_column_set | set(select_columns))
-
-            column_name_index_dict = {}
-            for column_name in all_columns:
-                column_index = self._get_column_index_from_name(column_name.decode())
-                column_name_index_dict[column_name] = column_index
-                column_index_name_dict[column_index] = column_name
-
-            for column_name in filter_column_set:
-                column_type_dict[column_name] = self._get_column_type_from_index(column_name_index_dict[column_name])
-
-            all_column_indices = [column_name_index_dict[name] for name in all_columns]
-            all_coords = self._parse_data_coords(all_column_indices)
-
-            for i, column_name in enumerate(all_columns):
-                column_coords_dict[column_name] = all_coords[i]
-
-        decompression_type = None
-        decompressor = None
-        bigram_size_dict = {}
-
-        if "cmpr" in self.__file_map_dict:
-            decompression_text_coords = self.__file_map_dict["cmpr"]
-            decompression_text = self.__file_handle[decompression_text_coords[0]:decompression_text_coords[1]]
-
-            if decompression_text == b"z":
-                decompression_type = "zstd"
-            else:
-                decompression_type = "dictionary"
-                decompressor = deserialize(decompression_text)
-
-                for column_name in all_columns:
-                    bigram_size_dict[column_name] = get_bigram_size(len(decompressor[column_name]["map"]))
-
-        return select_columns, column_type_dict, column_coords_dict, decompression_type, decompressor, bigram_size_dict
-
-    def _generate_row_chunks(self, num_threads):
-        rows_per_chunk = math.ceil(self.get_num_rows() / num_threads)
-
-        row_indices = set()
-
-        for row_index in range(self.get_num_rows()):
-            row_indices.add(row_index)
-
-            if len(row_indices) == rows_per_chunk:
-                yield row_indices
-                row_indices = set()
-
-        if len(row_indices) > 0:
-            yield row_indices
-
-    def _parse_data_coords(self, indices, data_prefix=""):
-        #TODO: Store coordinates in an object-level dictionary after retrieving them?
-        file_key = "cc"
-        data_coords = []
-        out_dict = {}
-        mccl = self._get_stat(data_prefix + "mccl")
-
-        for index in indices:
-            start_pos = index * mccl
-            next_start_pos = start_pos + mccl
-            further_next_start_pos = next_start_pos + mccl
-
-            # See if we already have cached the start position.
-            if index in out_dict:
-                data_start_pos = out_dict[index]
-            # If not, retrieve the start position from the cc file and then cache it.
-            else:
-                data_start_pos = fastnumbers.fast_int(self._parse_data_value_from_file(0, 0, [start_pos, next_start_pos], data_prefix, file_key).rstrip(b" "))
-                out_dict[index] = data_start_pos
-
-            # See if we already have cached the end position.
-            if (index + 1) in out_dict:
-                data_end_pos = out_dict[index + 1]
-            # If not, retrieve the end position from the cc file and then cache it.
-            else:
-                data_end_pos = fastnumbers.fast_int(self._parse_data_value_from_file(0, 0, [next_start_pos, further_next_start_pos], data_prefix, file_key).rstrip(b" "))
-                out_dict[index + 1] = data_end_pos
-
-            data_coords.append([data_start_pos, data_end_pos])
-
-        return data_coords
-
-    def _parse_data_value_from_file(self, start_element, segment_length, coords, data_prefix, file_key):
-        start_pos = start_element * segment_length + self.__file_map_dict[data_prefix + file_key][0]
-        return self.__file_handle[(start_pos + coords[0]):(start_pos + coords[1])]
-
-    def _parse_data_values_from_string(self, data_coords, string):
-        for coords in data_coords:
-            yield string[(coords[0]):(coords[1])].rstrip(b" ")
-
-    def _parse_data_values_from_file(self, start_element, segment_length, data_coords, data_prefix, file_key):
-        start_pos = start_element * segment_length + self.__file_map_dict[data_prefix + file_key][0]
-
-        for coords in data_coords:
-            yield self.__file_handle[(start_pos + coords[0]):(start_pos + coords[1])].rstrip(b" ")
-
-    def _get_parse_row_value_function(self, decompression_type):
-        if not decompression_type:
-            return self._parse_row_value
-        elif decompression_type == "zstd":
-            return self._parse_zstd_compressed_row_value
-        else:
-            return self._parse_dictionary_compressed_row_value
-
-    def _parse_row_value(self, row_index, column_coords, line_length, data_prefix="", decompression_type=None, decompressor=None, bigram_size_dict=None, column_name=None):
-        return self._parse_data_value_from_file(row_index, line_length, column_coords, data_prefix, "data").rstrip(b" ")
-
-    def _parse_zstd_compressed_row_value(self, row_index, column_coords, line_length, data_prefix="", decompression_type=None, decompressor=None, bigram_size_dict=None, column_name=None):
-        line = self._parse_data_value_from_file(row_index, line_length, [0, line_length], data_prefix, "data")
-        line = decompressor.decompress(line)
-
-        return line[column_coords[0]:column_coords[1]].rstrip(b" ")
-
-    def _parse_dictionary_compressed_row_value(self, row_index, column_coords, line_length, data_prefix="", decompression_type=None, decompressor=None, bigram_size_dict=None, column_name=None):
-        value = self._parse_data_value_from_file(row_index, line_length, column_coords, data_prefix, "data").rstrip(b" ")
-        return decompress(value, decompressor[column_name], bigram_size_dict[column_name])
-
-    def _get_parse_row_values_function(self, decompression_type):
-        if not decompression_type:
-            return self._parse_row_values
-        elif decompression_type == "zstd":
-            return self._parse_zstd_compressed_row_values
-        else:
-            return self._parse_dictionary_compressed_row_values
-
-    def _parse_row_values(self, row_index, column_coords, data_prefix="", decompression_type=None, decompressor=None, bigram_size_dict=None, column_names=None):
-        return list(self._parse_data_values_from_file(row_index, self._get_stat(data_prefix + "ll"), column_coords, data_prefix, "data"))
-
-    def _parse_zstd_compressed_row_values(self, row_index, column_coords, data_prefix="", decompression_type=None, decompressor=None, bigram_size_dict=None, column_names=None):
-        line_length = self._get_stat("ll")
-        line = self._parse_data_value_from_file(row_index, line_length, [0, line_length], data_prefix, "data")
-        line = decompressor.decompress(line)
-
-        return list(self._parse_data_values_from_string(column_coords, line))
-
-    def _parse_dictionary_compressed_row_values(self, row_index, column_coords, data_prefix="", decompression_type=None, decompressor=None, bigram_size_dict=None, column_names=None):
-            values = list(self._parse_data_values_from_file(row_index, self._get_stat("ll"), column_coords, data_prefix, "data"))
-
-            return [decompress(values.pop(0), decompressor[column_name], bigram_size_dict[column_name]) for column_name in column_names]
-
-    # def _get_decompression_dict(self, file_path, column_index_name_dict):
-    #     with open(file_path, "rb") as cmpr_file:
-    #         return deserialize(cmpr_file.read())
-
-    #     compression_dict = {}
-    #     with open(file_path, "rb") as cmpr_file:
-    #         for line in cmpr_file:
-    #             line_items = line.rstrip(b"\n").split(b"\t")
-    #             column_index = fastnumbers.fast_int(line_items[0])
-
-    #             if column_index in column_index_name_dict:
-    #                 column_name = column_index_name_dict[column_index]
-    #                 compression_dict[column_name] = deserialize(line_items[1])
-
-    #     #for column_index in column_index_name_dict.keys():
-    #     #     compression_dict[column_index_name_dict[column_index]] = {}
-    #     #     compression_dict[column_index_name_dict[column_index]]["map"] = {}
-
-    #     # with Parser(file_path, fixed_file_extensions=[".data", ".cc"], stats_file_extensions=[".ll", ".mccl"]) as parser:
-    #     #     coords = parser._parse_data_coords([0, 1, 2])
-    #     #     num_rows = fastnumbers.fast_int((len(parser.get_file_handle(".data")) + 1) / parser.get_stat(".ll"))
-
-    #     #     # Use a set for performance reasons
-    #     #     column_indices_set = set(column_index_name_dict.keys())
-
-    #     #     with Parser(f"{self.data_file_path}.cmpr", fixed_file_extensions=[".data", ".cc"], stats_file_extensions=[".ll", ".mccl"]) as parser:
-    #     #         for row_index in range(num_rows):
-    #     #             values = parser.__parse_row_values(row_index, coords)
-    #     #             column_index = fastnumbers.fast_int(values[0])
-
-    #     #             if column_index in column_indices_set:
-    #     #                 compressed_value = convert_bytes_to_int(values[2])
-
-    #     #                 compression_dict[column_index_name_dict[column_index]]["map"][compressed_value] = values[1]
-
-    #     # # # We need column names as keys rather than indices.
-    #     # # compression_dict2 = {}
-    #     # # for i, column_name in enumerate(column_names):
-    #     # #     compression_dict2[column_name] = compression_dict[column_indices[i]]
-
-    #     # with Parser(f"{self.data_file_path}.cmprtype", fixed_file_extensions=[".data"], stats_file_extensions=[".ll"]) as parser:
-    #     #     coords = [[0, 1]]
-
-    #     #     for column_index in column_index_name_dict.keys():
-    #     #         compression_dict[column_index_name_dict[column_index]]["compression_type"] = parser.__parse_row_values(column_index, coords)[0]
-
-    #     return compression_dict
-
-    # def _invert_decompression_dict(self, decompression_dict, select_columns):
-    #     inverted_dict = {}
-    #
-    #     for select_column in select_columns:
-    #         inverted_dict[select_column] = {"compression_type": decompression_dict[select_column]["compression_type"]}
-    #         inverted_dict[select_column]["map"] = {}
-    #
-    #         for compressed_value, value in decompression_dict[select_column]["map"].items():
-    #             inverted_dict[select_column]["map"][value] = compressed_value
-    #
-    #     return inverted_dict
-
-"""
-This class is used to indicate that no filtering should be performed.
-"""
 class NoFilter:
     def _check_types(self, column_type_dict):
         pass
@@ -421,7 +7,7 @@ class NoFilter:
     def _get_column_name_set(self):
         return set()
 
-    def _filter_column_values(self, data_file_path, row_indices, column_coords_dict, decompression_type, decompressor, bigram_size_dict):
+    def _filter_column_values(self, data_file_path, row_indices, column_coords_dict, bigram_size_dict):
         return row_indices
 
     def _filter_indexed_column_values(self, data_file_path, end_index, num_threads):
@@ -443,21 +29,24 @@ class __SimpleBaseFilter(NoFilter):
     def _get_column_name_set(self):
         return set([self.column_name])
 
-    def _filter_column_values(self, data_file_path, row_indices, column_coords_dict, decompression_type, decompressor, bigram_size_dict):
-        with Parser(data_file_path) as parser:
-            line_length = parser._get_stat("ll")
-            coords = column_coords_dict[self.column_name]
+    def _filter_column_values(self, data_file_path, row_indices, column_coords_dict, bigram_size_dict):
+        #TODO: Pass this into the function rather than re-initializing.
+        #      Probably move this entire function out of here.
+        file_data = initialize(data_file_path)
 
-            # This avoids having to check the decompression type each time we parse a value.
-            decompressor = get_decompressor(decompression_type, decompressor)
-            parse_function = parser._get_parse_row_value_function(decompression_type)
+        line_length = file_data.stat_dict["ll"]
+        coords = column_coords_dict[self.column_name]
 
-            passing_row_indices = set()
-            for i in row_indices:
-                if self.passes(parse_function(i, coords, line_length, decompression_type=decompression_type, decompressor=decompressor, bigram_size_dict=bigram_size_dict, column_name=self.column_name)):
-                    passing_row_indices.add(i)
+        # This avoids having to check the decompression type each time we parse a value.
+        #decompressor = get_decompressor(decompression_type, decompressor)
+        parse_function = get_parse_row_value_function(file_data)
 
-            return passing_row_indices
+        passing_row_indices = set()
+        for i in row_indices:
+            if self.passes(parse_function(file_data, i, coords, line_length, bigram_size_dict=bigram_size_dict, column_name=self.column_name)):
+                passing_row_indices.add(i)
+
+        return passing_row_indices
 
     def _get_conversion_function(self):
         return do_nothing
@@ -473,8 +62,11 @@ class __OperatorFilter(__SimpleBaseFilter):
 
     def _filter_indexed_column_values(self, data_file_path, end_index, num_threads):
         index_file_path = get_index_file_path(data_file_path, self.column_name.decode())
+        #TODO: Pass this into the function rather than re-initializing.
+        #      Probably move this entire function out of here.
+        file_data = initialize(index_file_path)
 
-        return IndexSearcher._filter_using_operator(index_file_path, self, end_index, num_threads)
+        return _filter_using_operator(file_data, self, end_index, num_threads)
 
     def _check_column_types(self, column_index_dict, column_type_dict, expected_column_type, expected_column_type_description):
         if column_type_dict[column_index_dict[self.column_name]] != expected_column_type:
@@ -523,8 +115,11 @@ class StartsWithFilter(__SimpleBaseFilter):
 
     def _filter_indexed_column_values(self, data_file_path, end_index, num_threads):
         index_file_path = get_index_file_path(data_file_path, self.column_name.decode())
+        #TODO: Pass this into the function rather than re-initializing.
+        #      Probably move this entire function out of here.
+        file_data = initialize(index_file_path)
 
-        return IndexSearcher._get_passing_row_indices_with_filter(index_file_path, self, end_index, num_threads)
+        return _get_passing_row_indices_with_filter(file_data, self, end_index, num_threads)
 
     def passes(self, value):
         return value.startswith(self.value)
@@ -540,15 +135,21 @@ class EndsWithFilter(StartsWithFilter):
         if os.path.exists(custom_index_file_path):
             custom_fltr = StartsWithFilter(self.column_name.decode(), custom_index_function(self.value).decode())
 
-            return IndexSearcher._get_passing_row_indices_with_filter(custom_index_file_path, custom_fltr, end_index, num_threads)
+            # TODO: Pass this into the function rather than re-initializing.
+            #      Probably move this entire function out of here.
+            file_data = initialize(custom_index_file_path)
+
+            return _get_passing_row_indices_with_filter(file_data, custom_fltr, end_index, num_threads)
         else:
             index_file_path = get_index_file_path(data_file_path, self.column_name.decode())
+            # TODO: Pass this into the function rather than re-initializing.
+            #      Probably move this entire function out of here.
+            file_data = initialize(index_file_path)
 
-            with Parser(index_file_path) as index_parser:
-                line_length = index_parser._get_stat("ll")
-                coords = index_parser._parse_data_coords([0, 1])
+            line_length = file_data.stat_dict["ll"]
+            coords = _parse_data_coords(file_data, [0, 1])
 
-                return IndexSearcher._get_passing_row_indices(self, index_parser, line_length, coords[0], coords[1], 0, end_index)
+            return _get_passing_row_indices(file_data, self, line_length, coords[0], coords[1], 0, end_index)
 
 class LikeFilter(__SimpleBaseFilter):
     def __init__(self, column_name, regular_expression):
@@ -560,11 +161,14 @@ class LikeFilter(__SimpleBaseFilter):
     def _filter_indexed_column_values(self, data_file_path, end_index, num_threads):
         index_file_path = get_index_file_path(data_file_path, self.column_name.decode())
 
-        with Parser(index_file_path) as index_parser:
-            line_length = index_parser._get_stat("ll")
-            coords = index_parser._parse_data_coords([0, 1])
+        #TODO: Pass this into the function rather than re-initializing.
+        #      Probably move this entire function out of here.
+        file_data = initialize(index_file_path)
 
-            return IndexSearcher._get_passing_row_indices(self, index_parser, line_length, coords[0], coords[1], 0, end_index)
+        line_length = file_data.stat_dict["ll"]
+        coords = _parse_data_coords(file_data, [0, 1])
+
+        return _get_passing_row_indices(file_data, self, line_length, coords[0], coords[1], 0, end_index)
 
     def passes(self, value):
         return self.value.search(value.decode())
@@ -581,23 +185,22 @@ class HeadFilter(NoFilter):
     def _get_column_name_set(self):
         return self.select_columns_set
 
-    def _get_num_rows(self, data_file_path):
-        with Parser(data_file_path) as parser:
-            return parser.get_num_rows()
+    # def _get_num_rows(self, data_file_path):
+    #     return get_num_rows(data_file_path)
 
-    def _filter_column_values(self, data_file_path, row_indices, column_coords_dict, decompression_type, decompressor, bigram_size_dict):
-        return set(range(min(self._get_num_rows(data_file_path), self.n))) & row_indices
+    def _filter_column_values(self, data_file_path, row_indices, column_coords_dict, bigram_size_dict):
+        return set(range(min(get_num_rows(data_file_path), self.n))) & row_indices
 
     def _filter_indexed_column_values(self, data_file_path, end_index, num_threads):
-        return set(range(min(self._get_num_rows(data_file_path), self.n)))
+        return set(range(min(get_num_rows(data_file_path), self.n)))
 
 class TailFilter(HeadFilter):
-    def _filter_column_values(self, data_file_path, row_indices, column_coords_dict, decompression_type, decompressor, bigram_size_dict):
-        num_rows = self._get_num_rows(data_file_path)
+    def _filter_column_values(self, data_file_path, row_indices, column_coords_dict, bigram_size_dict):
+        num_rows = get_num_rows(data_file_path)
         return set(range(num_rows - self.n, num_rows)) & row_indices
 
     def _filter_indexed_column_values(self, data_file_path, end_index, num_threads):
-        num_rows = self._get_num_rows(data_file_path)
+        num_rows = get_num_rows(data_file_path)
         return set(range(num_rows - self.n, num_rows))
 
 class __CompositeFilter(NoFilter):
@@ -641,29 +244,32 @@ class AndFilter(__CompositeFilter):
     def __init__(self, filter1, filter2):
         super().__init__(filter1, filter2)
 
-    def _filter_column_values(self, data_file_path, row_indices, column_coords_dict, decompression_type, decompressor, bigram_size_dict):
-        row_indices_1 = self.filter1._filter_column_values(data_file_path, row_indices, column_coords_dict, decompression_type, decompressor, bigram_size_dict)
-        return self.filter2._filter_column_values(data_file_path, row_indices_1, column_coords_dict, decompression_type, decompressor, bigram_size_dict)
+    def _filter_column_values(self, data_file_path, row_indices, column_coords_dict, bigram_size_dict):
+        row_indices_1 = self.filter1._filter_column_values(data_file_path, row_indices, column_coords_dict, bigram_size_dict)
+        return self.filter2._filter_column_values(data_file_path, row_indices_1, column_coords_dict, bigram_size_dict)
 
     def _filter_indexed_column_values(self, data_file_path, end_index, num_threads):
         # Currently, this combination of two-column filters is supported. Add more later.
         if isinstance(self.filter1, StringFilter) and self.filter1.oper == operator.eq:
             if isinstance(self.filter2, IntRangeFilter):
-                two_column_index_name = IndexSearcher._get_two_column_index_name(self.filter1, self.filter2.filter1)
+                two_column_index_name = _get_two_column_index_name(self.filter1, self.filter2.filter1)
                 two_column_index_file_path = get_index_file_path(data_file_path, two_column_index_name)
 
                 if os.path.exists(two_column_index_file_path):
-                    with Parser(two_column_index_file_path) as index_parser:
-                        coords = index_parser._parse_data_coords([0, 1, 2])
+                    # TODO: Pass this into the function rather than re-initializing.
+                    #      Probably move this entire function out of here.
+                    file_data = initialize(two_column_index_file_path)
 
-                        # Find range for string column
-                        lower_position, upper_position = IndexSearcher._find_bounds_for_range(index_parser, coords[0], self.filter1, self.filter1, end_index, num_threads)
+                    coords = _parse_data_coords(file_data, [0, 1, 2])
 
-                        # Find range for int column
-                        lower_position, upper_position = IndexSearcher._find_bounds_for_range(index_parser, coords[1], self.filter2.filter1, self.filter2.filter2, upper_position, num_threads, lower_position)
+                    # Find range for string column
+                    lower_position, upper_position = _find_bounds_for_range(file_data, coords[0], self.filter1, self.filter1, end_index, num_threads)
 
-                        # Get row indices for the overlapping range
-                        return IndexSearcher._retrieve_matching_row_indices(index_parser, coords[2], (lower_position, upper_position), num_threads)
+                    # Find range for int column
+                    lower_position, upper_position = _find_bounds_for_range(file_data, coords[1], self.filter2.filter1, self.filter2.filter2, upper_position, num_threads, lower_position)
+
+                    # Get row indices for the overlapping range
+                    return _retrieve_matching_row_indices(file_data, coords[2], (lower_position, upper_position), num_threads)
 
         row_indices_1 = self.filter1._filter_indexed_column_values(data_file_path, end_index, num_threads)
         row_indices_2 = self.filter2._filter_indexed_column_values(data_file_path, end_index, num_threads)
@@ -686,9 +292,9 @@ class OrFilter(__CompositeFilter):
     def __init__(self, filter1, filter2):
         super().__init__(filter1, filter2)
 
-    def _filter_column_values(self, data_file_path, row_indices, column_coords_dict, decompression_type, decompressor, bigram_size_dict):
-        row_indices_1 = self.filter1._filter_column_values(data_file_path, row_indices, column_coords_dict, decompression_type, decompressor, bigram_size_dict)
-        row_indices_2 = self.filter2._filter_column_values(data_file_path, row_indices - row_indices_1, column_coords_dict, decompression_type, decompressor, bigram_size_dict)
+    def _filter_column_values(self, data_file_path, row_indices, column_coords_dict, bigram_size_dict):
+        row_indices_1 = self.filter1._filter_column_values(data_file_path, row_indices, column_coords_dict, bigram_size_dict)
+        row_indices_2 = self.filter2._filter_column_values(data_file_path, row_indices - row_indices_1, column_coords_dict, bigram_size_dict)
 
         return row_indices_1 | row_indices_2
 
@@ -709,16 +315,18 @@ class __RangeFilter(__CompositeFilter):
         if filter1.value > filter2.value:
             raise Exception("The lower_bound_value must be less than or equal to the upper_bound_value.")
 
-    def _filter_column_values(self, data_file_path, row_indices, column_coords_dict, decompression_type, decompressor, bigram_size_dict):
-        return AndFilter(self.filter1, self.filter2)._filter_column_values(data_file_path, row_indices, column_coords_dict, decompression_type, decompressor, bigram_size_dict)
+    def _filter_column_values(self, data_file_path, row_indices, column_coords_dict, bigram_size_dict):
+        return AndFilter(self.filter1, self.filter2)._filter_column_values(data_file_path, row_indices, column_coords_dict, bigram_size_dict)
 
     def _filter_indexed_column_values(self, data_file_path, end_index, num_threads):
         index_file_path = get_index_file_path(data_file_path, self.filter1.column_name.decode())
 
-        with Parser(index_file_path) as index_parser:
-            coords = index_parser._parse_data_coords([0, 1])
+        #TODO: Pass this into the function rather than re-initializing.
+        #      Probably move this entire function out of here.
+        file_data = initialize(index_file_path)
+        coords = _parse_data_coords(file_data, [0, 1])
 
-            return IndexSearcher._find_row_indices_for_range(index_parser, coords[0], coords[1], self.filter1, self.filter2, end_index, num_threads)
+        return _find_row_indices_for_range(file_data, coords[0], coords[1], self.filter1, self.filter2, end_index, num_threads)
 
     def _get_conversion_function(self):
         return do_nothing
@@ -750,229 +358,774 @@ class StringRangeFilter(__RangeFilter):
 
         super().__init__(filter1, filter2)
 
-class IndexSearcher:
-    def _get_identifier_row_index(parser, query_value, end_index, data_prefix=""):
-        if end_index == 0:
-            return -1
+"""
+This class is used to indicate that no filtering should be performed.
+"""
+#class Parser:
+    # """
+    # This class is used for querying F4 files and saving the output to new files.
+    #
+    # Args:
+    #     data_file_path (str): The path to an existing F4 file.
+    #
+    # Attributes:
+    #     data_file_path (str): The path to an existing F4 file.
+    # """
+    # def __init__(self, data_file_path):
+        # if not isinstance(data_file_path, str):
+        #     raise Exception("You must specify data_file_path as an str value.")
+        #
+        # #TODO: Move this to the query function
+        # self.data_file_path = data_file_path
+        # self.__file_handle = open_read_file(self.data_file_path)
 
-        line_length = parser._get_stat(data_prefix + "ll")
-        value_coords = parser._parse_data_coords([0], data_prefix=data_prefix)[0]
-        position_coords = parser._parse_data_coords([1], data_prefix=data_prefix)[0]
+        # #TODO: Move this stuff to an initialize() function
+        # file_map_length_string = self.__file_handle.readline()
+        # file_map_length = fastnumbers.fast_int(file_map_length_string.rstrip(b"\n"))
+        # self.__file_map_dict = deserialize(self.__file_handle[len(file_map_length_string):(len(file_map_length_string) + file_map_length)])
+        #
+        # # Invert the abbreviations used for file keys in the dictionary so they are more human readable.
+        # for file_name, abbreviation in FILE_KEY_ABBREVIATIONS.items():
+        #     if abbreviation in self.__file_map_dict:
+        #         self.__file_map_dict[file_name] = self.__file_map_dict[abbreviation]
+        #         del self.__file_map_dict[abbreviation]
+        #
+        # # Cache statistics in a dictionary.
+        # self.__stats = {}
+        #
+        # #TODO: Figure out how to handle "ll" and the other stats.
+        # #      Probably read them in the initialize file, even though you don't need all of them.
+        # data_size =  self.__file_map_dict["data"][1] - self.__file_map_dict["data"][0]
+        # self.__stats["nrow"] = fastnumbers.fast_int(data_size / self._get_stat("ll"))
+        #
+        # cc_size = self.__file_map_dict["cc"][1] - self.__file_map_dict["cc"][0]
+        # self.__stats["ncol"] = fastnumbers.fast_int(cc_size / self._get_stat("mccl")) - 1
 
-        matching_position = IndexSearcher._binary_identifier_search(parser, data_prefix, line_length, value_coords, query_value, 0, end_index)
+    # def __enter__(self):
+    #     return self
+    #
+    # def __exit__(self, the_type, value, traceback):
+    #     self.__file_handle.close()
 
-        if matching_position == -1:
-            return -1
+class FileData:
+    def __init__(self, file_handle, file_map_dict, stat_dict, decompression_type, decompressor):
+        self.file_handle = file_handle
+        self.file_map_dict = file_map_dict
+        self.stat_dict = stat_dict
+        self.decompression_type = decompression_type
+        self.decompressor = decompressor
 
-        return fastnumbers.fast_int(parser._parse_row_value(matching_position, position_coords, line_length, data_prefix=data_prefix))
+def initialize(data_file_path):
+    file_handle = open_read_file(data_file_path)
 
-    # Searches for a single matching value.
-    def _binary_identifier_search(parser, data_prefix, line_length, value_coords, value_to_find, l, r):
-        if r == -1 or l > r:
-            return -1
+    file_map_length_string = file_handle.readline()
+    file_map_length = fastnumbers.fast_int(file_map_length_string.rstrip(b"\n"))
+    file_map_dict = deserialize(file_handle[len(file_map_length_string):(len(file_map_length_string) + file_map_length)])
 
-        mid = l + (r - l) // 2
-        mid_value = parser._parse_row_value(mid, value_coords, line_length, data_prefix=data_prefix)
+    stat_dict = {}
+    for file_name, abbreviation in FILE_KEY_ABBREVIATIONS_STATS.items():
+        if abbreviation in file_map_dict:
+            coordinates = file_map_dict[abbreviation]
+            stat_dict[file_name] = fastnumbers.fast_int(file_handle[coordinates[0]:coordinates[1]])
 
-        if mid_value == value_to_find:
-            # If element is present at the middle itself
-            return mid
-        elif mid_value > value_to_find:
-            return IndexSearcher._binary_identifier_search(parser, data_prefix, line_length, value_coords, value_to_find, l, mid - 1)
+    other_dict = {}
+    for file_name, abbreviation in FILE_KEY_ABBREVIATIONS_OTHER.items():
+        if abbreviation in file_map_dict:
+            coordinates = file_map_dict[abbreviation]
+            other_dict[file_name] = file_handle[coordinates[0]:coordinates[1]]
+
+    # Invert the abbreviations used for file keys in the dictionary so they are more human readable.
+    file_map_dict2 = {}
+    for file_name, abbreviation in FILE_KEY_ABBREVIATIONS_NOCACHE.items():
+        if abbreviation in file_map_dict:
+            file_map_dict2[file_name] = file_map_dict[abbreviation]
+
+    decompression_type = None
+    decompressor = None
+    stat_dict["num_rows"] = -1
+
+    if "cmpr" in other_dict:
+        # decompression_text_coords = file_map_dict["cmpr"]
+        # decompression_text = file_handle[decompression_text_coords[0]:decompression_text_coords[1]]
+        decompression_text = other_dict["cmpr"]
+
+        if decompression_text == b"z":
+            decompression_type = "zstd"
+            # For now, this will be a dictionary with the length of each line
+            decompressor = zstandard.ZstdDecompressor()
+            stat_dict["ll"] = deserialize(other_dict["ll"])
+            stat_dict["num_rows"] = len(stat_dict["ll"]) - 1
         else:
-            # Else the element can only be present in right subarray
-            return IndexSearcher._binary_identifier_search(parser, data_prefix, line_length, value_coords, value_to_find, mid + 1, r)
+            decompression_type = "dictionary"
+            decompressor = deserialize(decompression_text)
 
-    def _filter_using_operator(index_file_path, fltr, end_index, num_threads):
-        if end_index == 0:
-            return set()
+    if stat_dict["num_rows"] < 0:
+        stat_dict["ll"] = fastnumbers.fast_int(other_dict["ll"])
 
-        with Parser(index_file_path) as index_parser:
-            line_length = index_parser._get_stat("ll")
-            coords = index_parser._parse_data_coords([0, 1])
+        data_size = file_map_dict2["data"][1] - file_map_dict2["data"][0]
+        stat_dict["num_rows"] = fastnumbers.fast_int(data_size / stat_dict["ll"])
 
-            if fltr.oper == operator.eq:
-                return IndexSearcher._find_row_indices_for_range(index_parser, coords[0], coords[1], fltr, fltr, end_index, num_threads)
+    cc_size = file_map_dict2["cc"][1] - file_map_dict2["cc"][0]
+    stat_dict["num_cols"] = fastnumbers.fast_int(cc_size / stat_dict["mccl"]) - 1
+
+    return FileData(file_handle, file_map_dict2, stat_dict, decompression_type, decompressor)
+
+def query(data_file_path, fltr=NoFilter(), select_columns=[], out_file_path=None, out_file_type="tsv", num_threads=1, lines_per_chunk=10):
+    """
+    Query the data file using zero or more filters.
+
+    This function accepts filtering criteria, identifies matching rows,
+    and writes the output (for select columns) to an output file or standard output.
+
+    Args:
+        fltr (BaseFilter): A filter.
+        select_columns (list): A list of strings that indicate the names of columns that should be selected. If this is an empty list, all columns will be selected.
+        out_file_path(str): A path to a file that will store the output data. If None is specified, the data will be directed to standard output.
+        out_file_type (str): The output file type. Currently, the only supported value is tsv.
+    """
+    if not isinstance(data_file_path, str):
+        raise Exception("You must specify data_file_path as an str value.")
+
+    if not fltr:
+        raise Exception("A filter must be specified.")
+
+    if not isinstance(fltr, NoFilter):
+        raise Exception("An object that inherits from NoFilter must be specified.")
+
+    if out_file_type != "tsv":
+        raise Exception("The only out_file_type currently supported is tsv.")
+
+    if select_columns:
+        if not isinstance(select_columns, list):
+            raise Exception("You must specify select_column as a list.")
+    else:
+        select_columns = []
+
+    file_data = None
+
+    try:
+        file_data = initialize(data_file_path)
+
+        # Store column indices and types in dictionaries so we only have to retrieve
+        # each once, even if we use the same column in multiple filters.
+        select_columns, column_type_dict, column_coords_dict, bigram_size_dict = get_column_meta(file_data, fltr._get_column_name_set(), select_columns)
+
+        fltr._check_types(column_type_dict)
+
+        has_index = len(glob.glob(data_file_path + ".idx_*")) > 0
+
+        if has_index:
+#TODO: Remove this stuff if we don't need it after testing on huge files.
+#            sub_filters = fltr.get_sub_filters()
+
+#            if num_threads == 1 or len(sub_filters) == 1:
+            keep_row_indices = sorted(fltr._filter_indexed_column_values(data_file_path, file_data.stat_dict["num_rows"], num_threads))
+#            else:
+#                fltr_results_dict = {}
+
+##                for f in sub_filters:
+##                    fltr_results_dict[str(f)] = f.filter_indexed_column_values(self.data_file_path, self.compression_level, column_index_dict, column_type_dict, column_coords_dict, self.get_num_rows(), num_threads)
+
+                # This is a parallelization of the above code.
+                # At least in some cases, it slows things down more than it speeds things up.
+#                fltr_results = Parallel(n_jobs = num_threads)(delayed(f.filter_indexed_column_values)(self.data_file_path, self.compression_level, column_index_dict, column_type_dict, column_coords_dict, self.get_num_rows(), num_threads) for f in sub_filters)
+#                for i in range(len(sub_filters)):
+#                    fltr_results_dict[str(sub_filters[i])] = fltr_results[i]
+#
+#                keep_row_indices = sorted(fltr.filter_indexed_column_values_parallel(fltr_results_dict))
+        else:
+            if num_threads == 1:
+                row_indices = set(range(file_data.stat_dict["num_rows"]))
+                keep_row_indices = sorted(fltr._filter_column_values(data_file_path, row_indices, column_coords_dict, bigram_size_dict))
             else:
-                if fltr.oper == operator.ne:
-                    lower_position, upper_position = IndexSearcher._find_bounds_for_range(index_parser, coords[0], fltr, fltr, end_index, num_threads)
+                # Loop through the rows in parallel and find matching row indices.
+                keep_row_indices = sorted(chain.from_iterable(Parallel(n_jobs = num_threads)(delayed(fltr._filter_column_values)(data_file_path, row_indices, column_coords_dict, bigram_size_dict) for row_indices in _generate_row_chunks(file_data.stat_dict["num_rows"], num_threads))))
 
-                    lower_positions = (0, lower_position)
-                    upper_positions = (upper_position, end_index)
+        select_column_coords = [column_coords_dict[name] for name in select_columns]
 
-                    lower_row_indices = IndexSearcher._retrieve_matching_row_indices(index_parser, coords[1], lower_positions, num_threads)
-                    upper_row_indices = IndexSearcher._retrieve_matching_row_indices(index_parser, coords[1], upper_positions, num_threads)
+        # This avoids having to check the decompression type each time we parse a value.
+        #decompressor = get_decompressor(decompression_type, decompressor)
+        parse_function = _get_parse_row_values_function(file_data)
 
-                    return lower_row_indices | upper_row_indices
-                else:
-                    if fltr.oper == operator.gt:
-                        positions = IndexSearcher._find_positions_g(index_parser, line_length, coords[0], fltr, 0, end_index, operator.le)
-                    elif fltr.oper == operator.ge:
-                        positions = IndexSearcher._find_positions_g(index_parser, line_length, coords[0], fltr, 0, end_index, operator.lt)
-                    elif fltr.oper == operator.lt:
-                        positions = IndexSearcher._find_positions_l(index_parser, line_length, coords[0], fltr, 0, end_index, fltr.oper)
-                    elif fltr.oper == operator.le:
-                        positions = IndexSearcher._find_positions_l(index_parser, line_length, coords[0], fltr, 0, end_index, fltr.oper)
+        if out_file_path:
+            # Write output (in chunks)
+            with open(out_file_path, 'wb') as out_file:
+                out_file.write(b"\t".join(select_columns) + b"\n") # Header line
 
-                    return IndexSearcher._retrieve_matching_row_indices(index_parser, coords[1], positions, num_threads)
+                out_lines = []
+                for row_index in keep_row_indices:
+                    out_values = parse_function(file_data, row_index, select_column_coords, bigram_size_dict=bigram_size_dict, column_names=select_columns)
+                    out_lines.append(b"\t".join(out_values))
 
-    def _find_positions_g(index_parser, line_length, value_coords, fltr, start_index, end_index, all_false_operator):
-        smallest_value = index_parser._parse_row_value(start_index, value_coords, line_length)
-        if smallest_value == b"":
-            return start_index, end_index
+                    if len(out_lines) % lines_per_chunk == 0:
+                        out_file.write(b"\n".join(out_lines) + b"\n")
+                        out_lines = []
 
-        if not all_false_operator(fltr._get_conversion_function()(smallest_value), fltr.value):
-            return start_index, end_index
-
-        largest_value = index_parser._parse_row_value(end_index - 1, value_coords, line_length)
-        if largest_value == b"":
-            return start_index, start_index
-
-        matching_position = IndexSearcher._search(index_parser, line_length, value_coords, fltr, 0, end_index, end_index, all_false_operator)
-
-        return matching_position + 1, end_index
-
-    def _find_positions_l(index_parser, line_length, value_coords, fltr, start_index, end_index, all_true_operator):
-        smallest_value = index_parser._parse_row_value(start_index, value_coords, line_length)
-        if smallest_value == b"":
-            return start_index, start_index
-
-        if not all_true_operator(fltr._get_conversion_function()(smallest_value), fltr.value):
-            return start_index, start_index
-
-        largest_value = index_parser._parse_row_value(end_index - 1, value_coords, line_length)
-        if largest_value == b"":
-            return start_index, end_index
-
-        if all_true_operator(fltr._get_conversion_function()(largest_value), fltr.value):
-            return start_index, end_index
-
-        matching_position = IndexSearcher._search(index_parser, line_length, value_coords, fltr, 0, end_index, end_index, all_true_operator)
-
-        return start_index, matching_position + 1
-
-    # TODO: It might make sense to combine this function with _search_with_filter
-    #      to avoid duplicating similar code.
-    def _search(index_parser, line_length, value_coords, fltr, left_index, right_index, overall_end_index, search_operator):
-        mid_index = left_index + (right_index - left_index) // 2
-
-        conversion_function = fltr._get_conversion_function()
-        mid_value = conversion_function(index_parser._parse_row_value(mid_index, value_coords, line_length))
-
-        if search_operator(mid_value, fltr.value):
-            next_index = mid_index + 1
-
-            if next_index == overall_end_index:
-                return mid_index
-
-            next_value = index_parser._parse_row_value(mid_index + 1, value_coords, line_length)
-
-            # TODO: Does this work if we have a blank data value? Perhaps we can remove it?
-            #       Modify to be like _search_with_filter?
-            if next_value == b"":
-               return mid_index
-            elif not search_operator(conversion_function(next_value), fltr.value):
-                return mid_index
-            else:
-                return IndexSearcher._search(index_parser, line_length, value_coords, fltr, mid_index, right_index, overall_end_index, search_operator)
+                if len(out_lines) > 0:
+                    out_file.write(b"\n".join(out_lines) + b"\n")
         else:
-            return IndexSearcher._search(index_parser, line_length, value_coords, fltr, left_index, mid_index, overall_end_index, search_operator)
+            sys.stdout.buffer.write(b"\t".join(select_columns) + b"\n") # Header line
 
-    def _search_with_filter(index_parser, line_length, value_coords, left_index, right_index, overall_end_index, fltr):
-        mid_index = (left_index + right_index) // 2
+            for row_index in keep_row_indices:
+                out_values = parse_function(file_data, row_index, select_column_coords, bigram_size_dict=bigram_size_dict, column_names=select_columns)
+                sys.stdout.buffer.write(b"\t".join(out_values))
 
-        if mid_index == 0:
-            return 0
+                if row_index != keep_row_indices[-1]:
+                    sys.stdout.buffer.write(b"\n")
+    except Exception:
+        raise Exception
+    finally:
+        if file_data:
+            file_data.file_handle.close()
 
-        conversion_function = fltr._get_conversion_function()
-        mid_value = conversion_function(index_parser._parse_row_value(mid_index, value_coords, line_length))
+def head(data_file_path, n = 10, select_columns=None, out_file_path=None, out_file_type="tsv"):
+    if not select_columns:
+        select_columns = []
 
-        if fltr.passes(mid_value):
-            if mid_index == right_index:
-                return mid_index
+    query(data_file_path, HeadFilter(n, select_columns), select_columns, out_file_path=out_file_path, out_file_type=out_file_type)
 
-            next_index = mid_index + 1
+def tail(data_file_path, n = 10, select_columns=None, out_file_path=None, out_file_type="tsv"):
+    if not select_columns:
+        select_columns = []
 
-            if next_index == overall_end_index:
-                return next_index
+    query(data_file_path, TailFilter(n, select_columns), select_columns, out_file_path=out_file_path, out_file_type=out_file_type)
 
-            next_value = conversion_function(index_parser._parse_row_value(next_index, value_coords, line_length))
+def get_num_rows(data_file_path):
+    return initialize(data_file_path).stat_dict["num_rows"]
 
-            if fltr.passes(next_value):
-                return IndexSearcher._search_with_filter(index_parser, line_length, value_coords, next_index, right_index, overall_end_index, fltr)
-            else:
-                return mid_index + 1
+def get_num_cols(data_file_path):
+    return initialize(data_file_path).stat_dict["num_cols"]
+
+def get_column_type_from_name(data_file_path, column_name):
+    try:
+        file_data = initialize(data_file_path)
+        column_index = _get_column_index_from_name(file_data, column_name)
+        return _get_column_type_from_index(file_data, column_index)
+    except:
+        raise Exception(f"A column with the name {column_name} does not exist.")
+
+##############################################
+# Non-public functions
+##############################################
+
+def _get_column_index_from_name(file_data, column_name):
+    position = _get_identifier_row_index(file_data, column_name.encode(), file_data.stat_dict["num_cols"], data_prefix="cn")
+
+    if position < 0:
+        raise Exception(f"Could not retrieve index because column named {column_name} was not found.")
+
+    return position
+
+# def _get_stat(self, stat):
+#     if stat not in self.__stats:
+#         self.__stats[stat] = fastnumbers.fast_int(self._get_stat_from_file(stat))
+#
+#     return self.__stats[stat]
+
+# def get_stat_from_file(file_data, key):
+#     coordinates = file_map_dict[key]
+#     return fastnumbers.fast_int(file_handle[coordinates[0]:coordinates[1]])
+
+def _get_column_type_from_index(file_data, column_index):
+    return next(_parse_data_values_from_file(file_data, column_index, 1, [[0, 1]], "", "ct")).decode()
+
+def get_column_meta(file_data, filter_column_set, select_columns):
+    column_type_dict = {}
+    column_coords_dict = {}
+    column_index_name_dict = {}
+
+    if len(select_columns) == 0:
+        num_cols = file_data.stat_dict["num_cols"]
+        coords = _parse_data_coords(file_data, [0, 1], data_prefix="cn")
+
+        for row_index in range(num_cols):
+            values = _parse_row_values(file_data, row_index, coords, data_prefix="cn")
+            column_name = values[0]
+            column_index = fastnumbers.fast_int(values[1])
+
+            column_index_name_dict[column_index] = column_name
+
+            if column_name in filter_column_set:
+                column_type_dict[column_name] = _get_column_type_from_index(file_data, row_index)
+
+        all_coords = _parse_data_coords(file_data, range(num_cols))
+        for row_index in range(num_cols):
+            column_coords_dict[column_index_name_dict[row_index]] = all_coords[row_index]
+
+        all_columns = [x[1] for x in sorted(column_index_name_dict.items())]
+        select_columns = all_columns
+    else:
+        select_columns = [name.encode() for name in select_columns]
+        all_columns = list(filter_column_set | set(select_columns))
+
+        column_name_index_dict = {}
+        for column_name in all_columns:
+            column_index = _get_column_index_from_name(file_data, column_name.decode())
+            column_name_index_dict[column_name] = column_index
+            column_index_name_dict[column_index] = column_name
+
+        for column_name in filter_column_set:
+            column_type_dict[column_name] = _get_column_type_from_index(file_data, column_name_index_dict[column_name])
+
+        all_column_indices = [column_name_index_dict[name] for name in all_columns]
+        all_coords = _parse_data_coords(file_data, all_column_indices)
+
+        for i, column_name in enumerate(all_columns):
+            column_coords_dict[column_name] = all_coords[i]
+
+    # decompression_type = None
+    # decompressor = None
+    bigram_size_dict = {}
+
+    if file_data.decompression_type == "dictionary":
+        for column_name in all_columns:
+            bigram_size_dict[column_name] = get_bigram_size(len(file_data.decompressor[column_name]["map"]))
+
+    # ll = get_stat_from_file(file_data, "ll")
+    # num_rows = -1
+    #
+    # if "cmpr" in file_map_dict:
+    #     decompression_text_coords = file_map_dict["cmpr"]
+    #     decompression_text = file_handle[decompression_text_coords[0]:decompression_text_coords[1]]
+    #
+    #     if decompression_text == b"z":
+    #         decompression_type = "zstd"
+    #         # For now, this will be a dictionary with the length of each line
+    #         decompressor = deserialize(deserialize(ll))
+    #         num_rows = len(decompressor)
+    #     else:
+    #         decompression_type = "dictionary"
+    #         decompressor = deserialize(decompression_text)
+    #
+    #         for column_name in all_columns:
+    #             bigram_size_dict[column_name] = get_bigram_size(len(decompressor[column_name]["map"]))
+    #
+    # if num_rows < 0:
+    #     data_size = file_map_dict["data"][1] - file_map_dict["data"][0]
+    #     num_rows = fastnumbers.fast_int(data_size / fastnumbers.fast_int(ll))
+    #
+    # return select_columns, num_rows, column_type_dict, column_coords_dict, decompression_type, decompressor, bigram_size_dict
+
+    return select_columns, column_type_dict, column_coords_dict, bigram_size_dict
+
+def _generate_row_chunks(num_rows, num_threads):
+    rows_per_chunk = math.ceil(num_rows / num_threads)
+
+    row_indices = set()
+
+    for row_index in range(num_rows):
+        row_indices.add(row_index)
+
+        if len(row_indices) == rows_per_chunk:
+            yield row_indices
+            row_indices = set()
+
+    if len(row_indices) > 0:
+        yield row_indices
+
+def _parse_data_coords(file_data, indices, data_prefix=""):
+    file_key = "cc"
+    data_coords = []
+    out_dict = {}
+    mccl = file_data.stat_dict[data_prefix + "mccl"]
+
+    for index in indices:
+        start_pos = index * mccl
+        next_start_pos = start_pos + mccl
+        further_next_start_pos = next_start_pos + mccl
+
+        # See if we already have cached the start position.
+        if index in out_dict:
+            data_start_pos = out_dict[index]
+        # If not, retrieve the start position from the cc file and then cache it.
         else:
-            if left_index == mid_index:
-                return mid_index
+            data_start_pos = fastnumbers.fast_int(_parse_data_value_from_file(file_data, 0, 0, [start_pos, next_start_pos], data_prefix, file_key).rstrip(b" "))
+            out_dict[index] = data_start_pos
 
-            return IndexSearcher._search_with_filter(index_parser, line_length, value_coords, left_index, mid_index, overall_end_index, fltr)
-
-    def _find_matching_row_indices(index_file_path, position_coords, positions):
-        # To make this paralellizable, we pass just a file path rather than index_parser.
-        with Parser(index_file_path) as index_parser:
-            line_length = index_parser._get_stat("ll")
-
-            matching_row_indices = set()
-            for i in range(positions[0], positions[1]):
-                matching_row_indices.add(fastnumbers.fast_int(index_parser._parse_row_value(i, position_coords, line_length)))
-
-            return matching_row_indices
-
-    def _retrieve_matching_row_indices(index_parser, position_coords, positions, num_threads):
-        # This is a rough threshold for determine whether it is worth the overhead to parallelize.
-        num_indices = positions[1] - positions[0]
-
-        if num_threads == 1 or num_indices < 100:
-            return IndexSearcher._find_matching_row_indices(index_parser.data_file_path, position_coords, positions)
+        # See if we already have cached the end position.
+        if (index + 1) in out_dict:
+            data_end_pos = out_dict[index + 1]
+        # If not, retrieve the end position from the cc file and then cache it.
         else:
-            chunk_size = math.ceil(num_indices / num_threads)
-            position_chunks = []
+            data_end_pos = fastnumbers.fast_int(_parse_data_value_from_file(file_data, 0, 0, [next_start_pos, further_next_start_pos], data_prefix, file_key).rstrip(b" "))
+            out_dict[index + 1] = data_end_pos
+
+        data_coords.append([data_start_pos, data_end_pos])
+
+    return data_coords
+
+def _parse_data_value_from_file(file_data, start_element, segment_length, coords, data_prefix, file_key):
+    start_pos = start_element * segment_length + file_data.file_map_dict[data_prefix + file_key][0]
+    return file_data.file_handle[(start_pos + coords[0]):(start_pos + coords[1])]
+
+def _parse_data_values_from_string(data_coords, string):
+    for coords in data_coords:
+        yield string[(coords[0]):(coords[1])].rstrip(b" ")
+
+def _parse_data_values_from_file(file_data, start_element, segment_length, data_coords, data_prefix, file_key):
+    start_pos = start_element * segment_length + file_data.file_map_dict[data_prefix + file_key][0]
+
+    for coords in data_coords:
+        yield file_data.file_handle[(start_pos + coords[0]):(start_pos + coords[1])].rstrip(b" ")
+
+def get_parse_row_value_function(file_data):
+    if not file_data.decompression_type:
+        return _parse_row_value
+    elif file_data.decompression_type == "zstd":
+        return _parse_zstd_compressed_row_value
+    else:
+        return _parse_dictionary_compressed_row_value
+
+def _parse_row_value(file_data, row_index, column_coords, line_length, data_prefix="", bigram_size_dict=None, column_name=None):
+    return _parse_data_value_from_file(file_data, row_index, line_length, column_coords, data_prefix, "data").rstrip(b" ")
+
+def _parse_zstd_compressed_row_value(file_data, row_index, column_coords, line_lengths, data_prefix="", bigram_size_dict=None, column_name=None):
+    # print(len(line_lengths))
+    # print(row_index)
+    line_start_position = line_lengths[row_index]
+    line_length = line_lengths[row_index + 1] - line_start_position
+    # if row_index == len(line_lengths) - 1:
+    #     # print(line_start_position)
+    #     # print(file_data.file_map_dict["data"])
+    #     # line_length = file_data.file_map_dict["data"][1] - line_start_position
+    #     line_length = None
+    # else:
+
+    line = _parse_data_value_from_file(file_data, line_start_position, 1, [0, line_length], data_prefix, "data")
+    # print("decompressing:")
+    # print(line)
+    line = file_data.decompressor.decompress(line)
+
+    return line[column_coords[0]:column_coords[1]].rstrip(b" ")
+
+def _parse_dictionary_compressed_row_value(file_data, row_index, column_coords, line_length, data_prefix="", bigram_size_dict=None, column_name=None):
+    value = _parse_data_value_from_file(file_data, row_index, line_length, column_coords, data_prefix, "data").rstrip(b" ")
+    return decompress(value, file_data.decompressor[column_name], bigram_size_dict[column_name])
+
+def _get_parse_row_values_function(file_data):
+    if not file_data.decompression_type:
+        return _parse_row_values
+    elif file_data.decompression_type == "zstd":
+        return _parse_zstd_compressed_row_values
+    else:
+        return _parse_dictionary_compressed_row_values
+
+def _parse_row_values(file_data, row_index, column_coords, data_prefix="", bigram_size_dict=None, column_names=None):
+    return list(_parse_data_values_from_file(file_data, row_index, file_data.stat_dict[data_prefix + "ll"], column_coords, data_prefix, "data"))
+
+def _parse_zstd_compressed_row_values(file_data, row_index, column_coords, data_prefix="", bigram_size_dict=None, column_names=None):
+    line_start_position = file_data.stat_dict["ll"][row_index]
+    line_length = file_data.stat_dict["ll"][row_index + 1] - line_start_position
+
+    #line_length = file_data.stat_dict["ll"][row_index]
+    #line = _parse_data_value_from_file(file_data, row_index, line_length, [0, line_length], data_prefix, "data")
+    line = _parse_data_value_from_file(file_data, line_start_position, 1, [0, line_length], data_prefix, "data")
+    line = file_data.decompressor.decompress(line)
+
+    return list(_parse_data_values_from_string(column_coords, line))
+
+def _parse_dictionary_compressed_row_values(file_data, row_index, column_coords, data_prefix="", bigram_size_dict=None, column_names=None):
+        values = list(_parse_data_values_from_file(file_data, row_index, file_data.stat_dict["ll"], column_coords, data_prefix, "data"))
+
+        return [decompress(values.pop(0), file_data.decompressor[column_name], bigram_size_dict[column_name]) for column_name in column_names]
+
+# def _get_decompression_dict(self, file_path, column_index_name_dict):
+#     with open(file_path, "rb") as cmpr_file:
+#         return deserialize(cmpr_file.read())
+
+#     compression_dict = {}
+#     with open(file_path, "rb") as cmpr_file:
+#         for line in cmpr_file:
+#             line_items = line.rstrip(b"\n").split(b"\t")
+#             column_index = fastnumbers.fast_int(line_items[0])
+
+#             if column_index in column_index_name_dict:
+#                 column_name = column_index_name_dict[column_index]
+#                 compression_dict[column_name] = deserialize(line_items[1])
+
+#     #for column_index in column_index_name_dict.keys():
+#     #     compression_dict[column_index_name_dict[column_index]] = {}
+#     #     compression_dict[column_index_name_dict[column_index]]["map"] = {}
+
+#     # with Parser(file_path, fixed_file_extensions=[".data", ".cc"], stats_file_extensions=[".ll", ".mccl"]) as parser:
+#     #     coords = parser._parse_data_coords([0, 1, 2])
+#     #     num_rows = fastnumbers.fast_int((len(parser.get_file_handle(".data")) + 1) / parser.get_stat(".ll"))
+
+#     #     # Use a set for performance reasons
+#     #     column_indices_set = set(column_index_name_dict.keys())
+
+#     #     with Parser(f"{self.data_file_path}.cmpr", fixed_file_extensions=[".data", ".cc"], stats_file_extensions=[".ll", ".mccl"]) as parser:
+#     #         for row_index in range(num_rows):
+#     #             values = parser.__parse_row_values(row_index, coords)
+#     #             column_index = fastnumbers.fast_int(values[0])
+
+#     #             if column_index in column_indices_set:
+#     #                 compressed_value = convert_bytes_to_int(values[2])
+
+#     #                 compression_dict[column_index_name_dict[column_index]]["map"][compressed_value] = values[1]
+
+#     # # # We need column names as keys rather than indices.
+#     # # compression_dict2 = {}
+#     # # for i, column_name in enumerate(column_names):
+#     # #     compression_dict2[column_name] = compression_dict[column_indices[i]]
+
+#     # with Parser(f"{self.data_file_path}.cmprtype", fixed_file_extensions=[".data"], stats_file_extensions=[".ll"]) as parser:
+#     #     coords = [[0, 1]]
+
+#     #     for column_index in column_index_name_dict.keys():
+#     #         compression_dict[column_index_name_dict[column_index]]["compression_type"] = parser.__parse_row_values(column_index, coords)[0]
+
+#     return compression_dict
+
+# def _invert_decompression_dict(self, decompression_dict, select_columns):
+#     inverted_dict = {}
+#
+#     for select_column in select_columns:
+#         inverted_dict[select_column] = {"compression_type": decompression_dict[select_column]["compression_type"]}
+#         inverted_dict[select_column]["map"] = {}
+#
+#         for compressed_value, value in decompression_dict[select_column]["map"].items():
+#             inverted_dict[select_column]["map"][value] = compressed_value
+#
+#     return inverted_dict
+
+def _get_identifier_row_index(file_data, query_value, end_index, data_prefix=""):
+    if end_index == 0:
+        return -1
+
+    line_length = file_data.stat_dict[data_prefix + "ll"]
+    value_coords = _parse_data_coords(file_data, [0], data_prefix=data_prefix)[0]
+    position_coords = _parse_data_coords(file_data, [1], data_prefix=data_prefix)[0]
+
+    matching_position = _binary_identifier_search(file_data, data_prefix, line_length, value_coords, query_value, 0, end_index)
+
+    if matching_position == -1:
+        return -1
+
+    return fastnumbers.fast_int(_parse_row_value(file_data, matching_position, position_coords, line_length, data_prefix=data_prefix))
+
+# Searches for a single matching value.
+def _binary_identifier_search(file_data, data_prefix, line_length, value_coords, value_to_find, l, r):
+    if r == -1 or l > r:
+        return -1
+
+    mid = l + (r - l) // 2
+    mid_value = _parse_row_value(file_data, mid, value_coords, line_length, data_prefix=data_prefix)
+
+    if mid_value == value_to_find:
+        # If element is present at the middle itself
+        return mid
+    elif mid_value > value_to_find:
+        return _binary_identifier_search(file_data, data_prefix, line_length, value_coords, value_to_find, l, mid - 1)
+    else:
+        # Else the element can only be present in right subarray
+        return _binary_identifier_search(file_data, data_prefix, line_length, value_coords, value_to_find, mid + 1, r)
+
+def _filter_using_operator(file_data, fltr, end_index, num_threads):
+    if end_index == 0:
+        return set()
+
+#    with Parser(index_file_path) as index_parser:
+    line_length = file_data.stat_dict["ll"]
+    coords = _parse_data_coords(file_data, [0, 1])
+
+    if fltr.oper == operator.eq:
+        return _find_row_indices_for_range(file_data, coords[0], coords[1], fltr, fltr, end_index, num_threads)
+    else:
+        if fltr.oper == operator.ne:
+            lower_position, upper_position = _find_bounds_for_range(file_data, coords[0], fltr, fltr, end_index, num_threads)
+
+            lower_positions = (0, lower_position)
+            upper_positions = (upper_position, end_index)
+
+            lower_row_indices = _retrieve_matching_row_indices(file_data, coords[1], lower_positions, num_threads)
+            upper_row_indices = _retrieve_matching_row_indices(file_data, coords[1], upper_positions, num_threads)
+
+            return lower_row_indices | upper_row_indices
+        else:
+            if fltr.oper == operator.gt:
+                positions = _find_positions_g(file_data, line_length, coords[0], fltr, 0, end_index, operator.le)
+            elif fltr.oper == operator.ge:
+                positions = _find_positions_g(file_data, line_length, coords[0], fltr, 0, end_index, operator.lt)
+            elif fltr.oper == operator.lt:
+                positions = _find_positions_l(file_data, line_length, coords[0], fltr, 0, end_index, fltr.oper)
+            elif fltr.oper == operator.le:
+                positions = _find_positions_l(file_data, line_length, coords[0], fltr, 0, end_index, fltr.oper)
+
+            return _retrieve_matching_row_indices(file_data, coords[1], positions, num_threads)
+
+def _find_positions_g(file_data, line_length, value_coords, fltr, start_index, end_index, all_false_operator):
+    smallest_value = _parse_row_value(file_data, start_index, value_coords, line_length)
+    if smallest_value == b"":
+        return start_index, end_index
+
+    if not all_false_operator(fltr._get_conversion_function()(smallest_value), fltr.value):
+        return start_index, end_index
+
+    largest_value = _parse_row_value(file_data, end_index - 1, value_coords, line_length)
+    if largest_value == b"":
+        return start_index, start_index
+
+    matching_position = _search(file_data, line_length, value_coords, fltr, 0, end_index, end_index, all_false_operator)
+
+    return matching_position + 1, end_index
+
+def _find_positions_l(file_data, line_length, value_coords, fltr, start_index, end_index, all_true_operator):
+    smallest_value = _parse_row_value(file_data, start_index, value_coords, line_length)
+    if smallest_value == b"":
+        return start_index, start_index
+
+    if not all_true_operator(fltr._get_conversion_function()(smallest_value), fltr.value):
+        return start_index, start_index
+
+    largest_value = _parse_row_value(file_data, end_index - 1, value_coords, line_length)
+    if largest_value == b"":
+        return start_index, end_index
+
+    if all_true_operator(fltr._get_conversion_function()(largest_value), fltr.value):
+        return start_index, end_index
+
+    matching_position = _search(file_data, line_length, value_coords, fltr, 0, end_index, end_index, all_true_operator)
+
+    return start_index, matching_position + 1
+
+# TODO: It might make sense to combine this function with _search_with_filter
+#      to avoid duplicating similar code.
+def _search(file_data, line_length, value_coords, fltr, left_index, right_index, overall_end_index, search_operator):
+    mid_index = left_index + (right_index - left_index) // 2
+
+    conversion_function = fltr._get_conversion_function()
+    mid_value = conversion_function(_parse_row_value(file_data, mid_index, value_coords, line_length))
+
+    if search_operator(mid_value, fltr.value):
+        next_index = mid_index + 1
+
+        if next_index == overall_end_index:
+            return mid_index
+
+        next_value = _parse_row_value(file_data, mid_index + 1, value_coords, line_length)
+
+        # TODO: Does this work if we have a blank data value? Perhaps we can remove it?
+        #       Modify to be like _search_with_filter?
+        if next_value == b"":
+           return mid_index
+        elif not search_operator(conversion_function(next_value), fltr.value):
+            return mid_index
+        else:
+            return _search(file_data, line_length, value_coords, fltr, mid_index, right_index, overall_end_index, search_operator)
+    else:
+        return _search(file_data, line_length, value_coords, fltr, left_index, mid_index, overall_end_index, search_operator)
+
+def _search_with_filter(file_data, line_length, value_coords, left_index, right_index, overall_end_index, fltr):
+    mid_index = (left_index + right_index) // 2
+
+    if mid_index == 0:
+        return 0
+
+    conversion_function = fltr._get_conversion_function()
+    mid_value = conversion_function(_parse_row_value(file_data, mid_index, value_coords, line_length))
+
+    if fltr.passes(mid_value):
+        if mid_index == right_index:
+            return mid_index
+
+        next_index = mid_index + 1
+
+        if next_index == overall_end_index:
+            return next_index
+
+        next_value = conversion_function(_parse_row_value(file_data, next_index, value_coords, line_length))
+
+        if fltr.passes(next_value):
+            return _search_with_filter(file_data, line_length, value_coords, next_index, right_index, overall_end_index, fltr)
+        else:
+            return mid_index + 1
+    else:
+        if left_index == mid_index:
+            return mid_index
+
+        return _search_with_filter(file_data, line_length, value_coords, left_index, mid_index, overall_end_index, fltr)
+
+#TODO
+def _find_matching_row_indices(file_data, position_coords, positions):
+#def _find_matching_row_indices(data_file_path, position_coords, positions):
+    # To make this paralellizable, we pass just a file path rather than index_parser.
+    line_length = file_data.stat_dict["ll"]
+
+    matching_row_indices = set()
+    for i in range(positions[0], positions[1]):
+        matching_row_indices.add(fastnumbers.fast_int(_parse_row_value(file_data, i, position_coords, line_length)))
+
+    return matching_row_indices
+
+def _retrieve_matching_row_indices(file_data, position_coords, positions, num_threads):
+    # This is a rough threshold for determine whether it is worth the overhead to parallelize.
+    num_indices = positions[1] - positions[0]
+
+    if num_threads == 1 or num_indices < 100:
+        return _find_matching_row_indices(file_data, position_coords, positions)
+    else:
+        chunk_size = math.ceil(num_indices / num_threads)
+
+        # position_chunks = []
+        # for i in range(positions[0], positions[1], chunk_size):
+        #     position_chunks.append((i, min(positions[1], i + chunk_size)))
+
+        # return set(chain.from_iterable(Parallel(n_jobs=num_threads)(
+        #     delayed(_find_matching_row_indices)(file_data, position_coords, position_chunk)
+        #     for position_chunk in position_chunks))
+        # )
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers = num_threads) as executor:
+            futures = []
             for i in range(positions[0], positions[1], chunk_size):
-                position_chunks.append((i, min(positions[1], i + chunk_size)))
+                position_chunk = (i, min(positions[1], i + chunk_size))
+                futures.append(executor.submit(_find_matching_row_indices, file_data, position_coords, position_chunk))
 
-            return set(chain.from_iterable(Parallel(n_jobs=num_threads)(
-                delayed(IndexSearcher._find_matching_row_indices)(index_parser.data_file_path, position_coords, position_chunk)
-                for position_chunk in position_chunks)))
+            matches = set()
+            for future in concurrent.futures.as_completed(futures):
+                matches = matches | future.result()
 
-    def _find_bounds_for_range(index_parser, value_coords, filter1, filter2, end_index, num_threads, start_index=0):
-        line_length = index_parser._get_stat("ll")
+        return matches
 
-        lower_positions = IndexSearcher._find_positions_g(index_parser, line_length, value_coords, filter1, start_index, end_index, operator.lt)
-        upper_positions = IndexSearcher._find_positions_l(index_parser, line_length, value_coords, filter2, lower_positions[0], lower_positions[1], operator.le)
+def _find_bounds_for_range(file_data, value_coords, filter1, filter2, end_index, num_threads, start_index=0):
+    line_length = file_data.stat_dict["ll"]
 
-        lower_position = max(lower_positions[0], upper_positions[0])
-        upper_position = min(lower_positions[1], upper_positions[1])
+    lower_positions = _find_positions_g(file_data, line_length, value_coords, filter1, start_index, end_index, operator.lt)
+    upper_positions = _find_positions_l(file_data, line_length, value_coords, filter2, lower_positions[0], lower_positions[1], operator.le)
 
-        return lower_position, upper_position
+    lower_position = max(lower_positions[0], upper_positions[0])
+    upper_position = min(lower_positions[1], upper_positions[1])
 
-    def _find_row_indices_for_range(index_parser, value_coords, position_coords, filter1, filter2, end_index, num_threads):
-        lower_position, upper_position = IndexSearcher._find_bounds_for_range(index_parser, value_coords, filter1, filter2, end_index, num_threads)
+    return lower_position, upper_position
 
-        return IndexSearcher._retrieve_matching_row_indices(index_parser, position_coords, (lower_position, upper_position), num_threads)
+def _find_row_indices_for_range(file_data, value_coords, position_coords, filter1, filter2, end_index, num_threads):
+    lower_position, upper_position = _find_bounds_for_range(file_data, value_coords, filter1, filter2, end_index, num_threads)
 
-    def _get_passing_row_indices(fltr, parser, line_length, coords_value, coords_position, start_index, end_index):
-        passing_row_indices = set()
+    return _retrieve_matching_row_indices(file_data, position_coords, (lower_position, upper_position), num_threads)
 
-        for i in range(start_index, end_index):
-            if fltr.passes(parser._parse_row_value(i, coords_value, line_length)):
-                passing_row_indices.add(fastnumbers.fast_int(parser._parse_row_value(i, coords_position, line_length)))
+def _get_passing_row_indices(file_data, fltr, line_length, coords_value, coords_position, start_index, end_index):
+    passing_row_indices = set()
 
-        return passing_row_indices
+    for i in range(start_index, end_index):
+        if fltr.passes(_parse_row_value(file_data, i, coords_value, line_length)):
+            passing_row_indices.add(fastnumbers.fast_int(_parse_row_value(file_data, i, coords_position, line_length)))
 
-    def _get_passing_row_indices_with_filter(index_file_path, fltr, end_index, num_threads):
-        with Parser(index_file_path) as index_parser:
-            line_length = index_parser._get_stat("ll")
-            coords = index_parser._parse_data_coords([0, 1])
+    return passing_row_indices
 
-            lower_range = IndexSearcher._find_positions_g(index_parser, line_length, coords[0], fltr, 0, end_index, operator.lt)
+def _get_passing_row_indices_with_filter(file_data, fltr, end_index, num_threads):
+    #with Parser(index_file_path) as index_parser:
+    line_length = file_data.stat_dict["ll"]
+    coords = _parse_data_coords(file_data, [0, 1])
 
-            if lower_range[0] == end_index:
-                return set()
+    lower_range = _find_positions_g(file_data, line_length, coords[0], fltr, 0, end_index, operator.lt)
 
-            upper_position = IndexSearcher._search_with_filter(index_parser, line_length, coords[0], lower_range[0], lower_range[1], end_index, fltr)
+    if lower_range[0] == end_index:
+        return set()
 
-            return IndexSearcher._retrieve_matching_row_indices(index_parser, coords[1], (lower_range[0], upper_position), num_threads)
+    upper_position = _search_with_filter(file_data, line_length, coords[0], lower_range[0], lower_range[1], end_index, fltr)
 
-    def _get_two_column_index_name(filter1, filter2):
-        return "____".join([filter1.column_name.decode(), filter2.column_name.decode()])
+    return _retrieve_matching_row_indices(file_data, coords[1], (lower_range[0], upper_position), num_threads)
+
+def _get_two_column_index_name(filter1, filter2):
+    return "____".join([filter1.column_name.decode(), filter2.column_name.decode()])

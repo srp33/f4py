@@ -1,8 +1,11 @@
+#TODO:
+import concurrent.futures
 import copy
 import datetime
 import glob
 import gzip
 import fastnumbers
+#TODO:
 from itertools import chain
 from joblib import Parallel, delayed
 import math
@@ -18,7 +21,9 @@ import tempfile
 import zstandard
 
 # We use these dictionaries so that when we store the file map, it takes less space on disk.
-FILE_KEY_ABBREVIATIONS = {"data": 1, "cc": 2, "mccl": 3, "ll": 4, "ct": 5, "mctl": 6, "cmpr": 7, "cndata": 8, "cncc": 9, "cnmccl": 10, "cnll": 11}
+FILE_KEY_ABBREVIATIONS_STATS = {"mccl": 3, "mctl": 6, "cnmccl": 10, "cnll": 11}
+FILE_KEY_ABBREVIATIONS_OTHER = {"ll": 4, "cmpr": 7}
+FILE_KEY_ABBREVIATIONS_NOCACHE = {"data": 1, "cc": 2, "ct": 5, "cndata": 8, "cncc": 9}
 
 def open_read_file(file_path, file_extension=""):
     the_file = open(file_path + file_extension, 'rb')
@@ -124,12 +129,12 @@ def decompress(compressed_value, compression_dict, bigram_size):
 
     return value
 
-def get_decompressor(decompression_type, decompressor):
-    if not decompression_type:
-        return None
-
-    # We have to instantiate this object more than once because some functions are invoked in parallel, and they cannot be serialized.
-    return zstandard.ZstdDecompressor() if decompression_type == "zstd" else decompressor
+# def get_decompressor(decompression_type, decompressor):
+#     if not decompression_type:
+#         return None
+#
+#     # We have to instantiate this object more than once because some functions are invoked in parallel, and they cannot be serialized.
+#     return zstandard.ZstdDecompressor() if decompression_type == "zstd" else decompressor
 
 def convert_bytes_to_int(b):
     return int.from_bytes(b, byteorder="big")
@@ -183,8 +188,13 @@ def combine_into_single_file(tmp_dir_path_chunks, tmp_dir_path_outputs, f4_file_
 
         for x in start_end_positions:
             file_name = x[0]
-            start_end_dict[FILE_KEY_ABBREVIATIONS[file_name]] = x[1:]
-            #start_end_dict[file_name] = x[1:]
+
+            if file_name in FILE_KEY_ABBREVIATIONS_STATS:
+                start_end_dict[FILE_KEY_ABBREVIATIONS_STATS[file_name]] = x[1:]
+            elif file_name in FILE_KEY_ABBREVIATIONS_OTHER:
+                start_end_dict[FILE_KEY_ABBREVIATIONS_OTHER[file_name]] = x[1:]
+            else:
+                start_end_dict[FILE_KEY_ABBREVIATIONS_NOCACHE[file_name]] = x[1:]
 
         serialized = serialize(start_end_dict)
 
