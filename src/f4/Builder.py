@@ -1,6 +1,10 @@
 from .Parser import *
 from .Utilities import *
 
+#####################################################
+# Public function(s)
+#####################################################
+
 def convert_delimited_file(delimited_file_path, f4_file_path, index_columns=[], delimiter="\t", comment_prefix="#", compression_type=None, num_threads=1, num_cols_per_chunk=10, num_rows_per_write=100, tmp_dir_path=None, verbose=False):
     if type(delimiter) != str:
         raise Exception("The delimiter value must be a string.")
@@ -42,10 +46,10 @@ def convert_delimited_file(delimited_file_path, f4_file_path, index_columns=[], 
     # Iterate through the lines to summarize each column.
     print_message(f"Summarizing each column in {delimited_file_path}", verbose)
     if num_threads == 1:
-        chunk_results = [_parse_columns_chunk(delimited_file_path, delimiter, comment_prefix, 0, num_cols, num_rows_per_write, compression_type, verbose)]
+        chunk_results = [parse_columns_chunk(delimited_file_path, delimiter, comment_prefix, 0, num_cols, num_rows_per_write, compression_type, verbose)]
     else:
-        column_chunk_indices = _generate_chunk_ranges(num_cols, num_cols_per_chunk)
-        chunk_results = Parallel(n_jobs=num_threads)(delayed(_parse_columns_chunk)(delimited_file_path, delimiter, comment_prefix, column_chunk[0], column_chunk[1], num_rows_per_write, compression_type, verbose) for column_chunk in column_chunk_indices)
+        column_chunk_indices = generate_chunk_ranges(num_cols, num_cols_per_chunk)
+        chunk_results = Parallel(n_jobs=num_threads)(delayed(parse_columns_chunk)(delimited_file_path, delimiter, comment_prefix, column_chunk[0], column_chunk[1], num_rows_per_write, compression_type, verbose) for column_chunk in column_chunk_indices)
 
     # Summarize the column sizes and types across the chunks.
     column_sizes = []
@@ -70,10 +74,10 @@ def convert_delimited_file(delimited_file_path, f4_file_path, index_columns=[], 
         raise Exception(f"A header row but no data rows were detected in {delimited_file_path}")
 
     print_message(f"Parsing chunks of {delimited_file_path} and saving to temp directory ({tmp_dir_path_chunks})", verbose)
-    line_lengths_dict = _get_line_lengths_dict(delimited_file_path, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes, column_compression_dicts, num_rows, num_threads, num_rows_per_write, verbose)
+    line_lengths_dict = get_line_lengths_dict(delimited_file_path, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes, column_compression_dicts, num_rows, num_threads, num_rows_per_write, verbose)
 
     print_message(f"Saving meta files for {f4_file_path}", verbose)
-    _write_meta_files(tmp_dir_path_outputs, column_sizes, line_lengths_dict, column_names, column_types, compression_type, column_compression_dicts, num_rows)
+    write_meta_files(tmp_dir_path_outputs, column_sizes, line_lengths_dict, column_names, column_types, compression_type, column_compression_dicts, num_rows)
 
     print_message(f"Combining all data into a single file for {delimited_file_path}", verbose)
     combine_into_single_file(tmp_dir_path_chunks, tmp_dir_path_outputs, f4_file_path, num_threads, num_rows_per_write)
@@ -87,11 +91,33 @@ def convert_delimited_file(delimited_file_path, f4_file_path, index_columns=[], 
 
     print_message(f"Done converting {delimited_file_path} to {f4_file_path}", verbose)
 
+def build_indexes(f4_file_path, index_columns, tmp_dir_path, verbose=False):
+    if isinstance(index_columns, str):
+        build_one_column_index(f4_file_path, index_columns, tmp_dir_path, verbose)
+    elif isinstance(index_columns, list):
+        for index_column in index_columns:
+            if isinstance(index_column, list):
+                if len(index_column) != 2:
+                    raise Exception("If you pass a list as an index_column, it must have exactly two elements.")
+
+                build_two_column_index(f4_file_path, index_column[0], index_column[1], tmp_dir_path, verbose)
+            else:
+                if not isinstance(index_column, str):
+                    raise Exception("When specifying an index column name, it must be a string.")
+
+                build_one_column_index(f4_file_path, index_column, tmp_dir_path, verbose, do_nothing)
+    else:
+        raise Exception("When specifying index_columns, it must either be a string or a list.")
+
+# This function is specifically for the EndsWithFilter.
+def build_endswith_index(f4_file_path, index_column, tmp_dir_path, verbose=False):
+    build_one_column_index(f4_file_path, index_column, tmp_dir_path, verbose, reverse_string)
+
 #####################################################
-# Non-public functions
+# Non-public function(s)
 #####################################################
 
-def _write_meta_files(tmp_dir_path_outputs, column_sizes, line_lengths_dict, column_names=None, column_types=None, compression_type=None, column_compression_dicts=None, num_rows=None):
+def write_meta_files(tmp_dir_path_outputs, column_sizes, line_lengths_dict, column_names=None, column_types=None, compression_type=None, column_compression_dicts=None, num_rows=None):
     # Calculate and write the column coordinates and max length of these coordinates.
     column_start_coords = get_column_start_coords(column_sizes)
     column_coords_string, max_column_coord_length = build_string_map(column_start_coords)
@@ -107,12 +133,6 @@ def _write_meta_files(tmp_dir_path_outputs, column_sizes, line_lengths_dict, col
             line_start_positions.append(line_start_positions[-1] + line_lengths_dict[i])
 
         write_str_to_file(f"{tmp_dir_path_outputs}ll", serialize(line_start_positions))
-        # print(f"{tmp_dir_path_outputs}ll")
-        # for i in range(3):
-        #      print(cumulative_line_lengths[i])
-        # print(len(line_start_positions))
-        # import sys
-        # sys.exit()
     else:
         # All lines have the same length, so we just use the first one.
         write_str_to_file(f"{tmp_dir_path_outputs}ll", str(line_lengths_dict[0]).encode())
@@ -126,8 +146,8 @@ def _write_meta_files(tmp_dir_path_outputs, column_sizes, line_lengths_dict, col
     # Build an index of the column names and write this to a file.
     sorted_column_names = sorted(column_names)
     values_positions = [[x.decode(), column_name_index_dict[x]] for x in sorted_column_names]
-    _customize_index_values_positions(values_positions, ["n"], sort_first_column, do_nothing)
-    _write_index_files(values_positions, None, f"{tmp_dir_path_outputs}cn")
+    customize_index_values_positions(values_positions, ["n"], sort_first_column, do_nothing)
+    write_index_files(values_positions, None, f"{tmp_dir_path_outputs}cn")
 
     if column_types:
         # Build a map of the column types and write this to a file.
@@ -135,11 +155,11 @@ def _write_meta_files(tmp_dir_path_outputs, column_sizes, line_lengths_dict, col
         write_str_to_file(f"{tmp_dir_path_outputs}ct", column_types_string)
         write_str_to_file(f"{tmp_dir_path_outputs}mctl", str(max_col_type_length).encode())
 
-    _write_compression_info(tmp_dir_path_outputs, compression_type, column_compression_dicts, column_index_name_dict)
+    write_compression_info(tmp_dir_path_outputs, compression_type, column_compression_dicts, column_index_name_dict)
 
-def _parse_columns_chunk(delimited_file_path, delimiter, comment_prefix, start_index, end_index, num_rows_per_write, compression_type, verbose):
+def parse_columns_chunk(delimited_file_path, delimiter, comment_prefix, start_index, end_index, num_rows_per_write, compression_type, verbose):
     with get_delimited_file_handle(delimited_file_path) as in_file:
-        _exclude_comments_and_header(in_file, comment_prefix)
+        exclude_comments_and_header(in_file, comment_prefix)
 
         # Initialize the column sizes and types.
         # We will count how many there are of each type.
@@ -159,7 +179,7 @@ def _parse_columns_chunk(delimited_file_path, delimiter, comment_prefix, start_i
             for i in range(start_index, end_index):
                 column_sizes_dict[i] = max([column_sizes_dict[i], len(line_items[i])])
 
-                inferred_type = _infer_type(line_items[i])
+                inferred_type = infer_type(line_items[i])
                 column_types_values_dict[i][inferred_type] += 1
 
             num_rows += 1
@@ -169,7 +189,7 @@ def _parse_columns_chunk(delimited_file_path, delimiter, comment_prefix, start_i
 
     column_types_dict = {}
     for i in range(start_index, end_index):
-        column_types_dict[i] = _infer_type_for_column(column_types_values_dict[i])
+        column_types_dict[i] = infer_type_for_column(column_types_values_dict[i])
 
     column_compression_dicts = {}
 
@@ -190,7 +210,7 @@ def _parse_columns_chunk(delimited_file_path, delimiter, comment_prefix, start_i
         column_bigrams_dict = {i: set() for i in range(start_index, end_index)}
 
         with get_delimited_file_handle(delimited_file_path) as in_file:
-            _exclude_comments_and_header(in_file, comment_prefix)
+            exclude_comments_and_header(in_file, comment_prefix)
 
             for line in in_file:
                 line_items = line.rstrip(b"\n").split(delimiter)
@@ -199,7 +219,7 @@ def _parse_columns_chunk(delimited_file_path, delimiter, comment_prefix, start_i
                     value = line_items[i]
                     column_max_length_dict[i] = max(column_max_length_dict[i], len(value))
 
-                    for bigram in _find_unique_bigrams(value):
+                    for bigram in find_unique_bigrams(value):
                         column_bigrams_dict[i].add(bigram)
 
                     if column_compression_dicts[i]["compression_type"] == b"c":
@@ -214,7 +234,7 @@ def _parse_columns_chunk(delimited_file_path, delimiter, comment_prefix, start_i
                 unique_values = sorted(column_unique_dict[i])
                 num_bytes = get_bigram_size(len(unique_values))
 
-                for j, value in _enumerate_for_compression(unique_values):
+                for j, value in enumerate_for_compression(unique_values):
                     #column_compression_dicts[i]["map"][value] = int2ba(j, length = length).to01()
                     column_compression_dicts[i]["map"][value] = j.to_bytes(length = num_bytes, byteorder = "big")
 
@@ -223,7 +243,7 @@ def _parse_columns_chunk(delimited_file_path, delimiter, comment_prefix, start_i
                 bigrams = sorted(column_bigrams_dict[i])
                 num_bytes = get_bigram_size(len(bigrams))
 
-                for j, bigram in _enumerate_for_compression(bigrams):
+                for j, bigram in enumerate_for_compression(bigrams):
                     #column_compression_dicts[i]["map"][bigram] = int2ba(j, length = length).to01()
                     column_compression_dicts[i]["map"][bigram] = j.to_bytes(length = num_bytes, byteorder = "big")
 
@@ -235,24 +255,22 @@ def _parse_columns_chunk(delimited_file_path, delimiter, comment_prefix, start_i
 
     return column_sizes_dict, column_types_dict, column_compression_dicts, num_rows
 
-def _get_line_lengths_dict(delimited_file_path, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes, compression_dicts, num_rows, num_threads, num_rows_per_write, verbose):
+def get_line_lengths_dict(delimited_file_path, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes, compression_dicts, num_rows, num_threads, num_rows_per_write, verbose):
     if num_threads == 1:
-        line_lengths_dict = _write_rows_chunk(delimited_file_path, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes, compression_dicts, 0, 0, num_rows, num_rows_per_write, verbose)
+        line_lengths_dict = write_rows_chunk(delimited_file_path, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes, compression_dicts, 0, 0, num_rows, num_rows_per_write, verbose)
     else:
-        row_chunk_indices = _generate_chunk_ranges(num_rows, math.ceil(num_rows / num_threads) + 1)
+        row_chunk_indices = generate_chunk_ranges(num_rows, math.ceil(num_rows / num_threads) + 1)
 
         # Find the line length.
-        line_lengths_dicts = Parallel(n_jobs=num_threads)(delayed(_write_rows_chunk)(delimited_file_path, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes, compression_dicts, i, row_chunk[0], row_chunk[1], num_rows_per_write, verbose) for i, row_chunk in enumerate(row_chunk_indices))
+        line_lengths_dicts = Parallel(n_jobs=num_threads)(delayed(write_rows_chunk)(delimited_file_path, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes, compression_dicts, i, row_chunk[0], row_chunk[1], num_rows_per_write, verbose) for i, row_chunk in enumerate(row_chunk_indices))
 
         line_lengths_dict = {}
         for x in line_lengths_dicts:
             line_lengths_dict = {**line_lengths_dict, **x}
 
-        # line_length = max(max_line_sizes)
-#    return line_length
     return line_lengths_dict
 
-def _write_rows_chunk(delimited_file_path, tmp_dir_path, delimiter, comment_prefix, compression_type, column_sizes, compression_dicts, chunk_number, start_index, end_index, num_rows_per_write, verbose):
+def write_rows_chunk(delimited_file_path, tmp_dir_path, delimiter, comment_prefix, compression_type, column_sizes, compression_dicts, chunk_number, start_index, end_index, num_rows_per_write, verbose):
     #max_line_size = 0
     line_lengths_dict = {}
 
@@ -261,7 +279,7 @@ def _write_rows_chunk(delimited_file_path, tmp_dir_path, delimiter, comment_pref
 
     # Write the data to output file. Ignore the header line.
     with get_delimited_file_handle(delimited_file_path) as in_file:
-        _exclude_comments_and_header(in_file, comment_prefix)
+        exclude_comments_and_header(in_file, comment_prefix)
 
         with open(f"{tmp_dir_path}{chunk_number}", 'wb') as chunk_file:
             out_lines = []
@@ -325,7 +343,7 @@ def _write_rows_chunk(delimited_file_path, tmp_dir_path, delimiter, comment_pref
     #return max_line_size
     return line_lengths_dict
 
-def _exclude_comments_and_header(in_file, comment_prefix):
+def exclude_comments_and_header(in_file, comment_prefix):
     # Ignore the header because we don't need column names here. Also ignore commented lines.
     if comment_prefix:
         for line in in_file:
@@ -334,7 +352,7 @@ def _exclude_comments_and_header(in_file, comment_prefix):
     else:
         in_file.readline()
 
-def _write_compression_info(tmp_dir_path_outputs, compression_type, column_compression_dicts, column_index_name_dict):
+def write_compression_info(tmp_dir_path_outputs, compression_type, column_compression_dicts, column_index_name_dict):
     if not compression_type:
         return
 
@@ -357,7 +375,7 @@ def _write_compression_info(tmp_dir_path_outputs, compression_type, column_compr
         else:
             cmpr_file.write(b"z")
 
-def _generate_chunk_ranges(num_cols, num_cols_per_chunk):
+def generate_chunk_ranges(num_cols, num_cols_per_chunk):
     if num_cols_per_chunk:
         last_end_index = 0
 
@@ -368,14 +386,14 @@ def _generate_chunk_ranges(num_cols, num_cols_per_chunk):
     else:
         yield [0, num_cols]
 
-def _infer_type(value):
+def infer_type(value):
     if fastnumbers.isint(value):
         return b"i"
     if fastnumbers.isfloat(value):
         return b"f"
     return b"s"
 
-def _infer_type_for_column(types_dict):
+def infer_type_for_column(types_dict):
     if len(types_dict) == 0:
         return None
 
@@ -386,18 +404,7 @@ def _infer_type_for_column(types_dict):
 
     return b"i"
 
-# def _infer_type_for_column(types_dict):
-#     if len(types_dict) == 0:
-#         return None
-#
-#     if len(types_dict[b"s"]) > 0:
-#         return b"s"
-#     elif len(types_dict[b"f"]) > 0:
-#         return b"f"
-#
-#     return b"i"
-
-def _find_unique_bigrams(value):
+def find_unique_bigrams(value):
     grams = set()
 
     for start_i in range(0, len(value), 2):
@@ -407,7 +414,7 @@ def _find_unique_bigrams(value):
     return grams
 
 # We skip the space character because it causes a problem when we parse from a file.
-def _enumerate_for_compression(values):
+def enumerate_for_compression(values):
     ints = []
     capacity = len(values)
     length = get_bigram_size(capacity)
@@ -422,29 +429,7 @@ def _enumerate_for_compression(values):
     for i in ints:
         yield i, values.pop(0)
 
-def build_indexes(f4_file_path, index_columns, tmp_dir_path, verbose=False):
-    if isinstance(index_columns, str):
-        _build_one_column_index(f4_file_path, index_columns, tmp_dir_path, verbose)
-    elif isinstance(index_columns, list):
-        for index_column in index_columns:
-            if isinstance(index_column, list):
-                if len(index_column) != 2:
-                    raise Exception("If you pass a list as an index_column, it must have exactly two elements.")
-
-                _build_two_column_index(f4_file_path, index_column[0], index_column[1], tmp_dir_path, verbose)
-            else:
-                if not isinstance(index_column, str):
-                    raise Exception("When specifying an index column name, it must be a string.")
-
-                _build_one_column_index(f4_file_path, index_column, tmp_dir_path, verbose, do_nothing)
-    else:
-        raise Exception("When specifying index_columns, it must either be a string or a list.")
-
-# This function is specifically for the EndsWithFilter.
-def build_endswith_index(f4_file_path, index_column, tmp_dir_path, verbose=False):
-    _build_one_column_index(f4_file_path, index_column, tmp_dir_path, verbose, reverse_string)
-
-def _build_one_column_index(f4_file_path, index_column, tmp_dir_path, verbose, custom_index_function):
+def build_one_column_index(f4_file_path, index_column, tmp_dir_path, verbose, custom_index_function):
     tmp_dir_path = fix_dir_path_ending(tmp_dir_path)
     tmp_dir_path_data = f"{tmp_dir_path}data/"
     tmp_dir_path_other = f"{tmp_dir_path}other/"
@@ -455,27 +440,24 @@ def _build_one_column_index(f4_file_path, index_column, tmp_dir_path, verbose, c
     print_message(f"Saving index for {index_column}.", verbose)
     index_column_encoded = index_column.encode()
 
-    #with Parser(f4_file_path) as parser:
     print_message(f"Getting column meta information for {index_column} index for {f4_file_path}.", verbose)
     file_data = initialize(f4_file_path)
     select_columns, column_type_dict, column_coords_dict, bigram_size_dict = get_column_meta(file_data, set([index_column_encoded]), [])
 
-    #line_length = file_data.stat_dict["ll"]
     index_column_type = column_type_dict[index_column_encoded]
     coords = column_coords_dict[index_column_encoded]
     values_positions = []
 
-    #decompressor = get_decompressor(decompression_type, decompressor)
     parse_function = get_parse_row_value_function(file_data)
 
     print_message(f"Parsing values and positions for {index_column} index for {f4_file_path}.", verbose)
     for row_index in range(file_data.stat_dict["num_rows"]):
-        value = parse_function(file_data, row_index, coords, file_data.stat_dict["ll"], bigram_size_dict=bigram_size_dict, column_name=index_column_encoded)
+        value = parse_function(file_data, row_index, coords, bigram_size_dict=bigram_size_dict, column_name=index_column_encoded)
         values_positions.append([value, row_index])
 
     print_message(f"Building index file for {index_column} index for {f4_file_path}.", verbose)
-    _customize_index_values_positions(values_positions, [index_column_type], sort_first_column, custom_index_function)
-    _write_index_files(values_positions, tmp_dir_path_data, tmp_dir_path_other)
+    customize_index_values_positions(values_positions, [index_column_type], sort_first_column, custom_index_function)
+    write_index_files(values_positions, tmp_dir_path_data, tmp_dir_path_other)
 
     index_file_path = get_index_file_path(f4_file_path, index_column, custom_index_function)
     combine_into_single_file(tmp_dir_path_data, tmp_dir_path_other, index_file_path)
@@ -483,7 +465,7 @@ def _build_one_column_index(f4_file_path, index_column, tmp_dir_path, verbose, c
     print_message(f"Done building index file for {index_column} index for {f4_file_path}.", verbose)
 
 # TODO: Combine this function with the above one and make it generic enough to handle indexes with more columns.
-def _build_two_column_index(f4_file_path, index_column_1, index_column_2, tmp_dir_path, verbose):
+def build_two_column_index(f4_file_path, index_column_1, index_column_2, tmp_dir_path, verbose):
     tmp_dir_path = fix_dir_path_ending(tmp_dir_path)
     tmp_dir_path_data = f"{tmp_dir_path}data/"
     tmp_dir_path_other = f"{tmp_dir_path}other/"
@@ -516,21 +498,21 @@ def _build_two_column_index(f4_file_path, index_column_1, index_column_2, tmp_di
     values_positions = []
     print_message(f"Parsing values and positions for {index_name} index.", verbose)
     for row_index in range(file_data.stat_dict["num_rows"]):
-        value_1 = parse_function(file_data, row_index, coords_1, file_data.stat_dict["ll"], bigram_size_dict=bigram_size_dict, column_name=index_column_1_encoded)
-        value_2 = parse_function(file_data, row_index, coords_2, file_data.stat_dict["ll"], bigram_size_dict=bigram_size_dict, column_name=index_column_2_encoded)
+        value_1 = parse_function(file_data, row_index, coords_1, bigram_size_dict=bigram_size_dict, column_name=index_column_1_encoded)
+        value_2 = parse_function(file_data, row_index, coords_2, bigram_size_dict=bigram_size_dict, column_name=index_column_2_encoded)
 
         values_positions.append([value_1, value_2, row_index])
 
     print_message(f"Building index file for {index_name}.", verbose)
-    _customize_index_values_positions(values_positions, [index_column_1_type, index_column_2_type], sort_first_two_columns, do_nothing)
-    _write_index_files(values_positions, tmp_dir_path_data, tmp_dir_path_other)
+    customize_index_values_positions(values_positions, [index_column_1_type, index_column_2_type], sort_first_two_columns, do_nothing)
+    write_index_files(values_positions, tmp_dir_path_data, tmp_dir_path_other)
 
     index_file_path = get_index_file_path(f4_file_path, index_name)
     combine_into_single_file(tmp_dir_path_data, tmp_dir_path_other, index_file_path)
 
     print_message(f"Done building two-column index file for {index_name}.", verbose)
 
-def _customize_index_values_positions(values_positions, column_types, sort_function, custom_index_function):
+def customize_index_values_positions(values_positions, column_types, sort_function, custom_index_function):
     # Iterate through each "column" except the last one (which has row_indices) and convert the data.
     for i in range(len(column_types)):
         conversion_function = get_conversion_function(column_types[i])
@@ -543,7 +525,7 @@ def _customize_index_values_positions(values_positions, column_types, sort_funct
     # Sort the rows.
     sort_function(values_positions)
 
-def _write_index_files(values_positions, tmp_dir_path_data, tmp_dir_path_prefix_other):
+def write_index_files(values_positions, tmp_dir_path_data, tmp_dir_path_prefix_other):
     column_dict = {}
     for i in range(len(values_positions[0])):
         column_dict[i] = [x[i] if isinstance(x[i], bytes) else str(x[i]).encode() for x in values_positions]

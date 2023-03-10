@@ -548,7 +548,7 @@ def run_small_tests(in_file_path, f4_file_path, out_file_path, num_threads = 1, 
     for file_path in glob.glob(f"{f4_file_path}*"):
         os.unlink(file_path)
 
-def run_larger_tests(num_threads, size, discrete1_index, numeric1_index, rebuild, num_cols_per_chunk, compression_type):
+def run_larger_tests(num_threads, size, discrete1_index, numeric1_index, rebuild, num_cols_per_chunk, compression_type, verbose=False):
     in_file_path = f"data/{size}.tsv"
     f4_file_path = f"data/{size}.f4"
     out_file_path = "/tmp/f4_out.tsv"
@@ -584,8 +584,7 @@ def run_larger_tests(num_threads, size, discrete1_index, numeric1_index, rebuild
             os.unlink(file_path)
 
     if not os.path.exists(f4_file_path):
-        f4.convert_delimited_file(in_file_path, f4_file_path, compression_type=compression_type, num_threads=num_threads, num_cols_per_chunk=num_cols_per_chunk)
-        #f4.convert_delimited_file(in_file_path, f4_file_path, compression_type=None, num_threads=num_threads, num_cols_per_chunk=num_cols_per_chunk, verbose=True)
+        f4.convert_delimited_file(in_file_path, f4_file_path, compression_type=compression_type, num_threads=num_threads, num_cols_per_chunk=num_cols_per_chunk, verbose=verbose)
 
     print("-------------------------------------------------------------------")
     print(f"Running all tests for {in_file_path} - no indexing (cmpr: {compression_type})")
@@ -741,9 +740,11 @@ for compression_type in [None, "zstd"]:
     run_larger_tests(num_threads=2, size="medium", discrete1_index=11, numeric1_index=21, rebuild=True, num_cols_per_chunk=10, compression_type=compression_type)
 
     # Large tests
-    run_larger_tests(num_threads=8, size="large_tall", discrete1_index=251, numeric1_index=501, rebuild=True, num_cols_per_chunk=76, compression_type=compression_type)
-#    run_larger_tests(num_threads=8, size="large_tall", discrete1_index=251, numeric1_index=501, rebuild=False, num_cols_per_chunk=76, compression_type=compression_type)
-    run_larger_tests(num_threads=8, size="large_wide", discrete1_index=25001, numeric1_index=50001, rebuild=True, num_cols_per_chunk=3200, compression_type=compression_type)
-    ##run_larger_tests(num_threads=8, size="large_wide", discrete1_index=25001, numeric1_index=50001, rebuild=False, num_cols_per_chunk=3200, compression_type=compression_type)
+    #verbose = True
+    verbose = False
+#    run_larger_tests(num_threads=8, size="large_tall", discrete1_index=251, numeric1_index=501, rebuild=True, num_cols_per_chunk=76, compression_type=compression_type, verbose=verbose)
+    run_larger_tests(num_threads=8, size="large_tall", discrete1_index=251, numeric1_index=501, rebuild=False, num_cols_per_chunk=76, compression_type=compression_type, verbose=verbose)
+#    run_larger_tests(num_threads=8, size="large_wide", discrete1_index=250001, numeric1_index=500001, rebuild=True, num_cols_per_chunk=32000, compression_type=compression_type, verbose=verbose)
+    run_larger_tests(num_threads=8, size="large_wide", discrete1_index=250001, numeric1_index=500001, rebuild=False, num_cols_per_chunk=32000, compression_type=compression_type, verbose=verbose)
 
 print("All tests passed!!")
