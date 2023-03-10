@@ -25,7 +25,6 @@ dockerCommand="docker run -i -t --rm --platform linux/x86_64 --user $(id -u):$(i
 #$dockerCommand bash -c "time python3 build_tsv.py 250 250 500 1000000 data/large_tall.tsv"
 #$dockerCommand bash -c "time python3 build_tsv.py 250000 250000 500000 1000 data/large_wide.tsv"
 
-#TODO: Use underscores consistently or don't use them at all. Not necessary because __init__.py hides most functions.
 #TODO: Reduce the imports to just use the specific functions we need?
 #TODO: By default, num_cols_per_chunk is the number of columns divided by the number of threads + 1?
 #TODO: By default, num_rows_per_write is the number of rows divided by the number of threads + 1?
