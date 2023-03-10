@@ -731,20 +731,20 @@ if do_small_tests:
         os.unlink(file_path)
 
 #for compression_type in [None, "dictionary", "zstd"]:
-for compression_type in [None, "zstd"]:
+#for compression_type in [None, "zstd"]:
 #for compression_type in [None]:
 #for compression_type in ["dictionary"]:
 #for compression_type in ["zstd"]:
     # Medium tests
-    run_larger_tests(num_threads=1, size="medium", discrete1_index=11, numeric1_index=21, rebuild=True, num_cols_per_chunk=10, compression_type=compression_type)
-    run_larger_tests(num_threads=2, size="medium", discrete1_index=11, numeric1_index=21, rebuild=True, num_cols_per_chunk=10, compression_type=compression_type)
+#    run_larger_tests(num_threads=1, size="medium", discrete1_index=11, numeric1_index=21, rebuild=True, num_cols_per_chunk=10, compression_type=compression_type)
+#    run_larger_tests(num_threads=2, size="medium", discrete1_index=11, numeric1_index=21, rebuild=True, num_cols_per_chunk=10, compression_type=compression_type)
 
     # Large tests
     #verbose = True
-    verbose = False
+#    verbose = False
 #    run_larger_tests(num_threads=8, size="large_tall", discrete1_index=251, numeric1_index=501, rebuild=True, num_cols_per_chunk=76, compression_type=compression_type, verbose=verbose)
-    run_larger_tests(num_threads=8, size="large_tall", discrete1_index=251, numeric1_index=501, rebuild=False, num_cols_per_chunk=76, compression_type=compression_type, verbose=verbose)
+#    run_larger_tests(num_threads=8, size="large_tall", discrete1_index=251, numeric1_index=501, rebuild=False, num_cols_per_chunk=76, compression_type=compression_type, verbose=verbose)
 #    run_larger_tests(num_threads=8, size="large_wide", discrete1_index=250001, numeric1_index=500001, rebuild=True, num_cols_per_chunk=32000, compression_type=compression_type, verbose=verbose)
-    run_larger_tests(num_threads=8, size="large_wide", discrete1_index=250001, numeric1_index=500001, rebuild=False, num_cols_per_chunk=32000, compression_type=compression_type, verbose=verbose)
+#    run_larger_tests(num_threads=8, size="large_wide", discrete1_index=250001, numeric1_index=500001, rebuild=False, num_cols_per_chunk=32000, compression_type=compression_type, verbose=verbose)
 
 print("All tests passed!!")

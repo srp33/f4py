@@ -259,7 +259,7 @@ def get_line_lengths_dict(delimited_file_path, tmp_dir_path_chunks, delimiter, c
     if num_threads == 1:
         line_lengths_dict = write_rows_chunk(delimited_file_path, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes, compression_dicts, 0, 0, num_rows, num_rows_per_write, verbose)
     else:
-        row_chunk_indices = generate_chunk_ranges(num_rows, math.ceil(num_rows / num_threads) + 1)
+        row_chunk_indices = generate_chunk_ranges(num_rows, ceil(num_rows / num_threads) + 1)
 
         # Find the line length.
         line_lengths_dicts = Parallel(n_jobs=num_threads)(delayed(write_rows_chunk)(delimited_file_path, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes, compression_dicts, i, row_chunk[0], row_chunk[1], num_rows_per_write, verbose) for i, row_chunk in enumerate(row_chunk_indices))
@@ -275,7 +275,7 @@ def write_rows_chunk(delimited_file_path, tmp_dir_path, delimiter, comment_prefi
     line_lengths_dict = {}
 
     if compression_type == "zstd":
-        compressor = zstandard.ZstdCompressor(level = 1)
+        compressor = ZstdCompressor(level = 1)
 
     # Write the data to output file. Ignore the header line.
     with get_delimited_file_handle(delimited_file_path) as in_file:
@@ -323,7 +323,7 @@ def write_rows_chunk(delimited_file_path, tmp_dir_path, delimiter, comment_prefi
                     # if testing:
                     #     print("build test after")
                     #     print(out_line)
-                    #     decompressor = zstandard.ZstdDecompressor()
+                    #     decompressor = ZstdDecompressor()
                     #     print(decompressor.decompress(out_line))
 
                 #line_size = len(out_line)
@@ -387,9 +387,9 @@ def generate_chunk_ranges(num_cols, num_cols_per_chunk):
         yield [0, num_cols]
 
 def infer_type(value):
-    if fastnumbers.isint(value):
+    if isint(value):
         return b"i"
-    if fastnumbers.isfloat(value):
+    if isfloat(value):
         return b"f"
     return b"s"
 
@@ -433,8 +433,8 @@ def build_one_column_index(f4_file_path, index_column, tmp_dir_path, verbose, cu
     tmp_dir_path = fix_dir_path_ending(tmp_dir_path)
     tmp_dir_path_data = f"{tmp_dir_path}data/"
     tmp_dir_path_other = f"{tmp_dir_path}other/"
-    os.makedirs(tmp_dir_path_data, exist_ok=True)
-    os.makedirs(tmp_dir_path_other, exist_ok=True)
+    makedirs(tmp_dir_path_data, exist_ok=True)
+    makedirs(tmp_dir_path_other, exist_ok=True)
 
     # TODO: Add logic to verify that index_column is valid. But where?
     print_message(f"Saving index for {index_column}.", verbose)
@@ -469,8 +469,8 @@ def build_two_column_index(f4_file_path, index_column_1, index_column_2, tmp_dir
     tmp_dir_path = fix_dir_path_ending(tmp_dir_path)
     tmp_dir_path_data = f"{tmp_dir_path}data/"
     tmp_dir_path_other = f"{tmp_dir_path}other/"
-    os.makedirs(tmp_dir_path_data, exist_ok=True)
-    os.makedirs(tmp_dir_path_other, exist_ok=True)
+    makedirs(tmp_dir_path_data, exist_ok=True)
+    makedirs(tmp_dir_path_other, exist_ok=True)
 
     if not isinstance(index_column_1, str) or not isinstance(index_column_2, str):
         raise Exception("When specifying an index column name, it must be a string.")

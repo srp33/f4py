@@ -100,7 +100,7 @@ class FloatFilter(__OperatorFilter):
             raise Exception(f"A float filter may only be used with float columns, but {self.column_name.decode()} is not a float.")
 
     def _get_conversion_function(self):
-        return fastnumbers.fast_float
+        return fast_float
 
 class IntFilter(__OperatorFilter):
     def __init__(self, column_name, oper, value):
@@ -112,7 +112,7 @@ class IntFilter(__OperatorFilter):
             raise Exception(f"An integer filter may only be used with integer columns, but {self.column_name.decode()} is not an integer.")
 
     def _get_conversion_function(self):
-        return fastnumbers.fast_int
+        return fast_int
 
 class StartsWithFilter(__SimpleBaseFilter):
     def __init__(self, column_name, value):
@@ -138,7 +138,7 @@ class EndsWithFilter(StartsWithFilter):
         custom_index_function = reverse_string
         custom_index_file_path = get_index_file_path(data_file_path, self.column_name.decode(), custom_index_function)
 
-        if os.path.exists(custom_index_file_path):
+        if path.exists(custom_index_file_path):
             custom_fltr = StartsWithFilter(self.column_name.decode(), custom_index_function(self.value).decode())
 
             # TODO: Pass this into the function rather than re-initializing.
@@ -162,7 +162,7 @@ class LikeFilter(__SimpleBaseFilter):
         super().__init__(column_name, regular_expression)
 
         self._check_argument(regular_expression, "regular_expression", str)
-        self.value = re.compile(self.value)
+        self.value = compile(self.value)
 
     def _filter_indexed_column_values(self, data_file_path, end_index, num_threads):
         index_file_path = get_index_file_path(data_file_path, self.column_name.decode())
@@ -256,12 +256,12 @@ class AndFilter(__CompositeFilter):
 
     def _filter_indexed_column_values(self, data_file_path, end_index, num_threads):
         # Currently, this combination of two-column filters is supported. Add more later.
-        if isinstance(self.filter1, StringFilter) and self.filter1.oper == operator.eq:
+        if isinstance(self.filter1, StringFilter) and self.filter1.oper == eq:
             if isinstance(self.filter2, IntRangeFilter):
                 two_column_index_name = get_two_column_index_name(self.filter1, self.filter2.filter1)
                 two_column_index_file_path = get_index_file_path(data_file_path, two_column_index_name)
 
-                if os.path.exists(two_column_index_file_path):
+                if path.exists(two_column_index_file_path):
                     # TODO: Pass this into the function rather than re-initializing.
                     #      Probably move this entire function out of here.
                     file_data = initialize(two_column_index_file_path)
@@ -339,28 +339,28 @@ class __RangeFilter(__CompositeFilter):
 
 class FloatRangeFilter(__RangeFilter):
     def __init__(self, column_name, lower_bound_value, upper_bound_value):
-        filter1 = FloatFilter(column_name, operator.ge, lower_bound_value)
-        filter2 = FloatFilter(column_name, operator.le, upper_bound_value)
+        filter1 = FloatFilter(column_name, ge, lower_bound_value)
+        filter2 = FloatFilter(column_name, le, upper_bound_value)
 
         super().__init__(filter1, filter2)
 
     def _get_conversion_function(self):
-        return fastnumbers.fast_float
+        return fast_float
 
 class IntRangeFilter(__RangeFilter):
     def __init__(self, column_name, lower_bound_value, upper_bound_value):
-        filter1 = IntFilter(column_name, operator.ge, lower_bound_value)
-        filter2 = IntFilter(column_name, operator.le, upper_bound_value)
+        filter1 = IntFilter(column_name, ge, lower_bound_value)
+        filter2 = IntFilter(column_name, le, upper_bound_value)
 
         super().__init__(filter1, filter2)
 
     def _get_conversion_function(self):
-        return fastnumbers.fast_int
+        return fast_int
 
 class StringRangeFilter(__RangeFilter):
     def __init__(self, column_name, lower_bound_value, upper_bound_value):
-        filter1 = StringFilter(column_name, operator.ge, lower_bound_value)
-        filter2 = StringFilter(column_name, operator.le, upper_bound_value)
+        filter1 = StringFilter(column_name, ge, lower_bound_value)
+        filter2 = StringFilter(column_name, le, upper_bound_value)
 
         super().__init__(filter1, filter2)
 
@@ -418,7 +418,7 @@ def query(data_file_path, fltr=NoFilter(), select_columns=[], out_file_path=None
 
         fltr._check_types(column_type_dict)
 
-        has_index = len(glob.glob(data_file_path + ".idx_*")) > 0
+        has_index = len(glob(data_file_path + ".idx_*")) > 0
 
         if has_index:
 #TODO: Remove this stuff if we don't need it after testing on huge files.
@@ -518,14 +518,14 @@ def initialize(data_file_path):
     file_handle = open_read_file(data_file_path)
 
     file_map_length_string = file_handle.readline()
-    file_map_length = fastnumbers.fast_int(file_map_length_string.rstrip(b"\n"))
+    file_map_length = fast_int(file_map_length_string.rstrip(b"\n"))
     file_map_dict = deserialize(file_handle[len(file_map_length_string):(len(file_map_length_string) + file_map_length)])
 
     stat_dict = {}
     for file_name, abbreviation in FILE_KEY_ABBREVIATIONS_STATS.items():
         if abbreviation in file_map_dict:
             coordinates = file_map_dict[abbreviation]
-            stat_dict[file_name] = fastnumbers.fast_int(file_handle[coordinates[0]:coordinates[1]])
+            stat_dict[file_name] = fast_int(file_handle[coordinates[0]:coordinates[1]])
 
     other_dict = {}
     for file_name, abbreviation in FILE_KEY_ABBREVIATIONS_OTHER.items():
@@ -551,7 +551,7 @@ def initialize(data_file_path):
         if decompression_text == b"z":
             decompression_type = "zstd"
             # For now, this will be a dictionary with the length of each line
-            decompressor = zstandard.ZstdDecompressor()
+            decompressor = ZstdDecompressor()
             stat_dict["ll"] = deserialize(other_dict["ll"])
             stat_dict["num_rows"] = len(stat_dict["ll"]) - 1
         else:
@@ -559,13 +559,13 @@ def initialize(data_file_path):
             decompressor = deserialize(decompression_text)
 
     if stat_dict["num_rows"] < 0:
-        stat_dict["ll"] = fastnumbers.fast_int(other_dict["ll"])
+        stat_dict["ll"] = fast_int(other_dict["ll"])
 
         data_size = file_map_dict2["data"][1] - file_map_dict2["data"][0]
-        stat_dict["num_rows"] = fastnumbers.fast_int(data_size / stat_dict["ll"])
+        stat_dict["num_rows"] = fast_int(data_size / stat_dict["ll"])
 
     cc_size = file_map_dict2["cc"][1] - file_map_dict2["cc"][0]
-    stat_dict["num_cols"] = fastnumbers.fast_int(cc_size / stat_dict["mccl"]) - 1
+    stat_dict["num_cols"] = fast_int(cc_size / stat_dict["mccl"]) - 1
 
     return FileData(file_handle, file_map_dict2, stat_dict, decompression_type, decompressor)
 
@@ -592,7 +592,7 @@ def get_column_meta(file_data, filter_column_set, select_columns):
         for row_index in range(num_cols):
             values = parse_row_values(file_data, row_index, coords, data_prefix="cn")
             column_name = values[0]
-            column_index = fastnumbers.fast_int(values[1])
+            column_index = fast_int(values[1])
 
             column_index_name_dict[column_index] = column_name
 
@@ -633,7 +633,7 @@ def get_column_meta(file_data, filter_column_set, select_columns):
     return select_columns, column_type_dict, column_coords_dict, bigram_size_dict
 
 def generate_row_chunks(num_rows, num_threads):
-    rows_per_chunk = math.ceil(num_rows / num_threads)
+    rows_per_chunk = ceil(num_rows / num_threads)
 
     row_indices = set()
 
@@ -663,7 +663,7 @@ def parse_data_coords(file_data, indices, data_prefix=""):
             data_start_pos = out_dict[index]
         # If not, retrieve the start position from the cc file and then cache it.
         else:
-            data_start_pos = fastnumbers.fast_int(parse_data_value_from_file(file_data, 0, 0, [start_pos, next_start_pos], data_prefix, file_key).rstrip(b" "))
+            data_start_pos = fast_int(parse_data_value_from_file(file_data, 0, 0, [start_pos, next_start_pos], data_prefix, file_key).rstrip(b" "))
             out_dict[index] = data_start_pos
 
         # See if we already have cached the end position.
@@ -671,7 +671,7 @@ def parse_data_coords(file_data, indices, data_prefix=""):
             data_end_pos = out_dict[index + 1]
         # If not, retrieve the end position from the cc file and then cache it.
         else:
-            data_end_pos = fastnumbers.fast_int(parse_data_value_from_file(file_data, 0, 0, [next_start_pos, further_next_start_pos], data_prefix, file_key).rstrip(b" "))
+            data_end_pos = fast_int(parse_data_value_from_file(file_data, 0, 0, [next_start_pos, further_next_start_pos], data_prefix, file_key).rstrip(b" "))
             out_dict[index + 1] = data_end_pos
 
         data_coords.append([data_start_pos, data_end_pos])
@@ -750,7 +750,7 @@ def parse_dictionary_compressed_row_values(file_data, row_index, column_coords, 
 #     with open(file_path, "rb") as cmpr_file:
 #         for line in cmpr_file:
 #             line_items = line.rstrip(b"\n").split(b"\t")
-#             column_index = fastnumbers.fast_int(line_items[0])
+#             column_index = fast_int(line_items[0])
 
 #             if column_index in column_index_name_dict:
 #                 column_name = column_index_name_dict[column_index]
@@ -762,7 +762,7 @@ def parse_dictionary_compressed_row_values(file_data, row_index, column_coords, 
 
 #     # with Parser(file_path, fixed_file_extensions=[".data", ".cc"], stats_file_extensions=[".ll", ".mccl"]) as parser:
 #     #     coords = parser._parse_data_coords([0, 1, 2])
-#     #     num_rows = fastnumbers.fast_int((len(parser.get_file_handle(".data")) + 1) / parser.get_stat(".ll"))
+#     #     num_rows = fast_int((len(parser.get_file_handle(".data")) + 1) / parser.get_stat(".ll"))
 
 #     #     # Use a set for performance reasons
 #     #     column_indices_set = set(column_index_name_dict.keys())
@@ -770,7 +770,7 @@ def parse_dictionary_compressed_row_values(file_data, row_index, column_coords, 
 #     #     with Parser(f"{self.data_file_path}.cmpr", fixed_file_extensions=[".data", ".cc"], stats_file_extensions=[".ll", ".mccl"]) as parser:
 #     #         for row_index in range(num_rows):
 #     #             values = parser.__parse_row_values(row_index, coords)
-#     #             column_index = fastnumbers.fast_int(values[0])
+#     #             column_index = fast_int(values[0])
 
 #     #             if column_index in column_indices_set:
 #     #                 compressed_value = convert_bytes_to_int(values[2])
@@ -815,7 +815,7 @@ def get_identifier_row_index(file_data, query_value, end_index, data_prefix=""):
     if matching_position == -1:
         return -1
 
-    return fastnumbers.fast_int(parse_row_value(file_data, matching_position, position_coords, data_prefix=data_prefix))
+    return fast_int(parse_row_value(file_data, matching_position, position_coords, data_prefix=data_prefix))
 
 # Searches for a single matching value.
 def binary_identifier_search(file_data, data_prefix, value_coords, value_to_find, l, r):
@@ -840,10 +840,10 @@ def filter_using_operator(file_data, fltr, end_index, num_threads):
 
     coords = parse_data_coords(file_data, [0, 1])
 
-    if fltr.oper == operator.eq:
+    if fltr.oper == eq:
         return find_row_indices_for_range(file_data, coords[0], coords[1], fltr, fltr, end_index, num_threads)
     else:
-        if fltr.oper == operator.ne:
+        if fltr.oper == ne:
             lower_position, upper_position = find_bounds_for_range(file_data, coords[0], fltr, fltr, end_index, num_threads)
 
             lower_positions = (0, lower_position)
@@ -854,13 +854,13 @@ def filter_using_operator(file_data, fltr, end_index, num_threads):
 
             return lower_row_indices | upper_row_indices
         else:
-            if fltr.oper == operator.gt:
-                positions = find_positions_g(file_data, coords[0], fltr, 0, end_index, operator.le)
-            elif fltr.oper == operator.ge:
-                positions = find_positions_g(file_data, coords[0], fltr, 0, end_index, operator.lt)
-            elif fltr.oper == operator.lt:
+            if fltr.oper == gt:
+                positions = find_positions_g(file_data, coords[0], fltr, 0, end_index, le)
+            elif fltr.oper == ge:
+                positions = find_positions_g(file_data, coords[0], fltr, 0, end_index, lt)
+            elif fltr.oper == lt:
                 positions = find_positions_l(file_data, coords[0], fltr, 0, end_index, fltr.oper)
-            elif fltr.oper == operator.le:
+            elif fltr.oper == le:
                 positions = find_positions_l(file_data, coords[0], fltr, 0, end_index, fltr.oper)
 
             return retrieve_matching_row_indices(file_data, coords[1], positions, num_threads)
@@ -960,7 +960,7 @@ def search_with_filter(file_data, value_coords, left_index, right_index, overall
 def find_matching_row_indices(file_data, position_coords, positions):
     matching_row_indices = set()
     for i in range(positions[0], positions[1]):
-        matching_row_indices.add(fastnumbers.fast_int(parse_row_value(file_data, i, position_coords)))
+        matching_row_indices.add(fast_int(parse_row_value(file_data, i, position_coords)))
 
     return matching_row_indices
 
@@ -971,7 +971,7 @@ def retrieve_matching_row_indices(file_data, position_coords, positions, num_thr
     if num_threads == 1 or num_indices < 100:
         return find_matching_row_indices(file_data, position_coords, positions)
     else:
-        chunk_size = math.ceil(num_indices / num_threads)
+        chunk_size = ceil(num_indices / num_threads)
 
         # position_chunks = []
         # for i in range(positions[0], positions[1], chunk_size):
@@ -982,21 +982,21 @@ def retrieve_matching_row_indices(file_data, position_coords, positions, num_thr
         #     for position_chunk in position_chunks))
         # )
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers = num_threads) as executor:
+        with ThreadPoolExecutor(max_workers = num_threads) as executor:
             futures = []
             for i in range(positions[0], positions[1], chunk_size):
                 position_chunk = (i, min(positions[1], i + chunk_size))
                 futures.append(executor.submit(find_matching_row_indices, file_data, position_coords, position_chunk))
 
             matches = set()
-            for future in concurrent.futures.as_completed(futures):
+            for future in as_completed(futures):
                 matches = matches | future.result()
 
         return matches
 
 def find_bounds_for_range(file_data, value_coords, filter1, filter2, end_index, num_threads, start_index=0):
-    lower_positions = find_positions_g(file_data, value_coords, filter1, start_index, end_index, operator.lt)
-    upper_positions = find_positions_l(file_data, value_coords, filter2, lower_positions[0], lower_positions[1], operator.le)
+    lower_positions = find_positions_g(file_data, value_coords, filter1, start_index, end_index, lt)
+    upper_positions = find_positions_l(file_data, value_coords, filter2, lower_positions[0], lower_positions[1], le)
 
     lower_position = max(lower_positions[0], upper_positions[0])
     upper_position = min(lower_positions[1], upper_positions[1])
@@ -1013,14 +1013,14 @@ def get_passing_row_indices(file_data, fltr, coords_value, coords_position, star
 
     for i in range(start_index, end_index):
         if fltr._passes(parse_row_value(file_data, i, coords_value)):
-            passing_row_indices.add(fastnumbers.fast_int(parse_row_value(file_data, i, coords_position)))
+            passing_row_indices.add(fast_int(parse_row_value(file_data, i, coords_position)))
 
     return passing_row_indices
 
 def get_passing_row_indices_with_filter(file_data, fltr, end_index, num_threads):
     coords = parse_data_coords(file_data, [0, 1])
 
-    lower_range = find_positions_g(file_data, coords[0], fltr, 0, end_index, operator.lt)
+    lower_range = find_positions_g(file_data, coords[0], fltr, 0, end_index, lt)
 
     if lower_range[0] == end_index:
         return set()
