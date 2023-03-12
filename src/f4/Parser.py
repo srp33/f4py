@@ -376,7 +376,7 @@ class FileData:
 # Public function(s)
 #####################################################
 
-def query(data_file_path, fltr=NoFilter(), select_columns=[], out_file_path=None, out_file_type="tsv", num_threads=1, lines_per_chunk=10):
+def query(data_file_path, fltr=NoFilter(), select_columns=[], out_file_path=None, out_file_type="tsv", num_threads=1, lines_per_chunk=None):
     """
     Query the data file using zero or more filters.
 
@@ -411,6 +411,9 @@ def query(data_file_path, fltr=NoFilter(), select_columns=[], out_file_path=None
 
     try:
         file_data = initialize(data_file_path)
+
+        if not lines_per_chunk:
+            lines_per_chunk = ceil(file_data.stat_dict["num_rows"] / (num_threads * 4))
 
         # Store column indices and types in dictionaries so we only have to retrieve
         # each once, even if we use the same column in multiple filters.

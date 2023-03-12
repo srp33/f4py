@@ -25,8 +25,6 @@ dockerCommand="docker run -i -t --rm --platform linux/x86_64 --user $(id -u):$(i
 #$dockerCommand bash -c "time python3 build_tsv.py 250 250 500 1000000 data/large_tall.tsv"
 #$dockerCommand bash -c "time python3 build_tsv.py 250000 250000 500000 1000 data/large_wide.tsv"
 
-#TODO: By default, num_cols_per_chunk is the number of columns divided by the number of threads + 1?
-#TODO: By default, num_rows_per_write is the number of rows divided by the number of threads + 1?
 #TODO: Integrate f4 into the analysis paper tests. Check speed and optimize more, if needed.
 #        See if there's a way to speed up Parallel, delayed.
 #TODO: Modify class structure for Filters so inheritance is not used.
