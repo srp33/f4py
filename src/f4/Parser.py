@@ -255,27 +255,27 @@ class AndFilter(__CompositeFilter):
         return self.filter2._filter_column_values(data_file_path, row_indices_1, column_coords_dict, bigram_size_dict)
 
     def _filter_indexed_column_values(self, data_file_path, end_index, num_threads):
-        # Currently, this combination of two-column filters is supported. Add more later.
-        if isinstance(self.filter1, StringFilter) and self.filter1.oper == eq:
-            if isinstance(self.filter2, IntRangeFilter):
-                two_column_index_name = get_two_column_index_name(self.filter1, self.filter2.filter1)
-                two_column_index_file_path = get_index_file_path(data_file_path, two_column_index_name)
+        # Currently, only one combination (StringFilter + IntRangeFilter) of two-column filters is supported.
+        # TODO: Add more combinations and generalize the code.
+        if isinstance(self.filter1, StringFilter) and self.filter1.oper == eq and isinstance(self.filter2, IntRangeFilter):
+            two_column_index_name = get_two_column_index_name(self.filter1, self.filter2.filter1)
+            two_column_index_file_path = get_index_file_path(data_file_path, two_column_index_name)
 
-                if path.exists(two_column_index_file_path):
-                    # TODO: Pass this into the function rather than re-initializing.
-                    #      Probably move this entire function out of here.
-                    file_data = initialize(two_column_index_file_path)
+            if path.exists(two_column_index_file_path):
+                # TODO: Pass this into the function rather than re-initializing.
+                #      Probably move this entire function out of here.
+                file_data = initialize(two_column_index_file_path)
 
-                    coords = parse_data_coords(file_data, [0, 1, 2])
+                coords = parse_data_coords(file_data, [0, 1, 2])
 
-                    # Find range for string column
-                    lower_position, upper_position = find_bounds_for_range(file_data, coords[0], self.filter1, self.filter1, end_index, num_threads)
+                # Find range for string column
+                lower_position, upper_position = find_bounds_for_range(file_data, coords[0], self.filter1, self.filter1, end_index, num_threads)
 
-                    # Find range for int column
-                    lower_position, upper_position = find_bounds_for_range(file_data, coords[1], self.filter2.filter1, self.filter2.filter2, upper_position, num_threads, lower_position)
+                # Find range for int column
+                lower_position, upper_position = find_bounds_for_range(file_data, coords[1], self.filter2.filter1, self.filter2.filter2, upper_position, num_threads, lower_position)
 
-                    # Get row indices for the overlapping range
-                    return retrieve_matching_row_indices(file_data, coords[2], (lower_position, upper_position), num_threads)
+                # Get row indices for the overlapping range
+                return retrieve_matching_row_indices(file_data, coords[2], (lower_position, upper_position), num_threads)
 
         row_indices_1 = self.filter1._filter_indexed_column_values(data_file_path, end_index, num_threads)
         row_indices_2 = self.filter2._filter_indexed_column_values(data_file_path, end_index, num_threads)
@@ -568,6 +568,7 @@ def initialize(data_file_path):
         stat_dict["num_rows"] = fast_int(data_size / stat_dict["ll"])
 
     cc_size = file_map_dict2["cc"][1] - file_map_dict2["cc"][0]
+    print("got here")
     stat_dict["num_cols"] = fast_int(cc_size / stat_dict["mccl"]) - 1
 
     return FileData(file_handle, file_map_dict2, stat_dict, decompression_type, decompressor)
@@ -962,6 +963,7 @@ def search_with_filter(file_data, value_coords, left_index, right_index, overall
 
 def find_matching_row_indices(file_data, position_coords, positions):
     matching_row_indices = set()
+
     for i in range(positions[0], positions[1]):
         matching_row_indices.add(fast_int(parse_row_value(file_data, i, position_coords)))
 
