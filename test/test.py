@@ -679,8 +679,8 @@ def run_float_test(lower_bound, upper_bound, f4_file_path, larger_ID, larger_Num
     check_results(f"Filter FloatWithin = {lower_bound} <> {upper_bound} = {len(matches) - 1} matches", read_file_into_lists(out_file_path), matches)
     os.unlink(out_file_path)
 
-do_small_tests = True
-#do_small_tests = False
+#do_small_tests = True
+do_small_tests = False
 
 if do_small_tests:
     # Basic small tests
@@ -731,20 +731,27 @@ if do_small_tests:
         os.unlink(file_path)
 
 #for compression_type in [None, "dictionary", "zstd"]:
-for compression_type in [None, "zstd"]:
-#for compression_type in [None]:
+#for compression_type in [None, "zstd"]:
+for compression_type in [None]:
 #for compression_type in ["dictionary"]:
 #for compression_type in ["zstd"]:
     # Medium tests
-    run_larger_tests(num_threads=1, size="medium", discrete1_index=11, numeric1_index=21, rebuild=True, compression_type=compression_type)
-    run_larger_tests(num_threads=2, size="medium", discrete1_index=11, numeric1_index=21, rebuild=True, compression_type=compression_type)
+#    run_larger_tests(num_threads=1, size="medium", discrete1_index=11, numeric1_index=21, rebuild=True, compression_type=compression_type)
+#    run_larger_tests(num_threads=2, size="medium", discrete1_index=11, numeric1_index=21, rebuild=True, compression_type=compression_type)
 
     # Large tests
     verbose = True
     #verbose = False
     #run_larger_tests(num_threads=8, size="large_tall", discrete1_index=251, numeric1_index=501, rebuild=True, compression_type=compression_type, verbose=verbose)
-    run_larger_tests(num_threads=8, size="large_tall", discrete1_index=251, numeric1_index=501, rebuild=False, compression_type=compression_type, verbose=verbose)
+#    run_larger_tests(num_threads=8, size="large_tall", discrete1_index=251, numeric1_index=501, rebuild=False, compression_type=compression_type, verbose=verbose)
     #run_larger_tests(num_threads=8, size="large_wide", discrete1_index=250001, numeric1_index=500001, rebuild=True, compression_type=compression_type, verbose=verbose)
-    run_larger_tests(num_threads=8, size="large_wide", discrete1_index=250001, numeric1_index=500001, rebuild=False, compression_type=compression_type, verbose=verbose)
+#    run_larger_tests(num_threads=8, size="large_wide", discrete1_index=250001, numeric1_index=500001, rebuild=False, compression_type=compression_type, verbose=verbose)
+
+    disc_fltr1 = f4.StringFilter("Discrete2", operator.eq, "AM")
+    disc_fltr2 = f4.StringFilter("Discrete2", operator.eq, "NZ")
+    disc_fltr = f4.OrFilter(disc_fltr1, disc_fltr2)
+    num_fltr = f4.FloatFilter("Numeric2", operator.ge, 0.1)
+    fltr = f4.AndFilter(disc_fltr, num_fltr)
+    f4.query("data/100_900_1000000_None.f4", fltr=fltr, out_file_path="data/1")
 
 print("All tests passed!!")

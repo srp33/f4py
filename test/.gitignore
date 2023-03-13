@@ -1,5 +1,5 @@
 nohup*
-data/small.f4*
-data/medium*
-data/large*
+data/large*tsv
+data/medium*tsv
+data/*.f4*
 f4/
