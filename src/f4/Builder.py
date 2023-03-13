@@ -488,7 +488,7 @@ def build_two_column_index(f4_file_path, index_column_1, index_column_2, tmp_dir
     if not isinstance(index_column_1, str) or not isinstance(index_column_2, str):
         raise Exception("When specifying an index column name, it must be a string.")
 
-    print_message(f"Saving index for {index_column_1} and {index_column_2}.", verbose)
+    print_message(f"Saving two-column index for {index_column_1} and {index_column_2}.", verbose)
 
     index_name = "____".join([index_column_1, index_column_2])
     index_column_1_encoded = index_column_1.encode()

@@ -27,6 +27,7 @@ dockerCommand="docker run -i -t --rm --platform linux/x86_64 --user $(id -u):$(i
 
 #TODO: Integrate f4 into the analysis paper tests. Check speed and optimize more, if needed.
 #        See if there's a way to speed up Parallel, delayed.
+#        Modify Parser.py so that it parses multiple chunks of the output file in parallel and then concatenates them.
 #TODO: Modify class structure for Filters so inheritance is not used.
 #TODO: Address remaining TODO items in the code, remove unnecessary commented code.
 #TODO: Try potential speed improvements:
