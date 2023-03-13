@@ -6,7 +6,7 @@ set -o errexit
 # Build the Docker image
 #######################################################
 
-#docker build --platform linux/x86_64 -t srp33/f4_test .
+docker build --platform linux/x86_64 -t srp33/f4_test .
 
 #######################################################
 # Run preparatory steps
@@ -39,8 +39,8 @@ dockerCommand="docker run -i -t --rm --platform linux/x86_64 --user $(id -u):$(i
 # Run tests
 #######################################################
 
-python3 test.py
-#$dockerCommand python3 test.py
+#python3 test.py
+$dockerCommand python3 test.py
 
 #######################################################
 # Clean up
