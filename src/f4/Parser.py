@@ -568,7 +568,6 @@ def initialize(data_file_path):
         stat_dict["num_rows"] = fast_int(data_size / stat_dict["ll"])
 
     cc_size = file_map_dict2["cc"][1] - file_map_dict2["cc"][0]
-    print("got here")
     stat_dict["num_cols"] = fast_int(cc_size / stat_dict["mccl"]) - 1
 
     return FileData(file_handle, file_map_dict2, stat_dict, decompression_type, decompressor)
