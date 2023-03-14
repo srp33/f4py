@@ -27,14 +27,12 @@ dockerCommand="docker run -i -t --rm --platform linux/x86_64 --user $(id -u):$(i
 
 #TODO: Integrate f4 into the analysis paper tests. Check speed and optimize more, if needed.
 #        See if there's a way to speed up Parallel, delayed.
-#        Modify Parser.py so that it parses multiple chunks of the output file in parallel and then concatenates them.
-#        Is there a cleaner way of naming the index files, especially for double indexes?
+#        Modify Parser.py so that it parses multiple chunks of the output file in parallel, saves them to temp files, and then concatenates them.
+#        Try potential other speed improvements:
+#          * Python 3.11
+#          * [Probably not] Try Nuitka? https://nuitka.net (compiles your Python code to C, is supposed to achieve speedups of 3x or greater).
 #TODO: Modify class structure for Filters so inheritance is not used.
 #TODO: Address remaining TODO items in the code, remove unnecessary commented code.
-#TODO: Try potential speed improvements:
-#        - Python 3.11
-#        - [Probably not] Try Nuitka? https://nuitka.net (compiles your Python code to C, is supposed to achieve speedups of 3x or greater).
-#        - [Probably not] Parallelize the process of generating the output file (save to temp file)? This *might* help when doing a lot of decompression.
 #TODO: Run this script from beginning to end as a final check.
 
 #######################################################
