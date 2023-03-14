@@ -5,6 +5,7 @@
 * Filters.py - Can we filter without decompressing by converting self.value in constructor?
     Looks like we can do it for some filter classes (String, StartsWith, EndsWith, Head, Tail), but not others.
       If you don't do it, remove select_compression_dict as a parameter from filter_column_values().
+* Provide tips to users. For example, if they are using EndsWithFilter but haven't created an endswith index, warn them that it will be slower.
 * Compress values in index files using our dictionary compression technique.
 * Use more options for compression type and only store compression dictionary when more than 256 combinations (?).
 * Store individual, serialized compression dictionaries on one line, using .cc file to indicate where each starts and ends.

@@ -747,11 +747,4 @@ for compression_type in [None]:
     #run_larger_tests(num_threads=8, size="large_wide", discrete1_index=250001, numeric1_index=500001, rebuild=True, compression_type=compression_type, verbose=verbose)
 #    run_larger_tests(num_threads=8, size="large_wide", discrete1_index=250001, numeric1_index=500001, rebuild=False, compression_type=compression_type, verbose=verbose)
 
-    disc_fltr1 = f4.StringFilter("Discrete2", operator.eq, "AM")
-    disc_fltr2 = f4.StringFilter("Discrete2", operator.eq, "NZ")
-    disc_fltr = f4.OrFilter(disc_fltr1, disc_fltr2)
-    num_fltr = f4.FloatFilter("Numeric2", operator.ge, 0.1)
-    fltr = f4.AndFilter(disc_fltr, num_fltr)
-    f4.query("data/100_900_1000000_None.f4", fltr=fltr, out_file_path="data/1")
-
 print("All tests passed!!")
