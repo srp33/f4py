@@ -548,31 +548,32 @@ def run_small_tests(in_file_path, f4_file_path, out_file_path, num_threads = 1, 
     for file_path in glob.glob(f"{f4_file_path}*"):
         os.unlink(file_path)
 
-def run_larger_tests(num_threads, size, discrete1_index, numeric1_index, rebuild, compression_type, verbose=False):
+def run_larger_tests(num_threads, size, discrete1_index, numeric1_index, rebuild, compression_type, check_outputs=True, verbose=False):
     in_file_path = f"data/{size}.tsv"
     f4_file_path = f"data/{size}.f4"
     out_file_path = "/tmp/f4_out.tsv"
-
-    print("------------------------------------------------------------------")
-    print(f"Parsing {in_file_path} - cmpr: {compression_type} - for master outputs")
-    print("------------------------------------------------------------------")
 
     larger_ID = []
     larger_Categorical1 = []
     larger_Discrete1 = []
     larger_Numeric1 = []
 
-    with open(in_file_path) as larger_file:
-        for line in larger_file:
-            line_items = line.rstrip("\n").split("\t")
-            larger_ID.append([line_items[0].encode()])
-            larger_Categorical1.append([line_items[1].encode()])
-            larger_Discrete1.append([line_items[discrete1_index].encode()])
+    if check_outputs:
+        print("------------------------------------------------------------------")
+        print(f"Parsing {in_file_path} - cmpr: {compression_type} - for master outputs")
+        print("------------------------------------------------------------------")
 
-            number = line_items[numeric1_index]
-            if number != "Numeric1":
-                number = float(number)
-            larger_Numeric1.append([number])
+        with open(in_file_path) as larger_file:
+            for line in larger_file:
+                line_items = line.rstrip("\n").split("\t")
+                larger_ID.append([line_items[0].encode()])
+                larger_Categorical1.append([line_items[1].encode()])
+                larger_Discrete1.append([line_items[discrete1_index].encode()])
+
+                number = line_items[numeric1_index]
+                if number != "Numeric1":
+                    number = float(number)
+                larger_Numeric1.append([number])
 
     if rebuild:
         print("-------------------------------------------------------------------")
@@ -590,7 +591,7 @@ def run_larger_tests(num_threads, size, discrete1_index, numeric1_index, rebuild
     print(f"Running all tests for {in_file_path} - no indexing (cmpr: {compression_type})")
     print("-------------------------------------------------------------------")
 
-    run_larger_tests2(f4_file_path, out_file_path, larger_ID, larger_Categorical1, larger_Discrete1, larger_Numeric1, num_threads)
+    run_larger_tests2(f4_file_path, out_file_path, larger_ID, larger_Categorical1, larger_Discrete1, larger_Numeric1, num_threads, check_outputs)
 
     print("---------------------------------------------------------------------")
     print(f"Running all tests for {in_file_path} - with indexing (cmpr: {compression_type})")
@@ -600,83 +601,95 @@ def run_larger_tests(num_threads, size, discrete1_index, numeric1_index, rebuild
     shutil.rmtree(index_tmp_dir_path, ignore_errors = True)
     os.makedirs(index_tmp_dir_path)
     f4.build_indexes(f4_file_path, ["ID", "Categorical1", "Discrete1", "Numeric1"], index_tmp_dir_path)
-    run_larger_tests2(f4_file_path, out_file_path, larger_ID, larger_Categorical1, larger_Discrete1, larger_Numeric1, num_threads)
+    run_larger_tests2(f4_file_path, out_file_path, larger_ID, larger_Categorical1, larger_Discrete1, larger_Numeric1, num_threads, check_outputs)
 
     print("-------------------------------------------------------------------------")
     print(f"Running all tests for {in_file_path} - custom indexing (cmpr: {compression_type})")
     print("-------------------------------------------------------------------------")
 
     f4.build_endswith_index(f4_file_path, "Discrete1", index_tmp_dir_path)
-    run_larger_tests2(f4_file_path, out_file_path, larger_ID, larger_Categorical1, larger_Discrete1, larger_Numeric1, num_threads)
+    run_larger_tests2(f4_file_path, out_file_path, larger_ID, larger_Categorical1, larger_Discrete1, larger_Numeric1, num_threads, check_outputs)
 
     #for file_path in glob.glob(f"{f4_file_path}*"):
     #    os.unlink(file_path)
 
-def run_larger_tests2(f4_file_path, out_file_path, larger_ID, larger_Categorical1, larger_Discrete1, larger_Numeric1, num_threads):
+def run_larger_tests2(f4_file_path, out_file_path, larger_ID, larger_Categorical1, larger_Discrete1, larger_Numeric1, num_threads, check_outputs):
     f4.query(f4_file_path, f4.StringFilter("ID", operator.eq, "Row1"), ["Discrete1"], out_file_path, num_threads=num_threads)
-    check_results("Filter ID = Row1", read_file_into_lists(out_file_path), [[b"Discrete1"], larger_Discrete1[1]])
+    if check_outputs:
+        check_results("Filter ID = Row1", read_file_into_lists(out_file_path), [[b"Discrete1"], larger_Discrete1[1]])
     os.unlink(out_file_path)
 
     f4.query(f4_file_path, f4.StringFilter("ID", operator.eq, "Row33"), ["Discrete1"], out_file_path, num_threads=num_threads)
-    check_results("Filter ID = Row33", read_file_into_lists(out_file_path), [[b"Discrete1"], larger_Discrete1[33]])
+    if check_outputs:
+        check_results("Filter ID = Row33", read_file_into_lists(out_file_path), [[b"Discrete1"], larger_Discrete1[33]])
     os.unlink(out_file_path)
 
     f4.query(f4_file_path, f4.StringFilter("ID", operator.eq, "Row91"), ["Discrete1"], out_file_path, num_threads=num_threads)
-    check_results("Filter ID = Row91", read_file_into_lists(out_file_path), [[b"Discrete1"], larger_Discrete1[91]])
+    if check_outputs:
+        check_results("Filter ID = Row91", read_file_into_lists(out_file_path), [[b"Discrete1"], larger_Discrete1[91]])
     os.unlink(out_file_path)
 
     f4.query(f4_file_path, f4.StringFilter("ID", operator.eq, "Row100"), ["Discrete1"], out_file_path, num_threads=num_threads)
-    check_results("Filter ID = Row100", read_file_into_lists(out_file_path), [[b"Discrete1"], larger_Discrete1[100]])
+    if check_outputs:
+        check_results("Filter ID = Row100", read_file_into_lists(out_file_path), [[b"Discrete1"], larger_Discrete1[100]])
     os.unlink(out_file_path)
 
-    run_string_test("Categorical1", "A", "A", f4_file_path, larger_ID, larger_Categorical1, out_file_path, num_threads)
-    run_string_test("Categorical1", "D", "D", f4_file_path, larger_ID, larger_Categorical1, out_file_path, num_threads)
-    run_string_test("Categorical1", "A", "D", f4_file_path, larger_ID, larger_Categorical1, out_file_path, num_threads)
-    run_string_test("Categorical1", "B", "C", f4_file_path, larger_ID, larger_Categorical1, out_file_path, num_threads)
-    run_string_test("Categorical1", "A", "C", f4_file_path, larger_ID, larger_Categorical1, out_file_path, num_threads)
-    run_string_test("Categorical1", "B", "D", f4_file_path, larger_ID, larger_Categorical1, out_file_path, num_threads)
-    run_string_test("Categorical1", "B", "Z", f4_file_path, larger_ID, larger_Categorical1, out_file_path, num_threads)
+    run_string_test("Categorical1", "A", "A", f4_file_path, larger_ID, larger_Categorical1, out_file_path, num_threads, check_outputs)
+    run_string_test("Categorical1", "D", "D", f4_file_path, larger_ID, larger_Categorical1, out_file_path, num_threads, check_outputs)
+    run_string_test("Categorical1", "A", "D", f4_file_path, larger_ID, larger_Categorical1, out_file_path, num_threads, check_outputs)
+    run_string_test("Categorical1", "B", "C", f4_file_path, larger_ID, larger_Categorical1, out_file_path, num_threads, check_outputs)
+    run_string_test("Categorical1", "A", "C", f4_file_path, larger_ID, larger_Categorical1, out_file_path, num_threads, check_outputs)
+    run_string_test("Categorical1", "B", "D", f4_file_path, larger_ID, larger_Categorical1, out_file_path, num_threads, check_outputs)
+    run_string_test("Categorical1", "B", "Z", f4_file_path, larger_ID, larger_Categorical1, out_file_path, num_threads, check_outputs)
 
-    run_string_test("Discrete1", "AA", "AA", f4_file_path, larger_ID, larger_Discrete1, out_file_path, num_threads)
-    run_string_test("Discrete1", "PM", "PM", f4_file_path, larger_ID, larger_Discrete1, out_file_path, num_threads)
-    run_string_test("Discrete1", "AA", "ZZ", f4_file_path, larger_ID, larger_Discrete1, out_file_path, num_threads)
-    run_string_test("Discrete1", "FA", "SZ", f4_file_path, larger_ID, larger_Discrete1, out_file_path, num_threads)
+    run_string_test("Discrete1", "AA", "AA", f4_file_path, larger_ID, larger_Discrete1, out_file_path, num_threads, check_outputs)
+    run_string_test("Discrete1", "PM", "PM", f4_file_path, larger_ID, larger_Discrete1, out_file_path, num_threads, check_outputs)
+    run_string_test("Discrete1", "AA", "ZZ", f4_file_path, larger_ID, larger_Discrete1, out_file_path, num_threads, check_outputs)
+    run_string_test("Discrete1", "FA", "SZ", f4_file_path, larger_ID, larger_Discrete1, out_file_path, num_threads, check_outputs)
 
-    run_endswith_test("M", f4_file_path, larger_ID, larger_Discrete1, out_file_path, num_threads)
-    run_endswith_test("PM", f4_file_path, larger_ID, larger_Discrete1, out_file_path, num_threads)
-    run_endswith_test("ZZZZ", f4_file_path, larger_ID, larger_Discrete1, out_file_path, num_threads)
+    run_endswith_test("M", f4_file_path, larger_ID, larger_Discrete1, out_file_path, num_threads, check_outputs)
+    run_endswith_test("PM", f4_file_path, larger_ID, larger_Discrete1, out_file_path, num_threads, check_outputs)
+    run_endswith_test("ZZZZ", f4_file_path, larger_ID, larger_Discrete1, out_file_path, num_threads, check_outputs)
 
-    run_float_test(0.0, 1.0, f4_file_path, larger_ID, larger_Numeric1, out_file_path, num_threads)
-    run_float_test(0.85, 0.9, f4_file_path, larger_ID, larger_Numeric1, out_file_path, num_threads)
-    run_float_test(-0.9, -0.85, f4_file_path, larger_ID, larger_Numeric1, out_file_path, num_threads)
-    run_float_test(-0.5, 0.0, f4_file_path, larger_ID, larger_Numeric1, out_file_path, num_threads)
-    run_float_test(-0.5, 0.5, f4_file_path, larger_ID, larger_Numeric1, out_file_path, num_threads)
-    run_float_test(-1000.0, 1000.0, f4_file_path, larger_ID, larger_Numeric1, out_file_path, num_threads)
-    run_float_test(0.5, 0.5, f4_file_path, larger_ID, larger_Numeric1, out_file_path, num_threads)
+    run_float_test(0.0, 1.0, f4_file_path, larger_ID, larger_Numeric1, out_file_path, num_threads, check_outputs)
+    run_float_test(0.85, 0.9, f4_file_path, larger_ID, larger_Numeric1, out_file_path, num_threads, check_outputs)
+    run_float_test(-0.9, -0.85, f4_file_path, larger_ID, larger_Numeric1, out_file_path, num_threads, check_outputs)
+    run_float_test(-0.5, 0.0, f4_file_path, larger_ID, larger_Numeric1, out_file_path, num_threads, check_outputs)
+    run_float_test(-0.5, 0.5, f4_file_path, larger_ID, larger_Numeric1, out_file_path, num_threads, check_outputs)
+    run_float_test(-1000.0, 1000.0, f4_file_path, larger_ID, larger_Numeric1, out_file_path, num_threads, check_outputs)
+    run_float_test(0.5, 0.5, f4_file_path, larger_ID, larger_Numeric1, out_file_path, num_threads, check_outputs)
 
-def run_string_test(column_name, lower_bound, upper_bound, f4_file_path, larger_ID, filter_values, out_file_path, num_threads):
+def run_string_test(column_name, lower_bound, upper_bound, f4_file_path, larger_ID, filter_values, out_file_path, num_threads, check_outputs):
     f4.query(f4_file_path, f4.StringRangeFilter(column_name, lower_bound, upper_bound), ["ID"], out_file_path, num_threads=num_threads)
 
-    indices = [i for i in range(len(filter_values)) if filter_values[i][0] == column_name.encode() or (filter_values[i][0] >= lower_bound.encode() and filter_values[i][0] <= upper_bound.encode())]
-    matches = [larger_ID[i] for i in indices]
-    actual = read_file_into_lists(out_file_path)
-    check_results(f"Filter {column_name} = {lower_bound} <> {upper_bound} = {len(matches) - 1} matches", read_file_into_lists(out_file_path), matches)
+    if check_outputs:
+        indices = [i for i in range(len(filter_values)) if filter_values[i][0] == column_name.encode() or (filter_values[i][0] >= lower_bound.encode() and filter_values[i][0] <= upper_bound.encode())]
+        matches = [larger_ID[i] for i in indices]
+        actual = read_file_into_lists(out_file_path)
+        check_results(f"Filter {column_name} = {lower_bound} <> {upper_bound} = {len(matches) - 1} matches", read_file_into_lists(out_file_path), matches)
+
     os.unlink(out_file_path)
 
-def run_endswith_test(value, f4_file_path, larger_ID, filter_values, out_file_path, num_threads):
+def run_endswith_test(value, f4_file_path, larger_ID, filter_values, out_file_path, num_threads, check_outputs):
     column_name = "Discrete1"
     f4.query(f4_file_path, f4.EndsWithFilter(column_name, value), ["ID"], out_file_path, num_threads=num_threads)
-    indices = [i for i in range(len(filter_values)) if filter_values[i][0] == column_name.encode() or filter_values[i][0].endswith(value.encode())]
-    matches = [larger_ID[i] for i in indices]
-    check_results(f"EndsWith filter - {column_name} - {value} = {len(matches) - 1} matches", read_file_into_lists(out_file_path), matches)
+
+    if check_outputs:
+        indices = [i for i in range(len(filter_values)) if filter_values[i][0] == column_name.encode() or filter_values[i][0].endswith(value.encode())]
+        matches = [larger_ID[i] for i in indices]
+        check_results(f"EndsWith filter - {column_name} - {value} = {len(matches) - 1} matches", read_file_into_lists(out_file_path), matches)
+
     os.unlink(out_file_path)
 
-def run_float_test(lower_bound, upper_bound, f4_file_path, larger_ID, larger_Numeric1, out_file_path, num_threads):
+def run_float_test(lower_bound, upper_bound, f4_file_path, larger_ID, larger_Numeric1, out_file_path, num_threads, check_outputs):
     column_name = "Numeric1"
     f4.query(f4_file_path, f4.FloatRangeFilter(column_name, lower_bound, upper_bound), ["ID"], out_file_path, num_threads=num_threads)
-    indices = [i for i in range(len(larger_Numeric1)) if isinstance(larger_Numeric1[i][0], str) or (larger_Numeric1[i][0] >= lower_bound and larger_Numeric1[i][0] <= upper_bound)]
-    matches = [larger_ID[i] for i in indices]
-    check_results(f"Filter FloatWithin = {lower_bound} <> {upper_bound} = {len(matches) - 1} matches", read_file_into_lists(out_file_path), matches)
+
+    if check_outputs:
+        indices = [i for i in range(len(larger_Numeric1)) if isinstance(larger_Numeric1[i][0], str) or (larger_Numeric1[i][0] >= lower_bound and larger_Numeric1[i][0] <= upper_bound)]
+        matches = [larger_ID[i] for i in indices]
+        check_results(f"Filter FloatWithin = {lower_bound} <> {upper_bound} = {len(matches) - 1} matches", read_file_into_lists(out_file_path), matches)
+
     os.unlink(out_file_path)
 
 #do_small_tests = True
@@ -736,15 +749,21 @@ for compression_type in [None]:
 #for compression_type in ["dictionary"]:
 #for compression_type in ["zstd"]:
     # Medium tests
-#    run_larger_tests(num_threads=1, size="medium", discrete1_index=11, numeric1_index=21, rebuild=True, compression_type=compression_type)
-#    run_larger_tests(num_threads=2, size="medium", discrete1_index=11, numeric1_index=21, rebuild=True, compression_type=compression_type)
+    #run_larger_tests(num_threads=1, size="medium", discrete1_index=11, numeric1_index=21, rebuild=True, compression_type=compression_type)
+    #run_larger_tests(num_threads=2, size="medium", discrete1_index=11, numeric1_index=21, rebuild=True, compression_type=compression_type)
 
     # Large tests
+    #num_threads = 1
+    #num_threads = 2
+    num_threads = 4
+    #rebuild = True
+    rebuild = False
     verbose = True
     #verbose = False
-    #run_larger_tests(num_threads=8, size="large_tall", discrete1_index=251, numeric1_index=501, rebuild=True, compression_type=compression_type, verbose=verbose)
-#    run_larger_tests(num_threads=8, size="large_tall", discrete1_index=251, numeric1_index=501, rebuild=False, compression_type=compression_type, verbose=verbose)
-    #run_larger_tests(num_threads=8, size="large_wide", discrete1_index=250001, numeric1_index=500001, rebuild=True, compression_type=compression_type, verbose=verbose)
-#    run_larger_tests(num_threads=8, size="large_wide", discrete1_index=250001, numeric1_index=500001, rebuild=False, compression_type=compression_type, verbose=verbose)
+    check_outputs = True
+    #check_outputs = False
+
+    run_larger_tests(num_threads=num_threads, size="large_tall", discrete1_index=251, numeric1_index=501, rebuild=rebuild, compression_type=compression_type, verbose=verbose, check_outputs=check_outputs)
+    #run_larger_tests(num_threads=num_threads, size="large_wide", discrete1_index=250001, numeric1_index=500001, rebuild=rebuild, compression_type=compression_type, verbose=verbose, check_outputs=check_outputs)
 
 print("All tests passed!!")

@@ -365,7 +365,8 @@ class StringRangeFilter(__RangeFilter):
         super().__init__(filter1, filter2)
 
 class FileData:
-    def __init__(self, file_handle, file_map_dict, stat_dict, decompression_type, decompressor):
+    def __init__(self, data_file_path, file_handle, file_map_dict, stat_dict, decompression_type, decompressor):
+        self.data_file_path = data_file_path
         self.file_handle = file_handle
         self.file_map_dict = file_map_dict
         self.stat_dict = stat_dict
@@ -376,7 +377,7 @@ class FileData:
 # Public function(s)
 #####################################################
 
-def query(data_file_path, fltr=NoFilter(), select_columns=[], out_file_path=None, out_file_type="tsv", num_threads=1, lines_per_chunk=None):
+def query(data_file_path, fltr=NoFilter(), select_columns=[], out_file_path=None, out_file_type="tsv", num_threads=1, lines_per_chunk=None, tmp_dir_path=None):
     """
     Query the data file using zero or more filters.
 
@@ -448,12 +449,9 @@ def query(data_file_path, fltr=NoFilter(), select_columns=[], out_file_path=None
                 keep_row_indices = sorted(fltr._filter_column_values(data_file_path, row_indices, column_coords_dict, bigram_size_dict))
             else:
                 # Loop through the rows in parallel and find matching row indices.
-                keep_row_indices = sorted(chain.from_iterable(Parallel(n_jobs = num_threads)(delayed(fltr._filter_column_values)(data_file_path, row_indices, column_coords_dict, bigram_size_dict) for row_indices in generate_row_chunks(file_data.stat_dict["num_rows"], num_threads))))
+                keep_row_indices = sorted(chain.from_iterable(Parallel(n_jobs = num_threads)(delayed(fltr._filter_column_values)(data_file_path, row_indices, column_coords_dict, bigram_size_dict) for row_indices in generate_query_row_chunks(file_data.stat_dict["num_rows"], num_threads))))
 
         select_column_coords = [column_coords_dict[name] for name in select_columns]
-
-        # This avoids having to check the decompression type each time we parse a value.
-        #decompressor = get_decompressor(decompression_type, decompressor)
         parse_function = get_parse_row_values_function(file_data)
 
         if out_file_path:
@@ -461,17 +459,40 @@ def query(data_file_path, fltr=NoFilter(), select_columns=[], out_file_path=None
             with open(out_file_path, 'wb') as out_file:
                 out_file.write(b"\t".join(select_columns) + b"\n") # Header line
 
-                out_lines = []
-                for row_index in keep_row_indices:
-                    out_values = parse_function(file_data, row_index, select_column_coords, bigram_size_dict=bigram_size_dict, column_names=select_columns)
-                    out_lines.append(b"\t".join(out_values))
+                if num_threads == 1 or len(keep_row_indices) <= num_threads:
+                    out_lines = []
+                    for row_index in keep_row_indices:
+                        out_values = parse_function(file_data, row_index, select_column_coords, bigram_size_dict=bigram_size_dict, column_names=select_columns)
+                        out_lines.append(b"\t".join(out_values))
 
-                    if len(out_lines) % lines_per_chunk == 0:
+                        if len(out_lines) % lines_per_chunk == 0:
+                            out_file.write(b"\n".join(out_lines) + b"\n")
+                            out_lines = []
+
+                    if len(out_lines) > 0:
                         out_file.write(b"\n".join(out_lines) + b"\n")
-                        out_lines = []
+                else:
+                    if tmp_dir_path:
+                        makedirs(tmp_dir_path, exist_ok=True)
+                    else:
+                        tmp_dir_path = mkdtemp()
 
-                if len(out_lines) > 0:
-                    out_file.write(b"\n".join(out_lines) + b"\n")
+                    tmp_dir_path = fix_dir_path_ending(tmp_dir_path)
+                    makedirs(tmp_dir_path, exist_ok=True)
+
+                    row_index_chunks = generate_write_row_chunks(keep_row_indices, num_threads)
+
+                    # TODO: Pass the tmp directory into here and use it below in three places.
+                    Parallel(n_jobs=num_threads)(
+                        delayed(save_output_line_to_temp)(file_data.data_file_path, chunk_number, row_index_chunk, parse_function, select_column_coords, bigram_size_dict, select_columns, tmp_dir_path) for
+                        chunk_number, row_index_chunk in enumerate(row_index_chunks))
+
+                    for chunk_number in range(num_threads):
+                        with open_read_file(f"/{tmp_dir_path}/{chunk_number}") as read_file:
+                            for line in read_file:
+                                out_file.write(line)
+
+                        remove(f"/{tmp_dir_path}/{chunk_number}")
         else:
             sys.stdout.buffer.write(b"\t".join(select_columns) + b"\n") # Header line
 
@@ -570,7 +591,7 @@ def initialize(data_file_path):
     cc_size = file_map_dict2["cc"][1] - file_map_dict2["cc"][0]
     stat_dict["num_cols"] = fast_int(cc_size / stat_dict["mccl"]) - 1
 
-    return FileData(file_handle, file_map_dict2, stat_dict, decompression_type, decompressor)
+    return FileData(data_file_path, file_handle, file_map_dict2, stat_dict, decompression_type, decompressor)
 
 def get_column_index_from_name(file_data, column_name):
     position = get_identifier_row_index(file_data, column_name.encode(), file_data.stat_dict["num_cols"], data_prefix="cn")
@@ -635,7 +656,7 @@ def get_column_meta(file_data, filter_column_set, select_columns):
 
     return select_columns, column_type_dict, column_coords_dict, bigram_size_dict
 
-def generate_row_chunks(num_rows, num_threads):
+def generate_query_row_chunks(num_rows, num_threads):
     rows_per_chunk = ceil(num_rows / num_threads)
 
     row_indices = set()
@@ -649,6 +670,21 @@ def generate_row_chunks(num_rows, num_threads):
 
     if len(row_indices) > 0:
         yield row_indices
+
+def generate_write_row_chunks(row_indices, num_threads):
+    rows_per_chunk = ceil(len(row_indices) / num_threads)
+
+    return_indices = list()
+
+    for row_index in row_indices:
+        return_indices.append(row_index)
+
+        if len(return_indices) == rows_per_chunk:
+            yield return_indices
+            return_indices = list()
+
+    if len(return_indices) > 0:
+        yield return_indices
 
 def parse_data_coords(file_data, indices, data_prefix=""):
     file_key = "cc"
@@ -744,6 +780,14 @@ def parse_dictionary_compressed_row_values(file_data, row_index, column_coords, 
         values = list(parse_data_values_from_file(file_data, row_index, file_data.stat_dict["ll"], column_coords, data_prefix, "data"))
 
         return [decompress(values.pop(0), file_data.decompressor[column_name], bigram_size_dict[column_name]) for column_name in column_names]
+
+def save_output_line_to_temp(data_file_path, chunk_number, row_indices, parse_function, select_column_coords, bigram_size_dict, select_columns, tmp_dir_path):
+    file_data = initialize(data_file_path)
+
+    with open(f"/{tmp_dir_path}/{chunk_number}", "wb") as tmp_file:
+        for row_index in row_indices:
+            out_values = parse_function(file_data, row_index, select_column_coords, bigram_size_dict=bigram_size_dict, column_names=select_columns)
+            tmp_file.write(b"\t".join(out_values) + b"\n")
 
 # def _get_decompression_dict(self, file_path, column_index_name_dict):
 #     with open(file_path, "rb") as cmpr_file:
@@ -968,6 +1012,16 @@ def find_matching_row_indices(file_data, position_coords, positions):
 
     return matching_row_indices
 
+#TODO: This works with joblib. Keep it?
+def find_matching_row_indices2(data_file_path, position_coords, positions):
+    file_data = initialize(data_file_path)
+    matching_row_indices = set()
+
+    for i in range(positions[0], positions[1]):
+        matching_row_indices.add(fast_int(parse_row_value(file_data, i, position_coords)))
+
+    return matching_row_indices
+
 def retrieve_matching_row_indices(file_data, position_coords, positions, num_threads):
     # This is a rough threshold for determine whether it is worth the overhead to parallelize.
     num_indices = positions[1] - positions[0]
@@ -977,26 +1031,26 @@ def retrieve_matching_row_indices(file_data, position_coords, positions, num_thr
     else:
         chunk_size = ceil(num_indices / num_threads)
 
-        # position_chunks = []
-        # for i in range(positions[0], positions[1], chunk_size):
-        #     position_chunks.append((i, min(positions[1], i + chunk_size)))
+        position_chunks = []
+        for i in range(positions[0], positions[1], chunk_size):
+            position_chunks.append((i, min(positions[1], i + chunk_size)))
 
-        # return set(chain.from_iterable(Parallel(n_jobs=num_threads)(
-        #     delayed(_find_matching_row_indices)(file_data, position_coords, position_chunk)
-        #     for position_chunk in position_chunks))
-        # )
+        return set(chain.from_iterable(Parallel(n_jobs=num_threads)(
+            delayed(find_matching_row_indices2)(file_data.data_file_path, position_coords, position_chunk)
+            for position_chunk in position_chunks))
+        )
 
-        with ThreadPoolExecutor(max_workers = num_threads) as executor:
-            futures = []
-            for i in range(positions[0], positions[1], chunk_size):
-                position_chunk = (i, min(positions[1], i + chunk_size))
-                futures.append(executor.submit(find_matching_row_indices, file_data, position_coords, position_chunk))
-
-            matches = set()
-            for future in as_completed(futures):
-                matches = matches | future.result()
-
-        return matches
+        # with ThreadPoolExecutor(max_workers = num_threads) as executor:
+        #     futures = []
+        #     for i in range(positions[0], positions[1], chunk_size):
+        #         position_chunk = (i, min(positions[1], i + chunk_size))
+        #         futures.append(executor.submit(find_matching_row_indices, file_data, position_coords, position_chunk))
+        #
+        #     matches = set()
+        #     for future in as_completed(futures):
+        #         matches = matches | future.result()
+        #
+        # return matches
 
 def find_bounds_for_range(file_data, value_coords, filter1, filter2, end_index, num_threads, start_index=0):
     lower_positions = find_positions_g(file_data, value_coords, filter1, start_index, end_index, lt)

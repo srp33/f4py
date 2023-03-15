@@ -573,3 +573,22 @@ def write_index_files(values_positions, tmp_dir_path_data, tmp_dir_path_prefix_o
 
     # Find and write the line length.
     write_str_to_file(f"{tmp_dir_path_prefix_other}ll", str(rows_max_length).encode())
+
+def prepare_tmp_dirs(tmp_dir_path):
+    # Figure out where temp files will be stored and create directory, if needed.
+    if tmp_dir_path:
+        makedirs(tmp_dir_path, exist_ok=True)
+    else:
+        tmp_dir_path = mkdtemp()
+
+    tmp_dir_path = fix_dir_path_ending(tmp_dir_path)
+
+    tmp_dir_path_chunks = f"{tmp_dir_path}chunks/"
+    tmp_dir_path_outputs = f"{tmp_dir_path}outputs/"
+    tmp_dir_path_indexes = f"{tmp_dir_path}indexes/"
+
+    makedirs(tmp_dir_path_chunks, exist_ok=True)
+    makedirs(tmp_dir_path_outputs, exist_ok=True)
+    makedirs(tmp_dir_path_indexes, exist_ok=True)
+
+    return tmp_dir_path_chunks, tmp_dir_path_outputs, tmp_dir_path_indexes
