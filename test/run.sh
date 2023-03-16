@@ -26,8 +26,8 @@ dockerCommand="docker run -i -t --rm --platform linux/x86_64 --user $(id -u):$(i
 #$dockerCommand bash -c "time python3 build_tsv.py 250000 250000 500000 1000 data/large_wide.tsv"
 
 #TODO: Integrate f4 into the analysis paper tests. Check speed and optimize more, if needed.
-#        See if there's a way to speed up Parallel, delayed.
-#        Modify Parser.py so that it parses multiple chunks of the output file in parallel, saves them to temp files, and then concatenates them.
+#        Figure out why it's going so slow in Parser.py to save large files in parallel.
+#          Narrow down where the slowness is happening.
 #        Try potential other speed improvements:
 #          * Python 3.11
 #          * [Probably not] Try Nuitka? https://nuitka.net (compiles your Python code to C, is supposed to achieve speedups of 3x or greater).
