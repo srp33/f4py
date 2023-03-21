@@ -548,7 +548,7 @@ def run_small_tests(in_file_path, f4_file_path, out_file_path, num_threads = 1, 
     for file_path in glob.glob(f"{f4_file_path}*"):
         os.unlink(file_path)
 
-def run_larger_tests(num_threads, size, discrete1_index, numeric1_index, rebuild, compression_type, check_outputs=True, verbose=False):
+def run_larger_tests(num_threads, size, discrete1_index, numeric1_index, rebuild, compression_type, check_outputs=True, verbose=False, tmp_dir_path=None):
     in_file_path = f"data/{size}.tsv"
     f4_file_path = f"data/{size}.f4"
     out_file_path = "/tmp/f4_out.tsv"
@@ -585,13 +585,13 @@ def run_larger_tests(num_threads, size, discrete1_index, numeric1_index, rebuild
             os.unlink(file_path)
 
     if not os.path.exists(f4_file_path):
-        f4.convert_delimited_file(in_file_path, f4_file_path, compression_type=compression_type, num_threads=num_threads, verbose=verbose)
+        f4.convert_delimited_file(in_file_path, f4_file_path, compression_type=compression_type, num_threads=num_threads, verbose=verbose, tmp_dir_path=tmp_dir_path)
 
     print("-------------------------------------------------------------------")
     print(f"Running all tests for {in_file_path} - no indexing (cmpr: {compression_type})")
     print("-------------------------------------------------------------------")
 
-    run_larger_tests2(f4_file_path, out_file_path, larger_ID, larger_Categorical1, larger_Discrete1, larger_Numeric1, num_threads, check_outputs)
+    run_larger_tests2(f4_file_path, out_file_path, larger_ID, larger_Categorical1, larger_Discrete1, larger_Numeric1, num_threads, check_outputs, tmp_dir_path)
 
     print("---------------------------------------------------------------------")
     print(f"Running all tests for {in_file_path} - with indexing (cmpr: {compression_type})")
@@ -601,66 +601,67 @@ def run_larger_tests(num_threads, size, discrete1_index, numeric1_index, rebuild
     shutil.rmtree(index_tmp_dir_path, ignore_errors = True)
     os.makedirs(index_tmp_dir_path)
     f4.build_indexes(f4_file_path, ["ID", "Categorical1", "Discrete1", "Numeric1"], index_tmp_dir_path)
-    run_larger_tests2(f4_file_path, out_file_path, larger_ID, larger_Categorical1, larger_Discrete1, larger_Numeric1, num_threads, check_outputs)
+    run_larger_tests2(f4_file_path, out_file_path, larger_ID, larger_Categorical1, larger_Discrete1, larger_Numeric1, num_threads, check_outputs, tmp_dir_path)
 
     print("-------------------------------------------------------------------------")
     print(f"Running all tests for {in_file_path} - custom indexing (cmpr: {compression_type})")
     print("-------------------------------------------------------------------------")
 
     f4.build_endswith_index(f4_file_path, "Discrete1", index_tmp_dir_path)
-    run_larger_tests2(f4_file_path, out_file_path, larger_ID, larger_Categorical1, larger_Discrete1, larger_Numeric1, num_threads, check_outputs)
+    run_larger_tests2(f4_file_path, out_file_path, larger_ID, larger_Categorical1, larger_Discrete1, larger_Numeric1, num_threads, check_outputs, tmp_dir_path)
 
     #for file_path in glob.glob(f"{f4_file_path}*"):
     #    os.unlink(file_path)
 
-def run_larger_tests2(f4_file_path, out_file_path, larger_ID, larger_Categorical1, larger_Discrete1, larger_Numeric1, num_threads, check_outputs):
-    f4.query(f4_file_path, f4.StringFilter("ID", operator.eq, "Row1"), ["Discrete1"], out_file_path, num_threads=num_threads)
+def run_larger_tests2(f4_file_path, out_file_path, larger_ID, larger_Categorical1, larger_Discrete1, larger_Numeric1, num_threads, check_outputs, tmp_dir_path):
+    f4.query(f4_file_path, f4.StringFilter("ID", operator.eq, "Row1"), ["Discrete1"], out_file_path, num_threads=num_threads, tmp_dir_path=tmp_dir_path)
     if check_outputs:
         check_results("Filter ID = Row1", read_file_into_lists(out_file_path), [[b"Discrete1"], larger_Discrete1[1]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.StringFilter("ID", operator.eq, "Row33"), ["Discrete1"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.StringFilter("ID", operator.eq, "Row33"), ["Discrete1"], out_file_path, num_threads=num_threads, tmp_dir_path=tmp_dir_path)
     if check_outputs:
         check_results("Filter ID = Row33", read_file_into_lists(out_file_path), [[b"Discrete1"], larger_Discrete1[33]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.StringFilter("ID", operator.eq, "Row91"), ["Discrete1"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.StringFilter("ID", operator.eq, "Row91"), ["Discrete1"], out_file_path, num_threads=num_threads, tmp_dir_path=tmp_dir_path)
     if check_outputs:
         check_results("Filter ID = Row91", read_file_into_lists(out_file_path), [[b"Discrete1"], larger_Discrete1[91]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.StringFilter("ID", operator.eq, "Row100"), ["Discrete1"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.StringFilter("ID", operator.eq, "Row100"), ["Discrete1"], out_file_path, num_threads=num_threads, tmp_dir_path=tmp_dir_path)
     if check_outputs:
         check_results("Filter ID = Row100", read_file_into_lists(out_file_path), [[b"Discrete1"], larger_Discrete1[100]])
     os.unlink(out_file_path)
 
-    run_string_test("Categorical1", "A", "A", f4_file_path, larger_ID, larger_Categorical1, out_file_path, num_threads, check_outputs)
-    run_string_test("Categorical1", "D", "D", f4_file_path, larger_ID, larger_Categorical1, out_file_path, num_threads, check_outputs)
-    run_string_test("Categorical1", "A", "D", f4_file_path, larger_ID, larger_Categorical1, out_file_path, num_threads, check_outputs)
-    run_string_test("Categorical1", "B", "C", f4_file_path, larger_ID, larger_Categorical1, out_file_path, num_threads, check_outputs)
-    run_string_test("Categorical1", "A", "C", f4_file_path, larger_ID, larger_Categorical1, out_file_path, num_threads, check_outputs)
-    run_string_test("Categorical1", "B", "D", f4_file_path, larger_ID, larger_Categorical1, out_file_path, num_threads, check_outputs)
-    run_string_test("Categorical1", "B", "Z", f4_file_path, larger_ID, larger_Categorical1, out_file_path, num_threads, check_outputs)
+    run_string_test("Categorical1", "A", "A", f4_file_path, larger_ID, larger_Categorical1, out_file_path, num_threads, check_outputs, tmp_dir_path)
+    run_string_test("Categorical1", "D", "D", f4_file_path, larger_ID, larger_Categorical1, out_file_path, num_threads, check_outputs, tmp_dir_path)
+    run_string_test("Categorical1", "A", "D", f4_file_path, larger_ID, larger_Categorical1, out_file_path, num_threads, check_outputs, tmp_dir_path)
+    run_string_test("Categorical1", "B", "B", f4_file_path, larger_ID, larger_Categorical1, out_file_path, num_threads, check_outputs, tmp_dir_path)
+    run_string_test("Categorical1", "B", "C", f4_file_path, larger_ID, larger_Categorical1, out_file_path, num_threads, check_outputs, tmp_dir_path)
+    run_string_test("Categorical1", "A", "C", f4_file_path, larger_ID, larger_Categorical1, out_file_path, num_threads, check_outputs, tmp_dir_path)
+    run_string_test("Categorical1", "B", "D", f4_file_path, larger_ID, larger_Categorical1, out_file_path, num_threads, check_outputs, tmp_dir_path)
+    run_string_test("Categorical1", "B", "Z", f4_file_path, larger_ID, larger_Categorical1, out_file_path, num_threads, check_outputs, tmp_dir_path)
 
-    run_string_test("Discrete1", "AA", "AA", f4_file_path, larger_ID, larger_Discrete1, out_file_path, num_threads, check_outputs)
-    run_string_test("Discrete1", "PM", "PM", f4_file_path, larger_ID, larger_Discrete1, out_file_path, num_threads, check_outputs)
-    run_string_test("Discrete1", "AA", "ZZ", f4_file_path, larger_ID, larger_Discrete1, out_file_path, num_threads, check_outputs)
-    run_string_test("Discrete1", "FA", "SZ", f4_file_path, larger_ID, larger_Discrete1, out_file_path, num_threads, check_outputs)
+    run_string_test("Discrete1", "AA", "AA", f4_file_path, larger_ID, larger_Discrete1, out_file_path, num_threads, check_outputs, tmp_dir_path)
+    run_string_test("Discrete1", "PM", "PM", f4_file_path, larger_ID, larger_Discrete1, out_file_path, num_threads, check_outputs, tmp_dir_path)
+    run_string_test("Discrete1", "AA", "ZZ", f4_file_path, larger_ID, larger_Discrete1, out_file_path, num_threads, check_outputs, tmp_dir_path)
+    run_string_test("Discrete1", "FA", "SZ", f4_file_path, larger_ID, larger_Discrete1, out_file_path, num_threads, check_outputs, tmp_dir_path)
 
-    run_endswith_test("M", f4_file_path, larger_ID, larger_Discrete1, out_file_path, num_threads, check_outputs)
-    run_endswith_test("PM", f4_file_path, larger_ID, larger_Discrete1, out_file_path, num_threads, check_outputs)
-    run_endswith_test("ZZZZ", f4_file_path, larger_ID, larger_Discrete1, out_file_path, num_threads, check_outputs)
+    run_endswith_test("M", f4_file_path, larger_ID, larger_Discrete1, out_file_path, num_threads, check_outputs, tmp_dir_path)
+    run_endswith_test("PM", f4_file_path, larger_ID, larger_Discrete1, out_file_path, num_threads, check_outputs, tmp_dir_path)
+    run_endswith_test("ZZZZ", f4_file_path, larger_ID, larger_Discrete1, out_file_path, num_threads, check_outputs, tmp_dir_path)
 
-    run_float_test(0.0, 1.0, f4_file_path, larger_ID, larger_Numeric1, out_file_path, num_threads, check_outputs)
-    run_float_test(0.85, 0.9, f4_file_path, larger_ID, larger_Numeric1, out_file_path, num_threads, check_outputs)
-    run_float_test(-0.9, -0.85, f4_file_path, larger_ID, larger_Numeric1, out_file_path, num_threads, check_outputs)
-    run_float_test(-0.5, 0.0, f4_file_path, larger_ID, larger_Numeric1, out_file_path, num_threads, check_outputs)
-    run_float_test(-0.5, 0.5, f4_file_path, larger_ID, larger_Numeric1, out_file_path, num_threads, check_outputs)
-    run_float_test(-1000.0, 1000.0, f4_file_path, larger_ID, larger_Numeric1, out_file_path, num_threads, check_outputs)
-    run_float_test(0.5, 0.5, f4_file_path, larger_ID, larger_Numeric1, out_file_path, num_threads, check_outputs)
+    run_float_test(0.0, 1.0, f4_file_path, larger_ID, larger_Numeric1, out_file_path, num_threads, check_outputs, tmp_dir_path)
+    run_float_test(0.85, 0.9, f4_file_path, larger_ID, larger_Numeric1, out_file_path, num_threads, check_outputs, tmp_dir_path)
+    run_float_test(-0.9, -0.85, f4_file_path, larger_ID, larger_Numeric1, out_file_path, num_threads, check_outputs, tmp_dir_path)
+    run_float_test(-0.5, 0.0, f4_file_path, larger_ID, larger_Numeric1, out_file_path, num_threads, check_outputs, tmp_dir_path)
+    run_float_test(-0.5, 0.5, f4_file_path, larger_ID, larger_Numeric1, out_file_path, num_threads, check_outputs, tmp_dir_path)
+    run_float_test(-1000.0, 1000.0, f4_file_path, larger_ID, larger_Numeric1, out_file_path, num_threads, check_outputs, tmp_dir_path)
+    run_float_test(0.5, 0.5, f4_file_path, larger_ID, larger_Numeric1, out_file_path, num_threads, check_outputs, tmp_dir_path)
 
-def run_string_test(column_name, lower_bound, upper_bound, f4_file_path, larger_ID, filter_values, out_file_path, num_threads, check_outputs):
-    f4.query(f4_file_path, f4.StringRangeFilter(column_name, lower_bound, upper_bound), ["ID"], out_file_path, num_threads=num_threads)
+def run_string_test(column_name, lower_bound, upper_bound, f4_file_path, larger_ID, filter_values, out_file_path, num_threads, check_outputs, tmp_dir_path):
+    f4.query(f4_file_path, f4.StringRangeFilter(column_name, lower_bound, upper_bound), ["ID"], out_file_path, num_threads=num_threads, tmp_dir_path=tmp_dir_path)
 
     if check_outputs:
         indices = [i for i in range(len(filter_values)) if filter_values[i][0] == column_name.encode() or (filter_values[i][0] >= lower_bound.encode() and filter_values[i][0] <= upper_bound.encode())]
@@ -670,9 +671,9 @@ def run_string_test(column_name, lower_bound, upper_bound, f4_file_path, larger_
 
     os.unlink(out_file_path)
 
-def run_endswith_test(value, f4_file_path, larger_ID, filter_values, out_file_path, num_threads, check_outputs):
+def run_endswith_test(value, f4_file_path, larger_ID, filter_values, out_file_path, num_threads, check_outputs, tmp_dir_path):
     column_name = "Discrete1"
-    f4.query(f4_file_path, f4.EndsWithFilter(column_name, value), ["ID"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.EndsWithFilter(column_name, value), ["ID"], out_file_path, num_threads=num_threads, tmp_dir_path=tmp_dir_path)
 
     if check_outputs:
         indices = [i for i in range(len(filter_values)) if filter_values[i][0] == column_name.encode() or filter_values[i][0].endswith(value.encode())]
@@ -681,9 +682,9 @@ def run_endswith_test(value, f4_file_path, larger_ID, filter_values, out_file_pa
 
     os.unlink(out_file_path)
 
-def run_float_test(lower_bound, upper_bound, f4_file_path, larger_ID, larger_Numeric1, out_file_path, num_threads, check_outputs):
+def run_float_test(lower_bound, upper_bound, f4_file_path, larger_ID, larger_Numeric1, out_file_path, num_threads, check_outputs, tmp_dir_path):
     column_name = "Numeric1"
-    f4.query(f4_file_path, f4.FloatRangeFilter(column_name, lower_bound, upper_bound), ["ID"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.FloatRangeFilter(column_name, lower_bound, upper_bound), ["ID"], out_file_path, num_threads=num_threads, tmp_dir_path=tmp_dir_path)
 
     if check_outputs:
         indices = [i for i in range(len(larger_Numeric1)) if isinstance(larger_Numeric1[i][0], str) or (larger_Numeric1[i][0] >= lower_bound and larger_Numeric1[i][0] <= upper_bound)]
@@ -758,12 +759,12 @@ for compression_type in [None]:
     num_threads = 4
     #rebuild = True
     rebuild = False
-    verbose = True
-    #verbose = False
+    #verbose = True
+    verbose = False
     check_outputs = True
     #check_outputs = False
 
-    run_larger_tests(num_threads=num_threads, size="large_tall", discrete1_index=251, numeric1_index=501, rebuild=rebuild, compression_type=compression_type, verbose=verbose, check_outputs=check_outputs)
-    #run_larger_tests(num_threads=num_threads, size="large_wide", discrete1_index=250001, numeric1_index=500001, rebuild=rebuild, compression_type=compression_type, verbose=verbose, check_outputs=check_outputs)
+    #run_larger_tests(num_threads=num_threads, size="large_tall", discrete1_index=251, numeric1_index=501, rebuild=rebuild, compression_type=compression_type, verbose=verbose, check_outputs=check_outputs)
+    run_larger_tests(num_threads=num_threads, size="large_wide", discrete1_index=250001, numeric1_index=500001, rebuild=rebuild, compression_type=compression_type, verbose=verbose, check_outputs=check_outputs)
 
 print("All tests passed!!")

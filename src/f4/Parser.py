@@ -1,3 +1,5 @@
+import os.path
+
 from .Utilities import *
 
 #####################################################
@@ -390,6 +392,17 @@ def query(data_file_path, fltr=NoFilter(), select_columns=[], out_file_path=None
         out_file_path(str): A path to a file that will store the output data. If None is specified, the data will be directed to standard output.
         out_file_type (str): The output file type. Currently, the only supported value is tsv.
     """
+    # with open(out_file_path, "wb") as out_file:
+    #     read_length = 1000000
+    #
+    #     for chunk_number in [0]:
+    #         chunk_file_path = f"/{tmp_dir_path}/{chunk_number}"
+    #
+    #         with open(chunk_file_path, "rb") as read_file:
+    #             with mmap(read_file.fileno(), 0, prot=PROT_READ) as mmap_read_obj:
+    #                 for start_pos in range(0, len(mmap_read_obj), read_length):
+    #                     out_file.write(mmap_read_obj[start_pos:(start_pos + read_length)])
+
     if not isinstance(data_file_path, str):
         raise Exception("You must specify data_file_path as an str value.")
 
@@ -455,7 +468,6 @@ def query(data_file_path, fltr=NoFilter(), select_columns=[], out_file_path=None
         parse_function = get_parse_row_values_function(file_data)
 
         if out_file_path:
-            # Write output (in chunks)
             with open(out_file_path, 'wb') as out_file:
                 out_file.write(b"\t".join(select_columns) + b"\n") # Header line
 
@@ -480,17 +492,18 @@ def query(data_file_path, fltr=NoFilter(), select_columns=[], out_file_path=None
                     tmp_dir_path = fix_dir_path_ending(tmp_dir_path)
                     makedirs(tmp_dir_path, exist_ok=True)
 
-                    row_index_chunks = generate_write_row_chunks(keep_row_indices, num_threads)
+                    row_index_chunks = split_integer_list_into_chunks(keep_row_indices, num_threads)
 
-                    # TODO: Pass the tmp directory into here and use it below in three places.
                     Parallel(n_jobs=num_threads)(
                         delayed(save_output_line_to_temp)(file_data.data_file_path, chunk_number, row_index_chunk, parse_function, select_column_coords, bigram_size_dict, select_columns, tmp_dir_path) for
                         chunk_number, row_index_chunk in enumerate(row_index_chunks))
 
+                    read_length = 1000000
                     for chunk_number in range(num_threads):
-                        with open_read_file(f"/{tmp_dir_path}/{chunk_number}") as read_file:
-                            for line in read_file:
-                                out_file.write(line)
+                        with open(f"/{tmp_dir_path}/{chunk_number}", "rb") as read_file:
+                            with mmap(read_file.fileno(), 0, prot=PROT_READ) as mmap_handle:
+                                for start_pos in range(0, len(mmap_handle), read_length):
+                                    out_file.write(mmap_handle[start_pos:(start_pos + read_length)])
 
                         remove(f"/{tmp_dir_path}/{chunk_number}")
         else:
@@ -671,15 +684,15 @@ def generate_query_row_chunks(num_rows, num_threads):
     if len(row_indices) > 0:
         yield row_indices
 
-def generate_write_row_chunks(row_indices, num_threads):
-    rows_per_chunk = ceil(len(row_indices) / num_threads)
+def split_integer_list_into_chunks(int_list, num_threads):
+    items_per_chunk = ceil(len(int_list) / num_threads)
 
     return_indices = list()
 
-    for row_index in row_indices:
-        return_indices.append(row_index)
+    for an_int in int_list:
+        return_indices.append(an_int)
 
-        if len(return_indices) == rows_per_chunk:
+        if len(return_indices) == items_per_chunk:
             yield return_indices
             return_indices = list()
 

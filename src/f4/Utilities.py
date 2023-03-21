@@ -18,27 +18,6 @@ import sys
 from tempfile import mkdtemp
 from zstandard import ZstdCompressor, ZstdDecompressor
 
-# import concurrent.futures
-# import copy
-# import datetime
-# import glob
-# import gzip
-# import fastnumbers
-# #TODO:
-# from itertools import chain
-# from joblib import Parallel, delayed
-# import math
-# import mmap
-# import msgspec
-# import operator
-# from operator import itemgetter
-# import os
-# import re
-# import shutil
-# import sys
-# import tempfile
-# import zstandard
-
 # We use these dictionaries so that when we store the file map, it takes less space on disk.
 FILE_KEY_ABBREVIATIONS_STATS = {"mccl": 3, "mctl": 6, "cnmccl": 10, "cnll": 11}
 FILE_KEY_ABBREVIATIONS_OTHER = {"ll": 4, "cmpr": 7}
