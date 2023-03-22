@@ -64,12 +64,11 @@ def fail_test(message):
     print(f"FAIL: {message}")
     sys.exit(1)
 
-def run_small_tests(in_file_path, f4_file_path, out_file_path, num_threads = 1, num_cols_per_chunk = 1, lines_per_chunk = 1, compression_type=None, index_columns=None):
+def run_small_tests(in_file_path, f4_file_path, out_file_path, num_threads = 1, num_cols_per_chunk = 1, compression_type=None, index_columns=None):
     print("-------------------------------------------------------")
     print(f"Running all tests for {in_file_path}")
     print(f"num_threads: {num_threads}")
     print(f"num_cols_per_chunk: {num_cols_per_chunk}")
-    print(f"lines_per_chunk: {lines_per_chunk}")
     print(f"compression_type: {compression_type}")
     print(f"index_columns: {index_columns}")
     print("-------------------------------------------------------")
@@ -99,7 +98,7 @@ def run_small_tests(in_file_path, f4_file_path, out_file_path, num_threads = 1, 
     check_result("Column types", "CategoricalA column", f4.get_column_type_from_name(f4_file_path, "CategoricalA"), "s")
     check_result("Column types", "CategoricalB column", f4.get_column_type_from_name(f4_file_path, "CategoricalB"), "s")
 
-    f4.query(f4_file_path, f4.NoFilter(), [], out_file_path, num_threads=num_threads, lines_per_chunk=lines_per_chunk)
+    f4.query(f4_file_path, f4.NoFilter(), [], out_file_path, num_threads=num_threads)
     check_results("No filters, select all columns", read_file_into_lists(out_file_path), read_file_into_lists(in_file_path))
     os.unlink(out_file_path)
 
@@ -693,25 +692,25 @@ def run_float_test(lower_bound, upper_bound, f4_file_path, larger_ID, larger_Num
 
     os.unlink(out_file_path)
 
-#do_small_tests = True
-do_small_tests = False
+do_small_tests = True
+#do_small_tests = False
 
 if do_small_tests:
     # Basic small tests
     f4_file_path = "data/small.f4"
     out_file_path = "/tmp/small_out.tsv"
-    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_threads = 1, num_cols_per_chunk = 1, lines_per_chunk = 1)
-    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_threads = 2, num_cols_per_chunk = 2, lines_per_chunk = 2)
+    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_threads = 1, num_cols_per_chunk = 1)
+    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_threads = 2, num_cols_per_chunk = 2)
 
     # Basic small tests (with gzipped files)
-    run_small_tests("data/small.tsv.gz", f4_file_path, out_file_path, num_threads = 1, num_cols_per_chunk = 1, lines_per_chunk = 1)
-    run_small_tests("data/small.tsv.gz", f4_file_path, out_file_path, num_threads = 2, num_cols_per_chunk = 2, lines_per_chunk = 2)
+    run_small_tests("data/small.tsv.gz", f4_file_path, out_file_path, num_threads = 1, num_cols_per_chunk = 1)
+    run_small_tests("data/small.tsv.gz", f4_file_path, out_file_path, num_threads = 2, num_cols_per_chunk = 2)
 
     # Make sure we print to standard out properly (this code does not work inside a function).
     f4.convert_delimited_file("data/small.tsv", f4_file_path)
     old_stdout = sys.stdout
     sys.stdout = TextIOWrapper(BytesIO(), sys.stdout.encoding)
-    f4.query(f4_file_path, f4.NoFilter(), [], out_file_path=None, num_threads=1, lines_per_chunk=10)
+    f4.query(f4_file_path, f4.NoFilter(), [], out_file_path=None, num_threads=1)
     sys.stdout.seek(0)
     out = sys.stdout.read()
     sys.stdout.close()
@@ -721,24 +720,24 @@ if do_small_tests:
     index_columns = ["ID", "CategoricalB", "FloatA", "FloatB", "IntA", "IntB", "OrdinalA", ["CategoricalB", "IntB"]]
 
     # Small tests with indexing
-    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_threads = 1, num_cols_per_chunk = 1, lines_per_chunk = 1, index_columns = index_columns)
-    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_threads = 2, num_cols_per_chunk = 2, lines_per_chunk = 2, index_columns = index_columns)
+    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_threads = 1, num_cols_per_chunk = 1, index_columns = index_columns)
+    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_threads = 2, num_cols_per_chunk = 2, index_columns = index_columns)
 
     # Small tests with dictionary-based compression
-    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_threads = 1, num_cols_per_chunk = 1, lines_per_chunk = 1, compression_type = "dictionary")
-    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_threads = 2, num_cols_per_chunk = 2, lines_per_chunk = 2, compression_type = "dictionary")
+    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_threads = 1, num_cols_per_chunk = 1, compression_type = "dictionary")
+    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_threads = 2, num_cols_per_chunk = 2, compression_type = "dictionary")
 
     # Small tests with dictionary-based compression (and indexing)
-    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_threads = 1, num_cols_per_chunk = 1, lines_per_chunk = 1, compression_type = "dictionary", index_columns = index_columns)
-    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_threads = 2, num_cols_per_chunk = 2, lines_per_chunk = 2, compression_type = "dictionary", index_columns = index_columns)
+    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_threads = 1, num_cols_per_chunk = 1, compression_type = "dictionary", index_columns = index_columns)
+    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_threads = 2, num_cols_per_chunk = 2, compression_type = "dictionary", index_columns = index_columns)
 
     # Small tests with z-standard compression
-    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_threads = 1, num_cols_per_chunk = 1, lines_per_chunk = 1, compression_type = "zstd")
-    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_threads = 2, num_cols_per_chunk = 2, lines_per_chunk = 2, compression_type = "zstd")
+    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_threads = 1, num_cols_per_chunk = 1, compression_type = "zstd")
+    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_threads = 2, num_cols_per_chunk = 2, compression_type = "zstd")
 
     # Small tests with z-standard compression (and indexing)
-    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_threads = 1, num_cols_per_chunk = 1, lines_per_chunk = 1, compression_type = "zstd", index_columns = index_columns)
-    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_threads = 2, num_cols_per_chunk = 2, lines_per_chunk = 2, compression_type = "zstd", index_columns = index_columns)
+    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_threads = 1, num_cols_per_chunk = 1, compression_type = "zstd", index_columns = index_columns)
+    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_threads = 2, num_cols_per_chunk = 2, compression_type = "zstd", index_columns = index_columns)
 
     # Clean up data files
     for file_path in glob.glob(f"{f4_file_path}*"):
@@ -754,9 +753,9 @@ for compression_type in [None]:
     run_larger_tests(num_threads=2, size="medium", discrete1_index=11, numeric1_index=21, rebuild=True, compression_type=compression_type)
 
     # Large tests
-    #num_threads = 1
+    num_threads = 1
     #num_threads = 2
-    num_threads = 4
+    #num_threads = 4
     #rebuild = True
     rebuild = False
     #verbose = True

@@ -378,7 +378,7 @@ class FileData:
 # Public function(s)
 #####################################################
 
-def query(data_file_path, fltr=NoFilter(), select_columns=[], out_file_path=None, out_file_type="tsv", num_threads=1, lines_per_chunk=None, tmp_dir_path=None):
+def query(data_file_path, fltr=NoFilter(), select_columns=[], out_file_path=None, out_file_type="tsv", num_threads=1, tmp_dir_path=None):
     """
     Query the data file using zero or more filters.
 
@@ -424,9 +424,6 @@ def query(data_file_path, fltr=NoFilter(), select_columns=[], out_file_path=None
     #
     # try:
     with initialize(data_file_path) as file_data:
-        if not lines_per_chunk:
-            lines_per_chunk = ceil(file_data.stat_dict["num_rows"] / (num_threads * 4))
-
         # Store column indices and types in dictionaries so we only have to retrieve
         # each once, even if we use the same column in multiple filters.
         select_columns, column_type_dict, column_coords_dict, bigram_size_dict = get_column_meta(file_data, fltr._get_column_name_set(), select_columns)
@@ -470,17 +467,20 @@ def query(data_file_path, fltr=NoFilter(), select_columns=[], out_file_path=None
                 out_file.write(b"\t".join(select_columns) + b"\n") # Header line
 
                 if num_threads == 1 or len(keep_row_indices) <= num_threads:
-                    out_lines = []
+                    # lines_per_chunk = 10
+                    # out_lines = []
+
                     for row_index in keep_row_indices:
-                        out_values = parse_function(file_data, row_index, select_column_coords, bigram_size_dict=bigram_size_dict, column_names=select_columns)
-                        out_lines.append(b"\t".join(out_values))
-
-                        if len(out_lines) % lines_per_chunk == 0:
-                            out_file.write(b"\n".join(out_lines) + b"\n")
-                            out_lines = []
-
-                    if len(out_lines) > 0:
-                        out_file.write(b"\n".join(out_lines) + b"\n")
+                        out_file.write(b"\t".join(parse_function(file_data, row_index, select_column_coords, bigram_size_dict=bigram_size_dict, column_names=select_columns)) + b"\n")
+                    #     out_values = parse_function(file_data, row_index, select_column_coords, bigram_size_dict=bigram_size_dict, column_names=select_columns)
+                    #     out_lines.append(b"\t".join(out_values))
+                    #
+                    #     if len(out_lines) % lines_per_chunk == 0:
+                    #         out_file.write(b"\n".join(out_lines) + b"\n")
+                    #         out_lines = []
+                    #
+                    # if len(out_lines) > 0:
+                    #     out_file.write(b"\n".join(out_lines) + b"\n")
                 else:
                     if tmp_dir_path:
                         makedirs(tmp_dir_path, exist_ok=True)
