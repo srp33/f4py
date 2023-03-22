@@ -1,5 +1,7 @@
 #TODO:
 #from concurrent.futures import ThreadPoolExecutor, as_completed
+#TODO:
+from contextlib import contextmanager
 from copy import deepcopy
 from datetime import datetime
 from glob import glob
@@ -22,10 +24,6 @@ from zstandard import ZstdCompressor, ZstdDecompressor
 FILE_KEY_ABBREVIATIONS_STATS = {"mccl": 3, "mctl": 6, "cnmccl": 10, "cnll": 11}
 FILE_KEY_ABBREVIATIONS_OTHER = {"ll": 4, "cmpr": 7}
 FILE_KEY_ABBREVIATIONS_NOCACHE = {"data": 1, "cc": 2, "ct": 5, "cndata": 8, "cncc": 9}
-
-def open_read_file(file_path, file_extension=""):
-    the_file = open(file_path + file_extension, 'rb')
-    return mmap(the_file.fileno(), 0, prot=PROT_READ)
 
 def read_str_from_file(file_path, file_extension=""):
     with open(file_path + file_extension, 'rb') as the_file:

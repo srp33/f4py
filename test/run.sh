@@ -26,10 +26,7 @@ dockerCommand="docker run -i -t --rm --platform linux/x86_64 --user $(id -u):$(i
 #$dockerCommand bash -c "time python3 build_tsv.py 250000 250000 500000 1000 data/large_wide.tsv"
 
 #TODO: Integrate f4 into the analysis paper tests. Check speed and optimize more, if needed.
-#        Figure out why it's going so slow in Parser.py to save large files in parallel.
-#          Narrow down where the slowness is happening.
-#        Make sure we are closing the file handle wherever we are opening it (or find a way to use a with statement).
-#          Remove the open_read_file function?
+#        Narrow down any additional slow spots.
 #        Remove lines_per_chunk from Parser? How to deal with read_length?
 #        Try potential other speed improvements:
 #          * Python 3.11

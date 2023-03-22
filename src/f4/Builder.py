@@ -454,28 +454,28 @@ def build_one_column_index(f4_file_path, index_column, tmp_dir_path, verbose, cu
     index_column_encoded = index_column.encode()
 
     print_message(f"Getting column meta information for {index_column} index for {f4_file_path}.", verbose)
-    file_data = initialize(f4_file_path)
-    select_columns, column_type_dict, column_coords_dict, bigram_size_dict = get_column_meta(file_data, set([index_column_encoded]), [])
+    with initialize(f4_file_path) as file_data:
+        select_columns, column_type_dict, column_coords_dict, bigram_size_dict = get_column_meta(file_data, set([index_column_encoded]), [])
 
-    index_column_type = column_type_dict[index_column_encoded]
-    coords = column_coords_dict[index_column_encoded]
-    values_positions = []
+        index_column_type = column_type_dict[index_column_encoded]
+        coords = column_coords_dict[index_column_encoded]
+        values_positions = []
 
-    parse_function = get_parse_row_value_function(file_data)
+        parse_function = get_parse_row_value_function(file_data)
 
-    print_message(f"Parsing values and positions for {index_column} index for {f4_file_path}.", verbose)
-    for row_index in range(file_data.stat_dict["num_rows"]):
-        value = parse_function(file_data, row_index, coords, bigram_size_dict=bigram_size_dict, column_name=index_column_encoded)
-        values_positions.append([value, row_index])
+        print_message(f"Parsing values and positions for {index_column} index for {f4_file_path}.", verbose)
+        for row_index in range(file_data.stat_dict["num_rows"]):
+            value = parse_function(file_data, row_index, coords, bigram_size_dict=bigram_size_dict, column_name=index_column_encoded)
+            values_positions.append([value, row_index])
 
-    print_message(f"Building index file for {index_column} index for {f4_file_path}.", verbose)
-    customize_index_values_positions(values_positions, [index_column_type], sort_first_column, custom_index_function)
-    write_index_files(values_positions, tmp_dir_path_data, tmp_dir_path_other)
+        print_message(f"Building index file for {index_column} index for {f4_file_path}.", verbose)
+        customize_index_values_positions(values_positions, [index_column_type], sort_first_column, custom_index_function)
+        write_index_files(values_positions, tmp_dir_path_data, tmp_dir_path_other)
 
-    index_file_path = get_index_file_path(f4_file_path, index_column, custom_index_function)
-    combine_into_single_file(tmp_dir_path_data, tmp_dir_path_other, index_file_path)
+        index_file_path = get_index_file_path(f4_file_path, index_column, custom_index_function)
+        combine_into_single_file(tmp_dir_path_data, tmp_dir_path_other, index_file_path)
 
-    print_message(f"Done building index file for {index_column} index for {f4_file_path}.", verbose)
+        print_message(f"Done building index file for {index_column} index for {f4_file_path}.", verbose)
 
 # TODO: Combine this function with the above one and make it generic enough to handle indexes with more columns.
 def build_two_column_index(f4_file_path, index_column_1, index_column_2, tmp_dir_path, verbose):
@@ -495,35 +495,35 @@ def build_two_column_index(f4_file_path, index_column_1, index_column_2, tmp_dir
     index_column_2_encoded = index_column_2.encode()
 
     print_message(f"Getting column meta information for {index_name} index.", verbose)
-    file_data = initialize(f4_file_path)
-    select_columns, column_type_dict, column_coords_dict, bigram_size_dict = get_column_meta(file_data, set([index_column_1_encoded, index_column_2_encoded]), [])
-    # TODO: Add logic to verify that index_column_1 and index_column_2 are valid.
+    with initialize(f4_file_path) as file_data:
+        select_columns, column_type_dict, column_coords_dict, bigram_size_dict = get_column_meta(file_data, set([index_column_1_encoded, index_column_2_encoded]), [])
+        # TODO: Add logic to verify that index_column_1 and index_column_2 are valid.
 
-    #line_length = file_data.stat_dict["ll"]
-    index_column_1_type = column_type_dict[index_column_1_encoded]
-    index_column_2_type = column_type_dict[index_column_2_encoded]
-    coords_1 = column_coords_dict[index_column_1_encoded]
-    coords_2 = column_coords_dict[index_column_2_encoded]
+        #line_length = file_data.stat_dict["ll"]
+        index_column_1_type = column_type_dict[index_column_1_encoded]
+        index_column_2_type = column_type_dict[index_column_2_encoded]
+        coords_1 = column_coords_dict[index_column_1_encoded]
+        coords_2 = column_coords_dict[index_column_2_encoded]
 
-    #decompressor = get_decompressor(decompression_type, decompressor)
-    parse_function = get_parse_row_value_function(file_data)
+        #decompressor = get_decompressor(decompression_type, decompressor)
+        parse_function = get_parse_row_value_function(file_data)
 
-    values_positions = []
-    print_message(f"Parsing values and positions for {index_name} index.", verbose)
-    for row_index in range(file_data.stat_dict["num_rows"]):
-        value_1 = parse_function(file_data, row_index, coords_1, bigram_size_dict=bigram_size_dict, column_name=index_column_1_encoded)
-        value_2 = parse_function(file_data, row_index, coords_2, bigram_size_dict=bigram_size_dict, column_name=index_column_2_encoded)
+        values_positions = []
+        print_message(f"Parsing values and positions for {index_name} index.", verbose)
+        for row_index in range(file_data.stat_dict["num_rows"]):
+            value_1 = parse_function(file_data, row_index, coords_1, bigram_size_dict=bigram_size_dict, column_name=index_column_1_encoded)
+            value_2 = parse_function(file_data, row_index, coords_2, bigram_size_dict=bigram_size_dict, column_name=index_column_2_encoded)
 
-        values_positions.append([value_1, value_2, row_index])
+            values_positions.append([value_1, value_2, row_index])
 
-    print_message(f"Building index file for {index_name}.", verbose)
-    customize_index_values_positions(values_positions, [index_column_1_type, index_column_2_type], sort_first_two_columns, do_nothing)
-    write_index_files(values_positions, tmp_dir_path_data, tmp_dir_path_other)
+        print_message(f"Building index file for {index_name}.", verbose)
+        customize_index_values_positions(values_positions, [index_column_1_type, index_column_2_type], sort_first_two_columns, do_nothing)
+        write_index_files(values_positions, tmp_dir_path_data, tmp_dir_path_other)
 
-    index_file_path = get_index_file_path(f4_file_path, index_name)
-    combine_into_single_file(tmp_dir_path_data, tmp_dir_path_other, index_file_path)
+        index_file_path = get_index_file_path(f4_file_path, index_name)
+        combine_into_single_file(tmp_dir_path_data, tmp_dir_path_other, index_file_path)
 
-    print_message(f"Done building two-column index file for {index_name}.", verbose)
+        print_message(f"Done building two-column index file for {index_name}.", verbose)
 
 def customize_index_values_positions(values_positions, column_types, sort_function, custom_index_function):
     # Iterate through each "column" except the last one (which has row_indices) and convert the data.

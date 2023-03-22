@@ -750,8 +750,8 @@ for compression_type in [None]:
 #for compression_type in ["dictionary"]:
 #for compression_type in ["zstd"]:
     # Medium tests
-    #run_larger_tests(num_threads=1, size="medium", discrete1_index=11, numeric1_index=21, rebuild=True, compression_type=compression_type)
-    #run_larger_tests(num_threads=2, size="medium", discrete1_index=11, numeric1_index=21, rebuild=True, compression_type=compression_type)
+    run_larger_tests(num_threads=1, size="medium", discrete1_index=11, numeric1_index=21, rebuild=True, compression_type=compression_type)
+    run_larger_tests(num_threads=2, size="medium", discrete1_index=11, numeric1_index=21, rebuild=True, compression_type=compression_type)
 
     # Large tests
     #num_threads = 1
@@ -764,7 +764,7 @@ for compression_type in [None]:
     check_outputs = True
     #check_outputs = False
 
-    #run_larger_tests(num_threads=num_threads, size="large_tall", discrete1_index=251, numeric1_index=501, rebuild=rebuild, compression_type=compression_type, verbose=verbose, check_outputs=check_outputs)
+    run_larger_tests(num_threads=num_threads, size="large_tall", discrete1_index=251, numeric1_index=501, rebuild=rebuild, compression_type=compression_type, verbose=verbose, check_outputs=check_outputs)
     run_larger_tests(num_threads=num_threads, size="large_wide", discrete1_index=250001, numeric1_index=500001, rebuild=rebuild, compression_type=compression_type, verbose=verbose, check_outputs=check_outputs)
 
 print("All tests passed!!")
