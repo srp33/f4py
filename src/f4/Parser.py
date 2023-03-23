@@ -1,3 +1,5 @@
+import os.path
+
 from .Utilities import *
 
 #####################################################
@@ -461,10 +463,13 @@ def query(data_file_path, fltr=NoFilter(), select_columns=[], out_file_path=None
 
                     read_length = 1000000
                     for chunk_number in range(num_parallel):
-                        with open(f"/{tmp_dir_path}/{chunk_number}", "rb") as read_file:
-                            with mmap(read_file.fileno(), 0, prot=PROT_READ) as mmap_handle:
-                                for start_pos in range(0, len(mmap_handle), read_length):
-                                    out_file.write(mmap_handle[start_pos:(start_pos + read_length)])
+                        chunk_file_path = f"/{tmp_dir_path}/{chunk_number}"
+
+                        if os.path.exists(chunk_file_path):
+                            with open(chunk_file_path, "rb") as read_file:
+                                with mmap(read_file.fileno(), 0, prot=PROT_READ) as mmap_handle:
+                                    for start_pos in range(0, len(mmap_handle), read_length):
+                                        out_file.write(mmap_handle[start_pos:(start_pos + read_length)])
 
                         remove(f"/{tmp_dir_path}/{chunk_number}")
         else:
