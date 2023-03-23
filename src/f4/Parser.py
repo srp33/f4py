@@ -1,5 +1,3 @@
-import os.path
-
 from .Utilities import *
 
 #####################################################
@@ -39,13 +37,9 @@ class __SimpleBaseFilter(NoFilter):
         return set([self.column_name])
 
     def _filter_column_values(self, data_file_path, row_indices, column_coords_dict, bigram_size_dict):
-        #TODO: Pass this into the function rather than re-initializing.
-        #      Probably move this entire function out of here.
         with initialize(data_file_path) as file_data:
             coords = column_coords_dict[self.column_name]
 
-            # This avoids having to check the decompression type each time we parse a value.
-            #decompressor = get_decompressor(decompression_type, decompressor)
             parse_function = get_parse_row_value_function(file_data)
 
             passing_row_indices = set()
@@ -69,8 +63,7 @@ class __OperatorFilter(__SimpleBaseFilter):
 
     def _filter_indexed_column_values(self, file_data, end_index, num_parallel):
         index_file_path = get_index_file_path(file_data.data_file_path, self.column_name.decode())
-        #TODO: Pass this into the function rather than re-initializing.
-        #      Probably move this entire function out of here.
+
         with initialize(index_file_path) as index_file_data:
             return filter_using_operator(index_file_data, self, end_index, num_parallel)
 
@@ -121,8 +114,7 @@ class StartsWithFilter(__SimpleBaseFilter):
 
     def _filter_indexed_column_values(self, file_data, end_index, num_parallel):
         index_file_path = get_index_file_path(file_data.data_file_path, self.column_name.decode())
-        #TODO: Pass this into the function rather than re-initializing.
-        #      Probably move this entire function out of here.
+
         with initialize(index_file_path) as index_file_data:
             return get_passing_row_indices_with_filter(index_file_data, self, end_index, num_parallel)
 
@@ -140,16 +132,12 @@ class EndsWithFilter(StartsWithFilter):
         if path.exists(custom_index_file_path):
             custom_fltr = StartsWithFilter(self.column_name.decode(), custom_index_function(self.value).decode())
 
-            # TODO: Pass this into the function rather than re-initializing.
-            #      Probably move this entire function out of here.
             with initialize(custom_index_file_path) as index_file_data:
                 return get_passing_row_indices_with_filter(index_file_data, custom_fltr, end_index, num_parallel)
         else:
             index_file_path = get_index_file_path(file_data.data_file_path, self.column_name.decode())
-            # TODO: Pass this into the function rather than re-initializing.
-            #      Probably move this entire function out of here.
+
             with initialize(index_file_path) as index_file_data:
-                #line_length = file_data.stat_dict["ll"]
                 coords = parse_data_coords(index_file_data, [0, 1])
 
                 return get_passing_row_indices(index_file_data, self, coords[0], coords[1], 0, end_index)
@@ -164,10 +152,7 @@ class LikeFilter(__SimpleBaseFilter):
     def _filter_indexed_column_values(self, file_data, end_index, num_parallel):
         index_file_path = get_index_file_path(file_data.data_file_path, self.column_name.decode())
 
-        #TODO: Pass this into the function rather than re-initializing.
-        #      Probably move this entire function out of here.
         with initialize(index_file_path) as index_file_data:
-            #line_length = file_data.stat_dict["ll"]
             coords = parse_data_coords(index_file_data, [0, 1])
 
             return get_passing_row_indices(index_file_data, self, coords[0], coords[1], 0, end_index)
@@ -186,9 +171,6 @@ class HeadFilter(NoFilter):
 
     def _get_column_name_set(self):
         return self.select_columns_set
-
-    # def _get_num_rows(self, data_file_path):
-    #     return get_num_rows(data_file_path)
 
     def _filter_column_values(self, data_file_path, row_indices, column_coords_dict, bigram_size_dict):
         return set(range(min(get_num_rows(data_file_path), self.n))) & row_indices
@@ -258,8 +240,6 @@ class AndFilter(__CompositeFilter):
             two_column_index_file_path = get_index_file_path(file_data.data_file_path, two_column_index_name)
 
             if path.exists(two_column_index_file_path):
-                # TODO: Pass this into the function rather than re-initializing.
-                #      Probably move this entire function out of here.
                 with initialize(two_column_index_file_path) as index_file_data:
                     coords = parse_data_coords(index_file_data, [0, 1, 2])
 
@@ -322,8 +302,6 @@ class __RangeFilter(__CompositeFilter):
     def _filter_indexed_column_values(self, file_data, end_index, num_parallel):
         index_file_path = get_index_file_path(file_data.data_file_path, self.filter1.column_name.decode())
 
-        #TODO: Pass this into the function rather than re-initializing.
-        #      Probably move this entire function out of here.
         with initialize(index_file_path) as index_file_data:
             coords = parse_data_coords(index_file_data, [0, 1])
 
@@ -368,12 +346,6 @@ class FileData:
         self.decompression_type = decompression_type
         self.decompressor = decompressor
 
-    # def __enter__(self):
-    #     print(f"Entering {self.data_file_path}")
-    #
-    # def __exit__(self, exc_type, exc_value, exc_tb):
-    #     print(f"Exiting {self.data_file_path}!!")
-
 #####################################################
 # Public function(s)
 #####################################################
@@ -391,16 +363,6 @@ def query(data_file_path, fltr=NoFilter(), select_columns=[], out_file_path=None
         out_file_path(str): A path to a file that will store the output data. If None is specified, the data will be directed to standard output.
         out_file_type (str): The output file type. Currently, the only supported value is tsv.
     """
-    # with open(out_file_path, "wb") as out_file:
-    #     read_length = 1000000
-    #
-    #     for chunk_number in [0]:
-    #         chunk_file_path = f"/{tmp_dir_path}/{chunk_number}"
-    #
-    #         with open(chunk_file_path, "rb") as read_file:
-    #             with mmap(read_file.fileno(), 0, prot=PROT_READ) as mmap_read_obj:
-    #                 for start_pos in range(0, len(mmap_read_obj), read_length):
-    #                     out_file.write(mmap_read_obj[start_pos:(start_pos + read_length)])
 
     if not isinstance(data_file_path, str):
         raise Exception("You must specify data_file_path as an str value.")
@@ -424,9 +386,6 @@ def query(data_file_path, fltr=NoFilter(), select_columns=[], out_file_path=None
         global joblib
         joblib = __import__('joblib', globals(), locals())
 
-    # file_data = None
-    #
-    # try:
     with initialize(data_file_path) as file_data:
         # Store column indices and types in dictionaries so we only have to retrieve
         # each once, even if we use the same column in multiple filters.
@@ -517,11 +476,6 @@ def query(data_file_path, fltr=NoFilter(), select_columns=[], out_file_path=None
 
                 if row_index != keep_row_indices[-1]:
                     sys.stdout.buffer.write(b"\n")
-    # except Exception:
-    #     raise Exception
-    # finally:
-    #     if file_data:
-    #         file_data.file_handle.close()
 
 def head(data_file_path, n = 10, select_columns=None, out_file_path=None, out_file_type="tsv"):
     if not select_columns:
@@ -586,8 +540,6 @@ def initialize(data_file_path):
             stat_dict["num_rows"] = -1
 
             if "cmpr" in other_dict:
-                # decompression_text_coords = file_map_dict["cmpr"]
-                # decompression_text = file_handle[decompression_text_coords[0]:decompression_text_coords[1]]
                 decompression_text = other_dict["cmpr"]
 
                 if decompression_text == b"z":
@@ -873,7 +825,6 @@ def get_identifier_row_index(file_data, query_value, end_index, data_prefix=""):
     if end_index == 0:
         return -1
 
-    #line_length = file_data.stat_dict[data_prefix + "ll"]
     value_coords = parse_data_coords(file_data, [0], data_prefix=data_prefix)[0]
     position_coords = parse_data_coords(file_data, [1], data_prefix=data_prefix)[0]
 

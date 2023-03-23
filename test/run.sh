@@ -26,14 +26,11 @@ dockerCommand="docker run -i -t --rm --platform linux/x86_64 --user $(id -u):$(i
 #$dockerCommand bash -c "time python3 build_tsv.py 250000 250000 500000 1000 data/large_wide.tsv"
 
 #TODO: Integrate f4 into the analysis paper tests. Check speed and optimize more, if needed.
-#        Narrow down any additional slow spots.
 #        Try potential other speed improvements:
 #          * Python 3.11
 #          * PyPi.
 #          * https://github.com/exaloop/codon
 #          * https://nuitka.net (compiles your Python code to C, is supposed to achieve speedups of 3x or greater).
-#TODO: Address remaining TODO items in the code, remove unnecessary commented code.
-#TODO: Run this script from beginning to end as a final check.
 
 #######################################################
 # Run tests

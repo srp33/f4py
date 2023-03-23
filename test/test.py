@@ -740,7 +740,7 @@ def run_all_small_tests():
     for file_path in glob.glob(f"{f4_file_path}*"):
         os.unlink(file_path)
 
-#run_all_small_tests()
+run_all_small_tests()
 
 ##for compression_type in [None, "dictionary", "zstd"]:
 for compression_type in [None, "zstd"]:
