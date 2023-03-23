@@ -471,7 +471,7 @@ def query(data_file_path, fltr=NoFilter(), select_columns=[], out_file_path=None
                                     for start_pos in range(0, len(mmap_handle), read_length):
                                         out_file.write(mmap_handle[start_pos:(start_pos + read_length)])
 
-                        remove(f"/{tmp_dir_path}/{chunk_number}")
+                            remove(f"/{tmp_dir_path}/{chunk_number}")
         else:
             sys.stdout.buffer.write(b"\t".join(select_columns) + b"\n") # Header line
 
