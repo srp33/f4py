@@ -31,6 +31,7 @@
     Mention .gz file support.
     Mention that if they specify tmp_dir_path, we assume that it is empty. It will not work if it is not.
 * Set up readthedocs.
+* Address remaining TODO items in the code, remove unnecessary commented code.
 
 #####################################################
 # Rust conversion:

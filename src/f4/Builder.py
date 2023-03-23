@@ -263,11 +263,7 @@ def parse_columns_chunk(delimited_file_path, delimiter, comment_prefix, start_in
                     #column_compression_dicts[i]["map"][bigram] = int2ba(j, length = length).to01()
                     column_compression_dicts[i]["map"][bigram] = j.to_bytes(length = num_bytes, byteorder = "big")
 
-                #TODO: Does this work? If not, do we need to iterate the file again?
                 column_sizes_dict[i] = column_max_length_dict[i] * num_bytes
-                # for unique_value in unique_values:
-                #     compressed_length = len(compress_using_2_grams(unique_value, column_compression_dicts[i]["map"]))
-                #     column_sizes_dict[i] = max(column_sizes_dict[i], compressed_length)
 
     return column_sizes_dict, column_types_dict, column_compression_dicts, num_rows
 
@@ -287,7 +283,6 @@ def get_line_lengths_dict(delimited_file_path, tmp_dir_path_chunks, delimiter, c
     return line_lengths_dict
 
 def write_rows_chunk(delimited_file_path, tmp_dir_path, delimiter, comment_prefix, compression_type, column_sizes, compression_dicts, chunk_number, start_index, end_index, num_rows_per_write, verbose):
-    #max_line_size = 0
     line_lengths_dict = {}
 
     if compression_type == "zstd":
@@ -329,23 +324,9 @@ def write_rows_chunk(delimited_file_path, tmp_dir_path, delimiter, comment_prefi
                 out_line = b"".join(out_items)
 
                 if compression_type == "zstd":
-                    #TODO
-                    # testing = False
-                    # if out_line.startswith(b"Row2    B") or out_line.startswith(b"Row1    B") or out_line.startswith(b"Row3    "):
-                    #     # print("build test before")
-                    #     # print(out_line)
-                    #     testing = True
                     out_line = compressor.compress(out_line)
-                    # if testing:
-                    #     print("build test after")
-                    #     print(out_line)
-                    #     decompressor = ZstdDecompressor()
-                    #     print(decompressor.decompress(out_line))
 
-                #line_size = len(out_line)
                 line_lengths_dict[line_index] = len(out_line)
-                #max_line_size = max([max_line_size, line_size])
-
                 out_lines.append(out_line)
 
                 if len(out_lines) % num_rows_per_write == 0:
@@ -356,7 +337,6 @@ def write_rows_chunk(delimited_file_path, tmp_dir_path, delimiter, comment_prefi
             if len(out_lines) > 0:
                 chunk_file.write(b"".join(out_lines))
 
-    #return max_line_size
     return line_lengths_dict
 
 def exclude_comments_and_header(in_file, comment_prefix):
@@ -502,13 +482,11 @@ def build_two_column_index(f4_file_path, index_column_1, index_column_2, tmp_dir
         select_columns, column_type_dict, column_coords_dict, bigram_size_dict = get_column_meta(file_data, set([index_column_1_encoded, index_column_2_encoded]), [])
         # TODO: Add logic to verify that index_column_1 and index_column_2 are valid.
 
-        #line_length = file_data.stat_dict["ll"]
         index_column_1_type = column_type_dict[index_column_1_encoded]
         index_column_2_type = column_type_dict[index_column_2_encoded]
         coords_1 = column_coords_dict[index_column_1_encoded]
         coords_2 = column_coords_dict[index_column_2_encoded]
 
-        #decompressor = get_decompressor(decompression_type, decompressor)
         parse_function = get_parse_row_value_function(file_data)
 
         values_positions = []

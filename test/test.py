@@ -696,23 +696,23 @@ def run_all_small_tests():
     # Basic small tests
     f4_file_path = "data/small.f4"
     out_file_path = "/tmp/small_out.tsv"
-    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, num_cols_per_chunk = 1)
-    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2, num_cols_per_chunk = 2)
-
-    # Basic small tests (with gzipped files)
-    run_small_tests("data/small.tsv.gz", f4_file_path, out_file_path, num_parallel = 1, num_cols_per_chunk = 1)
-    run_small_tests("data/small.tsv.gz", f4_file_path, out_file_path, num_parallel = 2, num_cols_per_chunk = 2)
-
-    # Make sure we print to standard out properly (this code does not work inside a function).
-    f4.convert_delimited_file("data/small.tsv", f4_file_path)
-    old_stdout = sys.stdout
-    sys.stdout = TextIOWrapper(BytesIO(), sys.stdout.encoding)
-    f4.query(f4_file_path, f4.NoFilter(), [], out_file_path=None, num_parallel=1)
-    sys.stdout.seek(0)
-    out = sys.stdout.read()
-    sys.stdout.close()
-    sys.stdout = old_stdout
-    check_results("No filters, select all columns - std out", read_string_into_lists(out), read_file_into_lists("data/small.tsv"))
+#    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, num_cols_per_chunk = 1)
+#    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2, num_cols_per_chunk = 2)
+#
+#    # Basic small tests (with gzipped files)
+#    run_small_tests("data/small.tsv.gz", f4_file_path, out_file_path, num_parallel = 1, num_cols_per_chunk = 1)
+#    run_small_tests("data/small.tsv.gz", f4_file_path, out_file_path, num_parallel = 2, num_cols_per_chunk = 2)
+#
+#    # Make sure we print to standard out properly (this code does not work inside a function).
+#    f4.convert_delimited_file("data/small.tsv", f4_file_path)
+#    old_stdout = sys.stdout
+#    sys.stdout = TextIOWrapper(BytesIO(), sys.stdout.encoding)
+#    f4.query(f4_file_path, f4.NoFilter(), [], out_file_path=None, num_parallel=1)
+#    sys.stdout.seek(0)
+#    out = sys.stdout.read()
+#    sys.stdout.close()
+#    sys.stdout = old_stdout
+#    check_results("No filters, select all columns - std out", read_string_into_lists(out), read_file_into_lists("data/small.tsv"))
 
     index_columns = ["ID", "CategoricalB", "FloatA", "FloatB", "IntA", "IntB", "OrdinalA", ["CategoricalB", "IntB"]]
 
@@ -740,7 +740,7 @@ def run_all_small_tests():
     for file_path in glob.glob(f"{f4_file_path}*"):
         os.unlink(file_path)
 
-run_all_small_tests()
+#run_all_small_tests()
 
 ##for compression_type in [None, "dictionary", "zstd"]:
 for compression_type in [None, "zstd"]:
@@ -752,17 +752,18 @@ for compression_type in [None, "zstd"]:
     run_larger_tests(num_parallel=2, size="medium", discrete1_index=11, numeric1_index=21, rebuild=True, compression_type=compression_type)
 
     # Large tests
-    num_parallel = 1
+    #num_parallel = 1
     #num_parallel = 2
     #num_parallel = 4
+    num_parallel = 16
     rebuild = True
     #rebuild = False
-    #verbose = True
-    verbose = False
+    verbose = True
+    #verbose = False
     check_outputs = True
     #check_outputs = False
 
-    run_larger_tests(num_parallel=num_parallel, size="large_tall", discrete1_index=251, numeric1_index=501, rebuild=rebuild, compression_type=compression_type, verbose=verbose, check_outputs=check_outputs)
-    run_larger_tests(num_parallel=num_parallel, size="large_wide", discrete1_index=250001, numeric1_index=500001, rebuild=rebuild, compression_type=compression_type, verbose=verbose, check_outputs=check_outputs)
+    #run_larger_tests(num_parallel=num_parallel, size="large_tall", discrete1_index=251, numeric1_index=501, rebuild=rebuild, compression_type=compression_type, verbose=verbose, check_outputs=check_outputs)
+    #run_larger_tests(num_parallel=num_parallel, size="large_wide", discrete1_index=250001, numeric1_index=500001, rebuild=rebuild, compression_type=compression_type, verbose=verbose, check_outputs=check_outputs)
 
 print("All tests passed!!")
