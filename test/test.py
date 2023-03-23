@@ -763,7 +763,7 @@ for compression_type in [None, "zstd"]:
     check_outputs = True
     #check_outputs = False
 
-    #run_larger_tests(num_parallel=num_parallel, size="large_tall", discrete1_index=251, numeric1_index=501, rebuild=rebuild, compression_type=compression_type, verbose=verbose, check_outputs=check_outputs)
-    #run_larger_tests(num_parallel=num_parallel, size="large_wide", discrete1_index=250001, numeric1_index=500001, rebuild=rebuild, compression_type=compression_type, verbose=verbose, check_outputs=check_outputs)
+    run_larger_tests(num_parallel=num_parallel, size="large_tall", discrete1_index=251, numeric1_index=501, rebuild=rebuild, compression_type=compression_type, verbose=verbose, check_outputs=check_outputs)
+    run_larger_tests(num_parallel=num_parallel, size="large_wide", discrete1_index=250001, numeric1_index=500001, rebuild=rebuild, compression_type=compression_type, verbose=verbose, check_outputs=check_outputs)
 
 print("All tests passed!!")
