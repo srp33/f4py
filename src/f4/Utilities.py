@@ -1,6 +1,3 @@
-#TODO:
-#from concurrent.futures import ThreadPoolExecutor, as_completed
-#TODO:
 from contextlib import contextmanager
 from copy import deepcopy
 from datetime import datetime
@@ -8,7 +5,6 @@ from glob import glob
 import gzip
 from fastnumbers import isint, isfloat, fast_int, fast_float
 from itertools import chain
-from joblib import Parallel, delayed
 from math import ceil, log
 from mmap import mmap, PROT_READ
 from msgspec import msgpack
@@ -149,7 +145,7 @@ def remove_tmp_dir(tmp_dir_path):
             print(e)
             pass
 
-def combine_into_single_file(tmp_dir_path_chunks, tmp_dir_path_outputs, f4_file_path, num_threads=1, num_rows_per_write=1):
+def combine_into_single_file(tmp_dir_path_chunks, tmp_dir_path_outputs, f4_file_path, num_parallel=1, num_rows_per_write=1):
     def _create_file_map(start_end_positions):
         start_end_dict = {}
 
@@ -201,15 +197,15 @@ def combine_into_single_file(tmp_dir_path_chunks, tmp_dir_path_outputs, f4_file_
     with open(f4_file_path, "wb") as f4_file:
         f4_file.write(file_map_serialized)
 
-        _add_data_chunks(tmp_dir_path_chunks, f4_file, num_threads, num_rows_per_write)
+        _add_data_chunks(tmp_dir_path_chunks, f4_file, num_parallel, num_rows_per_write)
 
         for other_file_path in other_files:
             f4_file.write(read_str_from_file(other_file_path))
 
-def _add_data_chunks(tmp_dir_path_chunks, out_file_handle, num_threads, num_rows_per_write):
+def _add_data_chunks(tmp_dir_path_chunks, out_file_handle, num_parallel, num_rows_per_write):
     out_lines = []
 
-    for i in range(num_threads):
+    for i in range(num_parallel):
         chunk_file_path = f"{tmp_dir_path_chunks}{i}"
 
         if not path.exists(chunk_file_path):

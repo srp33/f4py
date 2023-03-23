@@ -32,7 +32,6 @@ dockerCommand="docker run -i -t --rm --platform linux/x86_64 --user $(id -u):$(i
 #          * PyPi.
 #          * https://github.com/exaloop/codon
 #          * https://nuitka.net (compiles your Python code to C, is supposed to achieve speedups of 3x or greater).
-#TODO: Modify class structure for Filters so inheritance is not used.
 #TODO: Address remaining TODO items in the code, remove unnecessary commented code.
 #TODO: Run this script from beginning to end as a final check.
 

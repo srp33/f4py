@@ -5,7 +5,7 @@ from .Utilities import *
 # Public function(s)
 #####################################################
 
-def convert_delimited_file(delimited_file_path, f4_file_path, index_columns=[], delimiter="\t", comment_prefix="#", compression_type=None, num_threads=1, num_cols_per_chunk=None, num_rows_per_write=None, tmp_dir_path=None, verbose=False):
+def convert_delimited_file(delimited_file_path, f4_file_path, index_columns=[], delimiter="\t", comment_prefix="#", compression_type=None, num_parallel=1, num_cols_per_chunk=None, num_rows_per_write=None, tmp_dir_path=None, verbose=False):
     if type(delimiter) != str:
         raise Exception("The delimiter value must be a string.")
 
@@ -23,8 +23,6 @@ def convert_delimited_file(delimited_file_path, f4_file_path, index_columns=[], 
         if comment_prefix == "":
             comment_prefix = None
 
-    print_message(f"Converting from {delimited_file_path}", verbose)
-
     # Guess an optimal value for this parameter, if not specified.
     if not num_rows_per_write:
         raw_num_rows = 0
@@ -32,8 +30,13 @@ def convert_delimited_file(delimited_file_path, f4_file_path, index_columns=[], 
             for line in in_file:
                 raw_num_rows += 1
 
-        num_rows_per_write = ceil(raw_num_rows / (num_threads * 2) + 1)
+        num_rows_per_write = ceil(raw_num_rows / (num_parallel * 2) + 1)
 
+    if num_parallel > 1:
+        global joblib
+        joblib = __import__('joblib', globals(), locals())
+
+    print_message(f"Converting from {delimited_file_path}", verbose)
     tmp_dir_path_chunks, tmp_dir_path_outputs, tmp_dir_path_indexes = prepare_tmp_dirs(tmp_dir_path)
 
     # Get column names. Remove any leading or trailing white space around the column names.
@@ -54,15 +57,15 @@ def convert_delimited_file(delimited_file_path, f4_file_path, index_columns=[], 
 
     # Iterate through the lines to summarize each column.
     print_message(f"Summarizing each column in {delimited_file_path}", verbose)
-    if num_threads == 1:
+    if num_parallel == 1:
         chunk_results = [parse_columns_chunk(delimited_file_path, delimiter, comment_prefix, 0, num_cols, num_rows_per_write, compression_type, verbose)]
     else:
         # Guess an optimal value for this parameter, if not specified.
         if not num_cols_per_chunk:
-            num_cols_per_chunk = ceil(num_cols / (num_threads * 2) + 1)
+            num_cols_per_chunk = ceil(num_cols / (num_parallel * 2) + 1)
 
         column_chunk_indices = generate_chunk_ranges(num_cols, num_cols_per_chunk)
-        chunk_results = Parallel(n_jobs=num_threads)(delayed(parse_columns_chunk)(delimited_file_path, delimiter, comment_prefix, column_chunk[0], column_chunk[1], num_rows_per_write, compression_type, verbose) for column_chunk in column_chunk_indices)
+        chunk_results = joblib.Parallel(n_jobs=num_parallel, mmap_mode=None)(joblib.delayed(parse_columns_chunk)(delimited_file_path, delimiter, comment_prefix, column_chunk[0], column_chunk[1], num_rows_per_write, compression_type, verbose) for column_chunk in column_chunk_indices)
 
     # Summarize the column sizes and types across the chunks.
     column_sizes = []
@@ -87,13 +90,13 @@ def convert_delimited_file(delimited_file_path, f4_file_path, index_columns=[], 
         raise Exception(f"A header row but no data rows were detected in {delimited_file_path}")
 
     print_message(f"Parsing chunks of {delimited_file_path} and saving to temp directory ({tmp_dir_path_chunks})", verbose)
-    line_lengths_dict = get_line_lengths_dict(delimited_file_path, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes, column_compression_dicts, num_rows, num_threads, num_rows_per_write, verbose)
+    line_lengths_dict = get_line_lengths_dict(delimited_file_path, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes, column_compression_dicts, num_rows, num_parallel, num_rows_per_write, verbose)
 
     print_message(f"Saving meta files for {f4_file_path}", verbose)
     write_meta_files(tmp_dir_path_outputs, column_sizes, line_lengths_dict, column_names, column_types, compression_type, column_compression_dicts, num_rows)
 
     print_message(f"Combining all data into a single file for {delimited_file_path}", verbose)
-    combine_into_single_file(tmp_dir_path_chunks, tmp_dir_path_outputs, f4_file_path, num_threads, num_rows_per_write)
+    combine_into_single_file(tmp_dir_path_chunks, tmp_dir_path_outputs, f4_file_path, num_parallel, num_rows_per_write)
 
     if index_columns:
         build_indexes(f4_file_path, index_columns, tmp_dir_path_indexes, verbose)
@@ -268,14 +271,14 @@ def parse_columns_chunk(delimited_file_path, delimiter, comment_prefix, start_in
 
     return column_sizes_dict, column_types_dict, column_compression_dicts, num_rows
 
-def get_line_lengths_dict(delimited_file_path, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes, compression_dicts, num_rows, num_threads, num_rows_per_write, verbose):
-    if num_threads == 1:
+def get_line_lengths_dict(delimited_file_path, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes, compression_dicts, num_rows, num_parallel, num_rows_per_write, verbose):
+    if num_parallel == 1:
         line_lengths_dict = write_rows_chunk(delimited_file_path, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes, compression_dicts, 0, 0, num_rows, num_rows_per_write, verbose)
     else:
-        row_chunk_indices = generate_chunk_ranges(num_rows, ceil(num_rows / num_threads) + 1)
+        row_chunk_indices = generate_chunk_ranges(num_rows, ceil(num_rows / num_parallel) + 1)
 
-        # Find the line length.
-        line_lengths_dicts = Parallel(n_jobs=num_threads)(delayed(write_rows_chunk)(delimited_file_path, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes, compression_dicts, i, row_chunk[0], row_chunk[1], num_rows_per_write, verbose) for i, row_chunk in enumerate(row_chunk_indices))
+        # We are doing the import here because it is slow.
+        line_lengths_dicts = joblib.Parallel(n_jobs=num_parallel, mmap_mode=None)(joblib.delayed(write_rows_chunk)(delimited_file_path, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes, compression_dicts, i, row_chunk[0], row_chunk[1], num_rows_per_write, verbose) for i, row_chunk in enumerate(row_chunk_indices))
 
         line_lengths_dict = {}
         for x in line_lengths_dicts:

@@ -64,10 +64,10 @@ def fail_test(message):
     print(f"FAIL: {message}")
     sys.exit(1)
 
-def run_small_tests(in_file_path, f4_file_path, out_file_path, num_threads = 1, num_cols_per_chunk = 1, compression_type=None, index_columns=None):
+def run_small_tests(in_file_path, f4_file_path, out_file_path, num_parallel = 1, num_cols_per_chunk = 1, compression_type=None, index_columns=None):
     print("-------------------------------------------------------")
     print(f"Running all tests for {in_file_path}")
-    print(f"num_threads: {num_threads}")
+    print(f"num_parallel: {num_parallel}")
     print(f"num_cols_per_chunk: {num_cols_per_chunk}")
     print(f"compression_type: {compression_type}")
     print(f"index_columns: {index_columns}")
@@ -77,7 +77,7 @@ def run_small_tests(in_file_path, f4_file_path, out_file_path, num_threads = 1, 
     for file_path in glob.glob(f"{f4_file_path}*"):
         os.unlink(file_path)
 
-    f4.convert_delimited_file(in_file_path, f4_file_path, compression_type=compression_type, num_threads=num_threads, num_cols_per_chunk=num_cols_per_chunk, index_columns=index_columns)
+    f4.convert_delimited_file(in_file_path, f4_file_path, compression_type=compression_type, num_parallel=num_parallel, num_cols_per_chunk=num_cols_per_chunk, index_columns=index_columns)
 
     try:
         f4.query("bogus_file_path")
@@ -98,85 +98,85 @@ def run_small_tests(in_file_path, f4_file_path, out_file_path, num_threads = 1, 
     check_result("Column types", "CategoricalA column", f4.get_column_type_from_name(f4_file_path, "CategoricalA"), "s")
     check_result("Column types", "CategoricalB column", f4.get_column_type_from_name(f4_file_path, "CategoricalB"), "s")
 
-    f4.query(f4_file_path, f4.NoFilter(), [], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.NoFilter(), [], out_file_path, num_parallel=num_parallel)
     check_results("No filters, select all columns", read_file_into_lists(out_file_path), read_file_into_lists(in_file_path))
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.NoFilter(), ["ID","FloatA","FloatB","OrdinalA","OrdinalB","IntA","IntB","CategoricalA","CategoricalB"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.NoFilter(), ["ID","FloatA","FloatB","OrdinalA","OrdinalB","IntA","IntB","CategoricalA","CategoricalB"], out_file_path, num_parallel=num_parallel)
     check_results("No filters, select all columns explicitly", read_file_into_lists(out_file_path), read_file_into_lists(in_file_path))
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.NoFilter(), ["ID"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.NoFilter(), ["ID"], out_file_path, num_parallel=num_parallel)
     check_results("No filters, select first column", read_file_into_lists(out_file_path), [[b"ID"],[b"E"],[b"A"],[b"B"],[b"C"],[b"D"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.NoFilter(), ["CategoricalB"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.NoFilter(), ["CategoricalB"], out_file_path, num_parallel=num_parallel)
     check_results("No filters, select last column", read_file_into_lists(out_file_path), [[b"CategoricalB"],[b"Brown"],[b"Yellow"],[b"Yellow"],[b"Brown"],[b"Orange"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.NoFilter(), ["FloatA", "CategoricalB"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.NoFilter(), ["FloatA", "CategoricalB"], out_file_path, num_parallel=num_parallel)
     check_results("No filters, select two columns", read_file_into_lists(out_file_path), [[b"FloatA", b"CategoricalB"],[b"9.9", b"Brown"],[b"1.1", b"Yellow"],[b"2.2", b"Yellow"],[b"2.2", b"Brown"],[b"4.4", b"Orange"]])
     os.unlink(out_file_path)
 
     try:
-        f4.query(f4_file_path, f4.NoFilter(), ["ID", "InvalidColumn"], out_file_path, num_threads=num_threads)
+        f4.query(f4_file_path, f4.NoFilter(), ["ID", "InvalidColumn"], out_file_path, num_parallel=num_parallel)
         fail_test("Invalid column name in select.")
     except:
         pass_test("Invalid column name in select.")
 
-    f4.query(f4_file_path, f4.StringFilter("ID", operator.eq, "A"), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.StringFilter("ID", operator.eq, "A"), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("Filter by ID using equals filter", read_file_into_lists(out_file_path), [[b"FloatA"],[b"1.1"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.StringFilter("ID", operator.ne, "A"), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.StringFilter("ID", operator.ne, "A"), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("Filter by ID using not equals filter", read_file_into_lists(out_file_path), [[b"FloatA"],[b"9.9"],[b"2.2"],[b"2.2"],[b"4.4"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.StringFilter("ID", operator.ge, "A"), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.StringFilter("ID", operator.ge, "A"), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("Filter by ID using string >= filter", read_file_into_lists(out_file_path), [[b"FloatA"],[b"9.9"], [b"1.1"], [b"2.2"], [b"2.2"], [b"4.4"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.StringFilter("ID", operator.gt, "A"), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.StringFilter("ID", operator.gt, "A"), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("Filter by ID using string > filter", read_file_into_lists(out_file_path), [[b"FloatA"],[b"9.9"], [b"2.2"], [b"2.2"], [b"4.4"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.StringFilter("ID", operator.le, "A"), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.StringFilter("ID", operator.le, "A"), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("Filter by ID using string <= filter", read_file_into_lists(out_file_path), [[b"FloatA"],[b"1.1"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.StringFilter("ID", operator.lt, "A"), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.StringFilter("ID", operator.lt, "A"), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("Filter by ID using string < filter", read_file_into_lists(out_file_path), [[b"FloatA"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.IntRangeFilter("IntA", -100, 100), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.IntRangeFilter("IntA", -100, 100), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("IntA within -100 and 100", read_file_into_lists(out_file_path), [[b"FloatA"], [b"9.9"], [b"1.1"], [b"2.2"], [b"2.2"], [b"4.4"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.IntFilter("IntA", operator.eq, 7), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.IntFilter("IntA", operator.eq, 7), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("Int equals filter", read_file_into_lists(out_file_path), [[b"FloatA"],[b"2.2"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.IntFilter("IntA", operator.eq, 5), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.IntFilter("IntA", operator.eq, 5), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("Int equals filter - one match", read_file_into_lists(out_file_path), [[b"FloatA"],[b"1.1"], [b"4.4"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.IntFilter("IntA", operator.ne, 5), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.IntFilter("IntA", operator.ne, 5), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("Int not equals filter - two matches", read_file_into_lists(out_file_path), [[b"FloatA"],[b"9.9"],[b"2.2"],[b"2.2"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.FloatFilter("FloatA", operator.eq, 1.1), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.FloatFilter("FloatA", operator.eq, 1.1), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("Float equals filter - one match", read_file_into_lists(out_file_path), [[b"FloatA"],[b"1.1"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.FloatFilter("FloatA", operator.eq, 2.2), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.FloatFilter("FloatA", operator.eq, 2.2), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("Float equals filter - two matches", read_file_into_lists(out_file_path), [[b"FloatA"],[b"2.2"],[b"2.2"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.FloatFilter("FloatA", operator.ne, 1.1), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.FloatFilter("FloatA", operator.ne, 1.1), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("Float not equals filter", read_file_into_lists(out_file_path), [[b"FloatA"],[b"9.9"],[b"2.2"],[b"2.2"],[b"4.4"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.AndFilter(f4.IntFilter("IntA", operator.eq, 7), f4.FloatFilter("FloatA", operator.ne, 1.1)), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.AndFilter(f4.IntFilter("IntA", operator.eq, 7), f4.FloatFilter("FloatA", operator.ne, 1.1)), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("Two numeric filters", read_file_into_lists(out_file_path), [[b"FloatA"],[b"2.2"]])
     os.unlink(out_file_path)
 
@@ -205,7 +205,7 @@ def run_small_tests(in_file_path, f4_file_path, out_file_path, num_threads = 1, 
                f4.IntFilter("IntB", operator.eq, 77)
              )
     fltr = f4.AndFilter(or_1, or_2)
-    f4.query(f4_file_path, fltr, ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, fltr, ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("Nested or filters", read_file_into_lists(out_file_path), [[b"FloatA"],[b"2.2"],[b"2.2"],[b"4.4"]])
     os.unlink(out_file_path)
 
@@ -219,124 +219,124 @@ def run_small_tests(in_file_path, f4_file_path, out_file_path, num_threads = 1, 
              ),
              f4.FloatFilter("FloatB", operator.le, 44.4)
            )
-    f4.query(f4_file_path, fltr, ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, fltr, ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("Numeric filters and string filters", read_file_into_lists(out_file_path), [[b"FloatA"],[b"9.9"],[b"2.2"],[b"4.4"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.LikeFilter("CategoricalB", r"ow$"), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.LikeFilter("CategoricalB", r"ow$"), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("Like filter on categorical column", read_file_into_lists(out_file_path), [[b"FloatA"],[b"1.1"],[b"2.2"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.NotLikeFilter("CategoricalB", r"ow$"), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.NotLikeFilter("CategoricalB", r"ow$"), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("NotLike filter on categorical column", read_file_into_lists(out_file_path), [[b"FloatA"],[b"9.9"],[b"2.2"],[b"4.4"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.StartsWithFilter("CategoricalB", "Yell"), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.StartsWithFilter("CategoricalB", "Yell"), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("StartsWith - CategoricalB - Yell", read_file_into_lists(out_file_path), [[b"FloatA"],[b"1.1"],[b"2.2"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.StartsWithFilter("CategoricalB", "B"), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.StartsWithFilter("CategoricalB", "B"), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("StartsWith - CategoricalB - B", read_file_into_lists(out_file_path), [[b"FloatA"],[b"9.9"],[b"2.2"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.StartsWithFilter("CategoricalB", "Or"), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.StartsWithFilter("CategoricalB", "Or"), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("StartsWith - CategoricalB - Or", read_file_into_lists(out_file_path), [[b"FloatA"],[b"4.4"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.StartsWithFilter("CategoricalB", "Gr"), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.StartsWithFilter("CategoricalB", "Gr"), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("StartsWith - CategoricalB - Gr", read_file_into_lists(out_file_path), [[b"FloatA"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.EndsWithFilter("CategoricalB", "ow"), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.EndsWithFilter("CategoricalB", "ow"), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("EndsWith filter on categorical column", read_file_into_lists(out_file_path), [[b"FloatA"],[b"1.1"],[b"2.2"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.EndsWithFilter("CategoricalB", "own"), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.EndsWithFilter("CategoricalB", "own"), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("EndsWith filter on categorical column", read_file_into_lists(out_file_path), [[b"FloatA"],[b"9.9"],[b"2.2"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.EndsWithFilter("CategoricalB", "x"), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.EndsWithFilter("CategoricalB", "x"), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("EndsWith filter on categorical column", read_file_into_lists(out_file_path), [[b"FloatA"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.FloatRangeFilter("FloatA", -9.9, 4.4), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.FloatRangeFilter("FloatA", -9.9, 4.4), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("FloatA within -9.9 and 4.4", read_file_into_lists(out_file_path), [[b"FloatA"], [b"1.1"], [b"2.2"], [b"2.2"], [b"4.4"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.FloatRangeFilter("FloatA", 2.2, 4.4), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.FloatRangeFilter("FloatA", 2.2, 4.4), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("FloatA within 2.2 and 4.4", read_file_into_lists(out_file_path), [[b"FloatA"], [b"2.2"], [b"2.2"], [b"4.4"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.FloatRangeFilter("FloatA", 4.4, 9.9), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.FloatRangeFilter("FloatA", 4.4, 9.9), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("FloatA within 4.4 and 9.9", read_file_into_lists(out_file_path), [[b"FloatA"], [b"9.9"], [b"4.4"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.FloatRangeFilter("FloatA", 1.1, 1.1), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.FloatRangeFilter("FloatA", 1.1, 1.1), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("FloatA within 1.1 and 1.1", read_file_into_lists(out_file_path), [[b"FloatA"], [b"1.1"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.FloatRangeFilter("FloatA", 2.2, 2.2), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.FloatRangeFilter("FloatA", 2.2, 2.2), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("FloatA within 2.2 and 2.2", read_file_into_lists(out_file_path), [[b"FloatA"], [b"2.2"], [b"2.2"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.FloatRangeFilter("FloatA", 100.0, 1000.0), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.FloatRangeFilter("FloatA", 100.0, 1000.0), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("FloatA within 100 and 1000", read_file_into_lists(out_file_path), [[b"FloatA"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.IntRangeFilter("IntA", -100, 100), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.IntRangeFilter("IntA", -100, 100), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("IntA within -100 and 100", read_file_into_lists(out_file_path), [[b"FloatA"], [b"9.9"], [b"1.1"], [b"2.2"], [b"2.2"], [b"4.4"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.IntRangeFilter("IntA", 5, 8), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.IntRangeFilter("IntA", 5, 8), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("IntA within 5 and 8", read_file_into_lists(out_file_path), [[b"FloatA"], [b"9.9"], [b"1.1"], [b"2.2"], [b"2.2"], [b"4.4"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.IntRangeFilter("IntA", -8, -5), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.IntRangeFilter("IntA", -8, -5), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("IntA within -8 and -5", read_file_into_lists(out_file_path), [[b"FloatA"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.IntRangeFilter("IntA", 5, 7), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.IntRangeFilter("IntA", 5, 7), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("IntA within 5 and 7", read_file_into_lists(out_file_path), [[b"FloatA"], [b"9.9"], [b"1.1"], [b"2.2"], [b"4.4"]])
 
-    f4.query(f4_file_path, f4.IntRangeFilter("IntA", 6, 8), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.IntRangeFilter("IntA", 6, 8), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("IntA within 6 and 8", read_file_into_lists(out_file_path), [[b"FloatA"], [b"9.9"], [b"2.2"], [b"2.2"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.IntRangeFilter("IntA", 5, 5), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.IntRangeFilter("IntA", 5, 5), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("IntA within 5 and 5", read_file_into_lists(out_file_path), [[b"FloatA"], [b"1.1"], [b"4.4"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.IntRangeFilter("IntA", 6, 6), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.IntRangeFilter("IntA", 6, 6), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("IntA within 6 and 6", read_file_into_lists(out_file_path), [[b"FloatA"], [b"9.9"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.StringRangeFilter("OrdinalA", "High", "Medium"), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.StringRangeFilter("OrdinalA", "High", "Medium"), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("OrdinalA within High and Medium", read_file_into_lists(out_file_path), [[b"FloatA"], [b"9.9"], [b"1.1"], [b"2.2"], [b"2.2"], [b"4.4"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.StringRangeFilter("OrdinalA", "High", "Low"), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.StringRangeFilter("OrdinalA", "High", "Low"), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("OrdinalA within High and Low", read_file_into_lists(out_file_path), [[b"FloatA"], [b"9.9"], [b"1.1"], [b"2.2"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.StringRangeFilter("OrdinalA", "Low", "Medium"), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.StringRangeFilter("OrdinalA", "Low", "Medium"), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("OrdinalA within Low and Medium", read_file_into_lists(out_file_path), [[b"FloatA"], [b"9.9"], [b"1.1"], [b"2.2"], [b"4.4"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.StringRangeFilter("OrdinalA", "A", "Z"), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.StringRangeFilter("OrdinalA", "A", "Z"), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("OrdinalA within High and Medium", read_file_into_lists(out_file_path), [[b"FloatA"], [b"9.9"], [b"1.1"], [b"2.2"], [b"2.2"], [b"4.4"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.StringRangeFilter("OrdinalA", "A", "B"), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.StringRangeFilter("OrdinalA", "A", "B"), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("OrdinalA within High and Medium", read_file_into_lists(out_file_path), [[b"FloatA"]])
     os.unlink(out_file_path)
 
     fltr = f4.AndFilter(f4.StringRangeFilter("OrdinalA", "High", "Low"), f4.IntRangeFilter("IntA", 5, 6))
-    f4.query(f4_file_path, fltr, ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, fltr, ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("StringRangeFilter and IntRangeFilter", read_file_into_lists(out_file_path), [[b"FloatA"], [b"9.9"], [b"1.1"]])
     os.unlink(out_file_path)
 
     fltr = f4.AndFilter(f4.StringRangeFilter("OrdinalA", "High", "Low"), f4.FloatRangeFilter("FloatA", 0.0, 5.0))
-    f4.query(f4_file_path, fltr, ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, fltr, ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("StringRangeFilter and IntRangeFilter", read_file_into_lists(out_file_path), [[b"FloatA"], [b"1.1"], [b"2.2"]])
     os.unlink(out_file_path)
 
@@ -349,168 +349,168 @@ def run_small_tests(in_file_path, f4_file_path, out_file_path, num_threads = 1, 
     os.unlink(out_file_path)
 
     try:
-        f4.query(f4_file_path, FloatFilter("InvalidColumn", operator.eq, 1), ["FloatA"], out_file_path, num_threads=num_threads)
+        f4.query(f4_file_path, FloatFilter("InvalidColumn", operator.eq, 1), ["FloatA"], out_file_path, num_parallel=num_parallel)
         fail_test("Invalid column name in float filter.")
     except:
         pass_test("Invalid column name in float filter.")
 
     try:
-        f4.query(f4_file_path, FloatFilter(2, operator.eq, 1), ["FloatA"], out_file_path, num_threads=num_threads)
+        f4.query(f4_file_path, FloatFilter(2, operator.eq, 1), ["FloatA"], out_file_path, num_parallel=num_parallel)
         fail_test("Non-string column name in float filter.")
     except:
         pass_test("Non-string column name in float filter.")
 
     try:
-        f4.query(f4_file_path, StringFilter("CategoricalA", operator.eq, None), ["FloatA"], out_file_path, num_threads=num_threads)
+        f4.query(f4_file_path, StringFilter("CategoricalA", operator.eq, None), ["FloatA"], out_file_path, num_parallel=num_parallel)
         fail_test("None value to equals filter.")
     except:
         pass_test("None value to equals filter.")
 
     try:
-        f4.query(f4_file_path, StringFilter("CategoricalA", operator.eq, 1), ["FloatA"], out_file_path, num_threads=num_threads)
+        f4.query(f4_file_path, StringFilter("CategoricalA", operator.eq, 1), ["FloatA"], out_file_path, num_parallel=num_parallel)
         fail_test("Non-string value to equals filter.")
     except:
         pass_test("Non-string value to equals filter.")
 
     try:
-        f4.query(f4_file_path, FloatFilter("FloatA", operator.eq, "2"), ["FloatA"], out_file_path, num_threads=num_threads)
+        f4.query(f4_file_path, FloatFilter("FloatA", operator.eq, "2"), ["FloatA"], out_file_path, num_parallel=num_parallel)
         fail_test("Non-number specified in float filter.")
     except:
         pass_test("Non-number specified in float filter.")
 
     try:
-        f4.query(f4_file_path, FloatFilter("OrdinalA", operator.eq, 2), ["FloatA"], out_file_path, num_threads=num_threads)
+        f4.query(f4_file_path, FloatFilter("OrdinalA", operator.eq, 2), ["FloatA"], out_file_path, num_parallel=num_parallel)
         fail_test("Non-float column specified for float filter.")
     except:
         pass_test("Non-float column specified for float filter.")
 
     try:
-        f4.query(f4_file_path, "abc", ["FloatA"], out_file_path, num_threads=num_threads)
+        f4.query(f4_file_path, "abc", ["FloatA"], out_file_path, num_parallel=num_parallel)
         fail_test("Non-filter is passed as a filter.")
     except:
         pass_test("Non-filter is passed as a filter.")
 
-    f4.query(f4_file_path, f4.StringFilter("ID", operator.eq, "A"), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.StringFilter("ID", operator.eq, "A"), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("Filter ID = A", read_file_into_lists(out_file_path), [[b"FloatA"], [b"1.1"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.StringFilter("ID", operator.eq, "B"), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.StringFilter("ID", operator.eq, "B"), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("Filter ID = B", read_file_into_lists(out_file_path), [[b"FloatA"], [b"2.2"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.StringFilter("ID", operator.eq, "D"), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.StringFilter("ID", operator.eq, "D"), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("Filter ID = D", read_file_into_lists(out_file_path), [[b"FloatA"], [b"4.4"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.StringFilter("ID", operator.eq, "E"), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.StringFilter("ID", operator.eq, "E"), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("Filter ID = E", read_file_into_lists(out_file_path), [[b"FloatA"], [b"9.9"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.FloatFilter("FloatA", operator.gt, 0.0), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.FloatFilter("FloatA", operator.gt, 0.0), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("Filter FloatA > 0", read_file_into_lists(out_file_path), [[b"FloatA"], [b"9.9"], [b"1.1"], [b"2.2"], [b"2.2"], [b"4.4"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.FloatFilter("FloatA", operator.gt, 1.1), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.FloatFilter("FloatA", operator.gt, 1.1), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("Filter FloatA > 1.1", read_file_into_lists(out_file_path), [[b"FloatA"], [b"9.9"], [b"2.2"], [b"2.2"], [b"4.4"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.FloatFilter("FloatA", operator.gt, 2.2), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.FloatFilter("FloatA", operator.gt, 2.2), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("Filter FloatA > 2.2", read_file_into_lists(out_file_path), [[b"FloatA"], [b"9.9"], [b"4.4"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.FloatFilter("FloatA", operator.gt, 4.4), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.FloatFilter("FloatA", operator.gt, 4.4), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("Filter FloatA > 4.4", read_file_into_lists(out_file_path), [[b"FloatA"], [b"9.9"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.FloatFilter("FloatA", operator.gt, 9.9), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.FloatFilter("FloatA", operator.gt, 9.9), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("Filter FloatA > 9.9", read_file_into_lists(out_file_path), [[b"FloatA"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.FloatFilter("FloatA", operator.gt, 100.0), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.FloatFilter("FloatA", operator.gt, 100.0), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("Filter FloatA > 100", read_file_into_lists(out_file_path), [[b"FloatA"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.FloatFilter("FloatA", operator.ge, 0.0), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.FloatFilter("FloatA", operator.ge, 0.0), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("Filter FloatA >= 0", read_file_into_lists(out_file_path), [[b"FloatA"], [b"9.9"], [b"1.1"], [b"2.2"], [b"2.2"], [b"4.4"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.FloatFilter("FloatA", operator.ge, 1.1), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.FloatFilter("FloatA", operator.ge, 1.1), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("Filter FloatA >= 1.1", read_file_into_lists(out_file_path), [[b"FloatA"], [b"9.9"], [b"1.1"], [b"2.2"], [b"2.2"], [b"4.4"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.FloatFilter("FloatA", operator.ge, 2.2), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.FloatFilter("FloatA", operator.ge, 2.2), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("Filter FloatA >= 2.2", read_file_into_lists(out_file_path), [[b"FloatA"], [b"9.9"], [b"2.2"], [b"2.2"], [b"4.4"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.FloatFilter("FloatA", operator.ge, 4.4), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.FloatFilter("FloatA", operator.ge, 4.4), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("Filter FloatA >= 4.4", read_file_into_lists(out_file_path), [[b"FloatA"], [b"9.9"], [b"4.4"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.FloatFilter("FloatA", operator.ge, 9.9), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.FloatFilter("FloatA", operator.ge, 9.9), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("Filter FloatA >= 9.9", read_file_into_lists(out_file_path), [[b"FloatA"], [b"9.9"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.FloatFilter("FloatA", operator.ge, 100.0), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.FloatFilter("FloatA", operator.ge, 100.0), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("Filter FloatA >= 100", read_file_into_lists(out_file_path), [[b"FloatA"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.FloatFilter("FloatA", operator.lt, 0.0), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.FloatFilter("FloatA", operator.lt, 0.0), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("Filter FloatA < 0", read_file_into_lists(out_file_path), [[b"FloatA"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.FloatFilter("FloatA", operator.lt, 1.1), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.FloatFilter("FloatA", operator.lt, 1.1), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("Filter FloatA < 1.1", read_file_into_lists(out_file_path), [[b"FloatA"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.FloatFilter("FloatA", operator.lt, 2.2), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.FloatFilter("FloatA", operator.lt, 2.2), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("Filter FloatA < 2.2", read_file_into_lists(out_file_path), [[b"FloatA"], [b"1.1"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.FloatFilter("FloatA", operator.lt, 4.4), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.FloatFilter("FloatA", operator.lt, 4.4), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("Filter FloatA < 4.4", read_file_into_lists(out_file_path), [[b"FloatA"], [b"1.1"], [b"2.2"], [b"2.2"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.FloatFilter("FloatA", operator.lt, 9.9), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.FloatFilter("FloatA", operator.lt, 9.9), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("Filter FloatA < 9.9", read_file_into_lists(out_file_path), [[b"FloatA"], [b"1.1"], [b"2.2"], [b"2.2"], [b"4.4"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.FloatFilter("FloatA", operator.lt, 100.0), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.FloatFilter("FloatA", operator.lt, 100.0), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("Filter FloatA < 100", read_file_into_lists(out_file_path), [[b"FloatA"], [b"9.9"], [b"1.1"], [b"2.2"], [b"2.2"], [b"4.4"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.FloatFilter("FloatA", operator.le, 0.0), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.FloatFilter("FloatA", operator.le, 0.0), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("Filter FloatA <= 0", read_file_into_lists(out_file_path), [[b"FloatA"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.FloatFilter("FloatA", operator.le, 1.1), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.FloatFilter("FloatA", operator.le, 1.1), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("Filter FloatA <= 1.1", read_file_into_lists(out_file_path), [[b"FloatA"], [b"1.1"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.FloatFilter("FloatA", operator.le, 2.2), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.FloatFilter("FloatA", operator.le, 2.2), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("Filter FloatA <= 2.2", read_file_into_lists(out_file_path), [[b"FloatA"], [b"1.1"], [b"2.2"], [b"2.2"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.FloatFilter("FloatA", operator.le, 4.4), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.FloatFilter("FloatA", operator.le, 4.4), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("Filter FloatA <= 4.4", read_file_into_lists(out_file_path), [[b"FloatA"], [b"1.1"], [b"2.2"], [b"2.2"], [b"4.4"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.FloatFilter("FloatA", operator.le, 9.9), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.FloatFilter("FloatA", operator.le, 9.9), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("Filter FloatA <= 9.9", read_file_into_lists(out_file_path), [[b"FloatA"], [b"9.9"], [b"1.1"], [b"2.2"], [b"2.2"], [b"4.4"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.FloatFilter("FloatA", operator.le, 100.0), ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.FloatFilter("FloatA", operator.le, 100.0), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("Filter FloatA <= 100", read_file_into_lists(out_file_path), [[b"FloatA"], [b"9.9"], [b"1.1"], [b"2.2"], [b"2.2"], [b"4.4"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.StringFilter("OrdinalA", operator.eq, "Low"), ["ID"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.StringFilter("OrdinalA", operator.eq, "Low"), ["ID"], out_file_path, num_parallel=num_parallel)
     check_results("Categorical filter OrdinalA = Low", read_file_into_lists(out_file_path), [[b"ID"], [b"E"], [b"A"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.StringFilter("OrdinalA", operator.eq, "Med"), ["ID"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.StringFilter("OrdinalA", operator.eq, "Med"), ["ID"], out_file_path, num_parallel=num_parallel)
     check_results("Categorical filter OrdinalA = Med", read_file_into_lists(out_file_path), [[b"ID"], [b"C"], [b"D"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.StringFilter("OrdinalA", operator.eq, "High"), ["ID"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, f4.StringFilter("OrdinalA", operator.eq, "High"), ["ID"], out_file_path, num_parallel=num_parallel)
     check_results("Categorical filter OrdinalA = High", read_file_into_lists(out_file_path), [[b"ID"], [b"B"]])
     os.unlink(out_file_path)
 
@@ -524,22 +524,22 @@ def run_small_tests(in_file_path, f4_file_path, out_file_path, num_threads = 1, 
              ),
              f4.FloatFilter("FloatA", operator.ge, 2.0)
            )
-    f4.query(f4_file_path, fltr, ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, fltr, ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("Filter using two index columns", read_file_into_lists(out_file_path), [[b"FloatA"], [b"2.2"], [b"2.2"]])
     os.unlink(out_file_path)
 
     fltr = f4.AndFilter(f4.StringFilter("CategoricalB", operator.eq, "Yellow"), f4.IntRangeFilter("IntB", 0, 50))
-    f4.query(f4_file_path, fltr, ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, fltr, ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("Filter using string/int-range two-column index", read_file_into_lists(out_file_path), [[b"FloatA"], [b"2.2"]])
     os.unlink(out_file_path)
 
     fltr = f4.AndFilter(f4.StringFilter("CategoricalB", operator.eq, "Yellow"), f4.IntRangeFilter("IntB", 0, 25))
-    f4.query(f4_file_path, fltr, ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, fltr, ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("Filter using string/int-range two-column index", read_file_into_lists(out_file_path), [[b"FloatA"]])
     os.unlink(out_file_path)
 
     fltr = f4.AndFilter(f4.StringFilter("CategoricalB", operator.eq, "Brown"), f4.IntRangeFilter("IntB", 50, 100))
-    f4.query(f4_file_path, fltr, ["FloatA"], out_file_path, num_threads=num_threads)
+    f4.query(f4_file_path, fltr, ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("Filter using string/int-range two-column index", read_file_into_lists(out_file_path), [[b"FloatA"], [b"9.9"], [b"2.2"]])
     os.unlink(out_file_path)
 
@@ -547,7 +547,7 @@ def run_small_tests(in_file_path, f4_file_path, out_file_path, num_threads = 1, 
     for file_path in glob.glob(f"{f4_file_path}*"):
         os.unlink(file_path)
 
-def run_larger_tests(num_threads, size, discrete1_index, numeric1_index, rebuild, compression_type, check_outputs=True, verbose=False, tmp_dir_path=None):
+def run_larger_tests(num_parallel, size, discrete1_index, numeric1_index, rebuild, compression_type, check_outputs=True, verbose=False, tmp_dir_path=None):
     in_file_path = f"data/{size}.tsv"
     f4_file_path = f"data/{size}.f4"
     out_file_path = "/tmp/f4_out.tsv"
@@ -584,13 +584,13 @@ def run_larger_tests(num_threads, size, discrete1_index, numeric1_index, rebuild
             os.unlink(file_path)
 
     if not os.path.exists(f4_file_path):
-        f4.convert_delimited_file(in_file_path, f4_file_path, compression_type=compression_type, num_threads=num_threads, verbose=verbose, tmp_dir_path=tmp_dir_path)
+        f4.convert_delimited_file(in_file_path, f4_file_path, compression_type=compression_type, num_parallel=num_parallel, verbose=verbose, tmp_dir_path=tmp_dir_path)
 
     print("-------------------------------------------------------------------")
     print(f"Running all tests for {in_file_path} - no indexing (cmpr: {compression_type})")
     print("-------------------------------------------------------------------")
 
-    run_larger_tests2(f4_file_path, out_file_path, larger_ID, larger_Categorical1, larger_Discrete1, larger_Numeric1, num_threads, check_outputs, tmp_dir_path)
+    run_larger_tests2(f4_file_path, out_file_path, larger_ID, larger_Categorical1, larger_Discrete1, larger_Numeric1, num_parallel, check_outputs, tmp_dir_path)
 
     print("---------------------------------------------------------------------")
     print(f"Running all tests for {in_file_path} - with indexing (cmpr: {compression_type})")
@@ -600,67 +600,67 @@ def run_larger_tests(num_threads, size, discrete1_index, numeric1_index, rebuild
     shutil.rmtree(index_tmp_dir_path, ignore_errors = True)
     os.makedirs(index_tmp_dir_path)
     f4.build_indexes(f4_file_path, ["ID", "Categorical1", "Discrete1", "Numeric1"], index_tmp_dir_path)
-    run_larger_tests2(f4_file_path, out_file_path, larger_ID, larger_Categorical1, larger_Discrete1, larger_Numeric1, num_threads, check_outputs, tmp_dir_path)
+    run_larger_tests2(f4_file_path, out_file_path, larger_ID, larger_Categorical1, larger_Discrete1, larger_Numeric1, num_parallel, check_outputs, tmp_dir_path)
 
     print("-------------------------------------------------------------------------")
     print(f"Running all tests for {in_file_path} - custom indexing (cmpr: {compression_type})")
     print("-------------------------------------------------------------------------")
 
     f4.build_endswith_index(f4_file_path, "Discrete1", index_tmp_dir_path)
-    run_larger_tests2(f4_file_path, out_file_path, larger_ID, larger_Categorical1, larger_Discrete1, larger_Numeric1, num_threads, check_outputs, tmp_dir_path)
+    run_larger_tests2(f4_file_path, out_file_path, larger_ID, larger_Categorical1, larger_Discrete1, larger_Numeric1, num_parallel, check_outputs, tmp_dir_path)
 
     #for file_path in glob.glob(f"{f4_file_path}*"):
     #    os.unlink(file_path)
 
-def run_larger_tests2(f4_file_path, out_file_path, larger_ID, larger_Categorical1, larger_Discrete1, larger_Numeric1, num_threads, check_outputs, tmp_dir_path):
-    f4.query(f4_file_path, f4.StringFilter("ID", operator.eq, "Row1"), ["Discrete1"], out_file_path, num_threads=num_threads, tmp_dir_path=tmp_dir_path)
+def run_larger_tests2(f4_file_path, out_file_path, larger_ID, larger_Categorical1, larger_Discrete1, larger_Numeric1, num_parallel, check_outputs, tmp_dir_path):
+    f4.query(f4_file_path, f4.StringFilter("ID", operator.eq, "Row1"), ["Discrete1"], out_file_path, num_parallel=num_parallel, tmp_dir_path=tmp_dir_path)
     if check_outputs:
         check_results("Filter ID = Row1", read_file_into_lists(out_file_path), [[b"Discrete1"], larger_Discrete1[1]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.StringFilter("ID", operator.eq, "Row33"), ["Discrete1"], out_file_path, num_threads=num_threads, tmp_dir_path=tmp_dir_path)
+    f4.query(f4_file_path, f4.StringFilter("ID", operator.eq, "Row33"), ["Discrete1"], out_file_path, num_parallel=num_parallel, tmp_dir_path=tmp_dir_path)
     if check_outputs:
         check_results("Filter ID = Row33", read_file_into_lists(out_file_path), [[b"Discrete1"], larger_Discrete1[33]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.StringFilter("ID", operator.eq, "Row91"), ["Discrete1"], out_file_path, num_threads=num_threads, tmp_dir_path=tmp_dir_path)
+    f4.query(f4_file_path, f4.StringFilter("ID", operator.eq, "Row91"), ["Discrete1"], out_file_path, num_parallel=num_parallel, tmp_dir_path=tmp_dir_path)
     if check_outputs:
         check_results("Filter ID = Row91", read_file_into_lists(out_file_path), [[b"Discrete1"], larger_Discrete1[91]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.StringFilter("ID", operator.eq, "Row100"), ["Discrete1"], out_file_path, num_threads=num_threads, tmp_dir_path=tmp_dir_path)
+    f4.query(f4_file_path, f4.StringFilter("ID", operator.eq, "Row100"), ["Discrete1"], out_file_path, num_parallel=num_parallel, tmp_dir_path=tmp_dir_path)
     if check_outputs:
         check_results("Filter ID = Row100", read_file_into_lists(out_file_path), [[b"Discrete1"], larger_Discrete1[100]])
     os.unlink(out_file_path)
 
-    run_string_test("Categorical1", "A", "A", f4_file_path, larger_ID, larger_Categorical1, out_file_path, num_threads, check_outputs, tmp_dir_path)
-    run_string_test("Categorical1", "D", "D", f4_file_path, larger_ID, larger_Categorical1, out_file_path, num_threads, check_outputs, tmp_dir_path)
-    run_string_test("Categorical1", "A", "D", f4_file_path, larger_ID, larger_Categorical1, out_file_path, num_threads, check_outputs, tmp_dir_path)
-    run_string_test("Categorical1", "B", "B", f4_file_path, larger_ID, larger_Categorical1, out_file_path, num_threads, check_outputs, tmp_dir_path)
-    run_string_test("Categorical1", "B", "C", f4_file_path, larger_ID, larger_Categorical1, out_file_path, num_threads, check_outputs, tmp_dir_path)
-    run_string_test("Categorical1", "A", "C", f4_file_path, larger_ID, larger_Categorical1, out_file_path, num_threads, check_outputs, tmp_dir_path)
-    run_string_test("Categorical1", "B", "D", f4_file_path, larger_ID, larger_Categorical1, out_file_path, num_threads, check_outputs, tmp_dir_path)
-    run_string_test("Categorical1", "B", "Z", f4_file_path, larger_ID, larger_Categorical1, out_file_path, num_threads, check_outputs, tmp_dir_path)
+    run_string_test("Categorical1", "A", "A", f4_file_path, larger_ID, larger_Categorical1, out_file_path, num_parallel, check_outputs, tmp_dir_path)
+    run_string_test("Categorical1", "D", "D", f4_file_path, larger_ID, larger_Categorical1, out_file_path, num_parallel, check_outputs, tmp_dir_path)
+    run_string_test("Categorical1", "A", "D", f4_file_path, larger_ID, larger_Categorical1, out_file_path, num_parallel, check_outputs, tmp_dir_path)
+    run_string_test("Categorical1", "B", "B", f4_file_path, larger_ID, larger_Categorical1, out_file_path, num_parallel, check_outputs, tmp_dir_path)
+    run_string_test("Categorical1", "B", "C", f4_file_path, larger_ID, larger_Categorical1, out_file_path, num_parallel, check_outputs, tmp_dir_path)
+    run_string_test("Categorical1", "A", "C", f4_file_path, larger_ID, larger_Categorical1, out_file_path, num_parallel, check_outputs, tmp_dir_path)
+    run_string_test("Categorical1", "B", "D", f4_file_path, larger_ID, larger_Categorical1, out_file_path, num_parallel, check_outputs, tmp_dir_path)
+    run_string_test("Categorical1", "B", "Z", f4_file_path, larger_ID, larger_Categorical1, out_file_path, num_parallel, check_outputs, tmp_dir_path)
 
-    run_string_test("Discrete1", "AA", "AA", f4_file_path, larger_ID, larger_Discrete1, out_file_path, num_threads, check_outputs, tmp_dir_path)
-    run_string_test("Discrete1", "PM", "PM", f4_file_path, larger_ID, larger_Discrete1, out_file_path, num_threads, check_outputs, tmp_dir_path)
-    run_string_test("Discrete1", "AA", "ZZ", f4_file_path, larger_ID, larger_Discrete1, out_file_path, num_threads, check_outputs, tmp_dir_path)
-    run_string_test("Discrete1", "FA", "SZ", f4_file_path, larger_ID, larger_Discrete1, out_file_path, num_threads, check_outputs, tmp_dir_path)
+    run_string_test("Discrete1", "AA", "AA", f4_file_path, larger_ID, larger_Discrete1, out_file_path, num_parallel, check_outputs, tmp_dir_path)
+    run_string_test("Discrete1", "PM", "PM", f4_file_path, larger_ID, larger_Discrete1, out_file_path, num_parallel, check_outputs, tmp_dir_path)
+    run_string_test("Discrete1", "AA", "ZZ", f4_file_path, larger_ID, larger_Discrete1, out_file_path, num_parallel, check_outputs, tmp_dir_path)
+    run_string_test("Discrete1", "FA", "SZ", f4_file_path, larger_ID, larger_Discrete1, out_file_path, num_parallel, check_outputs, tmp_dir_path)
 
-    run_endswith_test("M", f4_file_path, larger_ID, larger_Discrete1, out_file_path, num_threads, check_outputs, tmp_dir_path)
-    run_endswith_test("PM", f4_file_path, larger_ID, larger_Discrete1, out_file_path, num_threads, check_outputs, tmp_dir_path)
-    run_endswith_test("ZZZZ", f4_file_path, larger_ID, larger_Discrete1, out_file_path, num_threads, check_outputs, tmp_dir_path)
+    run_endswith_test("M", f4_file_path, larger_ID, larger_Discrete1, out_file_path, num_parallel, check_outputs, tmp_dir_path)
+    run_endswith_test("PM", f4_file_path, larger_ID, larger_Discrete1, out_file_path, num_parallel, check_outputs, tmp_dir_path)
+    run_endswith_test("ZZZZ", f4_file_path, larger_ID, larger_Discrete1, out_file_path, num_parallel, check_outputs, tmp_dir_path)
 
-    run_float_test(0.0, 1.0, f4_file_path, larger_ID, larger_Numeric1, out_file_path, num_threads, check_outputs, tmp_dir_path)
-    run_float_test(0.85, 0.9, f4_file_path, larger_ID, larger_Numeric1, out_file_path, num_threads, check_outputs, tmp_dir_path)
-    run_float_test(-0.9, -0.85, f4_file_path, larger_ID, larger_Numeric1, out_file_path, num_threads, check_outputs, tmp_dir_path)
-    run_float_test(-0.5, 0.0, f4_file_path, larger_ID, larger_Numeric1, out_file_path, num_threads, check_outputs, tmp_dir_path)
-    run_float_test(-0.5, 0.5, f4_file_path, larger_ID, larger_Numeric1, out_file_path, num_threads, check_outputs, tmp_dir_path)
-    run_float_test(-1000.0, 1000.0, f4_file_path, larger_ID, larger_Numeric1, out_file_path, num_threads, check_outputs, tmp_dir_path)
-    run_float_test(0.5, 0.5, f4_file_path, larger_ID, larger_Numeric1, out_file_path, num_threads, check_outputs, tmp_dir_path)
+    run_float_test(0.0, 1.0, f4_file_path, larger_ID, larger_Numeric1, out_file_path, num_parallel, check_outputs, tmp_dir_path)
+    run_float_test(0.85, 0.9, f4_file_path, larger_ID, larger_Numeric1, out_file_path, num_parallel, check_outputs, tmp_dir_path)
+    run_float_test(-0.9, -0.85, f4_file_path, larger_ID, larger_Numeric1, out_file_path, num_parallel, check_outputs, tmp_dir_path)
+    run_float_test(-0.5, 0.0, f4_file_path, larger_ID, larger_Numeric1, out_file_path, num_parallel, check_outputs, tmp_dir_path)
+    run_float_test(-0.5, 0.5, f4_file_path, larger_ID, larger_Numeric1, out_file_path, num_parallel, check_outputs, tmp_dir_path)
+    run_float_test(-1000.0, 1000.0, f4_file_path, larger_ID, larger_Numeric1, out_file_path, num_parallel, check_outputs, tmp_dir_path)
+    run_float_test(0.5, 0.5, f4_file_path, larger_ID, larger_Numeric1, out_file_path, num_parallel, check_outputs, tmp_dir_path)
 
-def run_string_test(column_name, lower_bound, upper_bound, f4_file_path, larger_ID, filter_values, out_file_path, num_threads, check_outputs, tmp_dir_path):
-    f4.query(f4_file_path, f4.StringRangeFilter(column_name, lower_bound, upper_bound), ["ID"], out_file_path, num_threads=num_threads, tmp_dir_path=tmp_dir_path)
+def run_string_test(column_name, lower_bound, upper_bound, f4_file_path, larger_ID, filter_values, out_file_path, num_parallel, check_outputs, tmp_dir_path):
+    f4.query(f4_file_path, f4.StringRangeFilter(column_name, lower_bound, upper_bound), ["ID"], out_file_path, num_parallel=num_parallel, tmp_dir_path=tmp_dir_path)
 
     if check_outputs:
         indices = [i for i in range(len(filter_values)) if filter_values[i][0] == column_name.encode() or (filter_values[i][0] >= lower_bound.encode() and filter_values[i][0] <= upper_bound.encode())]
@@ -670,9 +670,9 @@ def run_string_test(column_name, lower_bound, upper_bound, f4_file_path, larger_
 
     os.unlink(out_file_path)
 
-def run_endswith_test(value, f4_file_path, larger_ID, filter_values, out_file_path, num_threads, check_outputs, tmp_dir_path):
+def run_endswith_test(value, f4_file_path, larger_ID, filter_values, out_file_path, num_parallel, check_outputs, tmp_dir_path):
     column_name = "Discrete1"
-    f4.query(f4_file_path, f4.EndsWithFilter(column_name, value), ["ID"], out_file_path, num_threads=num_threads, tmp_dir_path=tmp_dir_path)
+    f4.query(f4_file_path, f4.EndsWithFilter(column_name, value), ["ID"], out_file_path, num_parallel=num_parallel, tmp_dir_path=tmp_dir_path)
 
     if check_outputs:
         indices = [i for i in range(len(filter_values)) if filter_values[i][0] == column_name.encode() or filter_values[i][0].endswith(value.encode())]
@@ -681,9 +681,9 @@ def run_endswith_test(value, f4_file_path, larger_ID, filter_values, out_file_pa
 
     os.unlink(out_file_path)
 
-def run_float_test(lower_bound, upper_bound, f4_file_path, larger_ID, larger_Numeric1, out_file_path, num_threads, check_outputs, tmp_dir_path):
+def run_float_test(lower_bound, upper_bound, f4_file_path, larger_ID, larger_Numeric1, out_file_path, num_parallel, check_outputs, tmp_dir_path):
     column_name = "Numeric1"
-    f4.query(f4_file_path, f4.FloatRangeFilter(column_name, lower_bound, upper_bound), ["ID"], out_file_path, num_threads=num_threads, tmp_dir_path=tmp_dir_path)
+    f4.query(f4_file_path, f4.FloatRangeFilter(column_name, lower_bound, upper_bound), ["ID"], out_file_path, num_parallel=num_parallel, tmp_dir_path=tmp_dir_path)
 
     if check_outputs:
         indices = [i for i in range(len(larger_Numeric1)) if isinstance(larger_Numeric1[i][0], str) or (larger_Numeric1[i][0] >= lower_bound and larger_Numeric1[i][0] <= upper_bound)]
@@ -692,25 +692,22 @@ def run_float_test(lower_bound, upper_bound, f4_file_path, larger_ID, larger_Num
 
     os.unlink(out_file_path)
 
-do_small_tests = True
-#do_small_tests = False
-
-if do_small_tests:
+def run_all_small_tests():
     # Basic small tests
     f4_file_path = "data/small.f4"
     out_file_path = "/tmp/small_out.tsv"
-    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_threads = 1, num_cols_per_chunk = 1)
-    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_threads = 2, num_cols_per_chunk = 2)
+    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, num_cols_per_chunk = 1)
+    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2, num_cols_per_chunk = 2)
 
     # Basic small tests (with gzipped files)
-    run_small_tests("data/small.tsv.gz", f4_file_path, out_file_path, num_threads = 1, num_cols_per_chunk = 1)
-    run_small_tests("data/small.tsv.gz", f4_file_path, out_file_path, num_threads = 2, num_cols_per_chunk = 2)
+    run_small_tests("data/small.tsv.gz", f4_file_path, out_file_path, num_parallel = 1, num_cols_per_chunk = 1)
+    run_small_tests("data/small.tsv.gz", f4_file_path, out_file_path, num_parallel = 2, num_cols_per_chunk = 2)
 
     # Make sure we print to standard out properly (this code does not work inside a function).
     f4.convert_delimited_file("data/small.tsv", f4_file_path)
     old_stdout = sys.stdout
     sys.stdout = TextIOWrapper(BytesIO(), sys.stdout.encoding)
-    f4.query(f4_file_path, f4.NoFilter(), [], out_file_path=None, num_threads=1)
+    f4.query(f4_file_path, f4.NoFilter(), [], out_file_path=None, num_parallel=1)
     sys.stdout.seek(0)
     out = sys.stdout.read()
     sys.stdout.close()
@@ -720,50 +717,52 @@ if do_small_tests:
     index_columns = ["ID", "CategoricalB", "FloatA", "FloatB", "IntA", "IntB", "OrdinalA", ["CategoricalB", "IntB"]]
 
     # Small tests with indexing
-    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_threads = 1, num_cols_per_chunk = 1, index_columns = index_columns)
-    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_threads = 2, num_cols_per_chunk = 2, index_columns = index_columns)
+    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, num_cols_per_chunk = 1, index_columns = index_columns)
+    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2, num_cols_per_chunk = 2, index_columns = index_columns)
 
     # Small tests with dictionary-based compression
-    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_threads = 1, num_cols_per_chunk = 1, compression_type = "dictionary")
-    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_threads = 2, num_cols_per_chunk = 2, compression_type = "dictionary")
+    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, num_cols_per_chunk = 1, compression_type = "dictionary")
+    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2, num_cols_per_chunk = 2, compression_type = "dictionary")
 
     # Small tests with dictionary-based compression (and indexing)
-    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_threads = 1, num_cols_per_chunk = 1, compression_type = "dictionary", index_columns = index_columns)
-    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_threads = 2, num_cols_per_chunk = 2, compression_type = "dictionary", index_columns = index_columns)
+    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, num_cols_per_chunk = 1, compression_type = "dictionary", index_columns = index_columns)
+    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2, num_cols_per_chunk = 2, compression_type = "dictionary", index_columns = index_columns)
 
     # Small tests with z-standard compression
-    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_threads = 1, num_cols_per_chunk = 1, compression_type = "zstd")
-    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_threads = 2, num_cols_per_chunk = 2, compression_type = "zstd")
+    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, num_cols_per_chunk = 1, compression_type = "zstd")
+    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2, num_cols_per_chunk = 2, compression_type = "zstd")
 
     # Small tests with z-standard compression (and indexing)
-    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_threads = 1, num_cols_per_chunk = 1, compression_type = "zstd", index_columns = index_columns)
-    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_threads = 2, num_cols_per_chunk = 2, compression_type = "zstd", index_columns = index_columns)
+    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, num_cols_per_chunk = 1, compression_type = "zstd", index_columns = index_columns)
+    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2, num_cols_per_chunk = 2, compression_type = "zstd", index_columns = index_columns)
 
     # Clean up data files
     for file_path in glob.glob(f"{f4_file_path}*"):
         os.unlink(file_path)
 
-#for compression_type in [None, "dictionary", "zstd"]:
-#for compression_type in [None, "zstd"]:
-for compression_type in [None]:
-#for compression_type in ["dictionary"]:
-#for compression_type in ["zstd"]:
-    # Medium tests
-    run_larger_tests(num_threads=1, size="medium", discrete1_index=11, numeric1_index=21, rebuild=True, compression_type=compression_type)
-    run_larger_tests(num_threads=2, size="medium", discrete1_index=11, numeric1_index=21, rebuild=True, compression_type=compression_type)
+run_all_small_tests()
+
+##for compression_type in [None, "dictionary", "zstd"]:
+for compression_type in [None, "zstd"]:
+##for compression_type in [None]:
+##for compression_type in ["dictionary"]:
+##for compression_type in ["zstd"]:
+#    # Medium tests
+    run_larger_tests(num_parallel=1, size="medium", discrete1_index=11, numeric1_index=21, rebuild=True, compression_type=compression_type)
+    run_larger_tests(num_parallel=2, size="medium", discrete1_index=11, numeric1_index=21, rebuild=True, compression_type=compression_type)
 
     # Large tests
-    num_threads = 1
-    #num_threads = 2
-    #num_threads = 4
-    #rebuild = True
-    rebuild = False
+    num_parallel = 1
+    #num_parallel = 2
+    #num_parallel = 4
+    rebuild = True
+    #rebuild = False
     #verbose = True
     verbose = False
     check_outputs = True
     #check_outputs = False
 
-    run_larger_tests(num_threads=num_threads, size="large_tall", discrete1_index=251, numeric1_index=501, rebuild=rebuild, compression_type=compression_type, verbose=verbose, check_outputs=check_outputs)
-    run_larger_tests(num_threads=num_threads, size="large_wide", discrete1_index=250001, numeric1_index=500001, rebuild=rebuild, compression_type=compression_type, verbose=verbose, check_outputs=check_outputs)
+    run_larger_tests(num_parallel=num_parallel, size="large_tall", discrete1_index=251, numeric1_index=501, rebuild=rebuild, compression_type=compression_type, verbose=verbose, check_outputs=check_outputs)
+    run_larger_tests(num_parallel=num_parallel, size="large_wide", discrete1_index=250001, numeric1_index=500001, rebuild=rebuild, compression_type=compression_type, verbose=verbose, check_outputs=check_outputs)
 
 print("All tests passed!!")
