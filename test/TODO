@@ -32,6 +32,10 @@
     Mention that if they specify tmp_dir_path, we assume that it is empty. It will not work if it is not.
 * Set up readthedocs.
 * Address remaining TODO items in the code, remove unnecessary commented code.
+* Try potential other speed improvements:
+  - PyPi.
+  - https://github.com/exaloop/codon
+  - https://nuitka.net (compiles your Python code to C, is supposed to achieve speedups of 3x or greater).
 
 #####################################################
 # Rust conversion:
