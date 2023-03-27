@@ -2,6 +2,9 @@
 # For software release:
 #####################################################
 
+* Make sure the delimited file is valid.
+  - Make sure each line has the same number of elements (and the same as the header line).
+  - Provide friendly error messages.
 * Filters.py - Can we filter without decompressing by converting self.value in constructor?
     Looks like we can do it for some filter classes (String, StartsWith, EndsWith, Head, Tail), but not others.
       If you don't do it, remove select_compression_dict as a parameter from filter_column_values().

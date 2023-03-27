@@ -28,9 +28,9 @@ dockerCommand="docker run -i -t --rm --platform linux/x86_64 --user $(id -u):$(i
 # Run tests
 #######################################################
 
-#python3 test.py
+python3 test.py
 #time python3 test.py
-$dockerCommand python3 test.py
+#$dockerCommand python3 test.py
 
 #######################################################
 # Clean up

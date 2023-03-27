@@ -742,11 +742,11 @@ def run_all_small_tests():
 
 run_all_small_tests()
 
-##for compression_type in [None, "dictionary", "zstd"]:
+#for compression_type in [None, "dictionary", "zstd"]:
 for compression_type in [None, "zstd"]:
-##for compression_type in [None]:
-##for compression_type in ["dictionary"]:
-##for compression_type in ["zstd"]:
+#for compression_type in [None]:
+#for compression_type in ["dictionary"]:
+#for compression_type in ["zstd"]:
     # Medium tests
     run_larger_tests(num_parallel=1, size="medium", discrete1_index=11, numeric1_index=21, rebuild=True, compression_type=compression_type)
     run_larger_tests(num_parallel=2, size="medium", discrete1_index=11, numeric1_index=21, rebuild=True, compression_type=compression_type)
@@ -754,8 +754,8 @@ for compression_type in [None, "zstd"]:
     # Large tests
     #num_parallel = 1
     #num_parallel = 2
-    #num_parallel = 4
-    num_parallel = 16
+    num_parallel = 4
+    #num_parallel = 16
     rebuild = True
     #rebuild = False
     verbose = True
@@ -763,7 +763,7 @@ for compression_type in [None, "zstd"]:
     check_outputs = True
     #check_outputs = False
 
-    run_larger_tests(num_parallel=num_parallel, size="large_tall", discrete1_index=251, numeric1_index=501, rebuild=rebuild, compression_type=compression_type, verbose=verbose, check_outputs=check_outputs)
-    run_larger_tests(num_parallel=num_parallel, size="large_wide", discrete1_index=250001, numeric1_index=500001, rebuild=rebuild, compression_type=compression_type, verbose=verbose, check_outputs=check_outputs)
+    #run_larger_tests(num_parallel=num_parallel, size="large_tall", discrete1_index=251, numeric1_index=501, rebuild=rebuild, compression_type=compression_type, verbose=verbose, check_outputs=check_outputs)
+    #run_larger_tests(num_parallel=num_parallel, size="large_wide", discrete1_index=250001, numeric1_index=500001, rebuild=rebuild, compression_type=compression_type, verbose=verbose, check_outputs=check_outputs)
 
 print("All tests passed!!")

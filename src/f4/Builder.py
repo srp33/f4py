@@ -192,6 +192,7 @@ def parse_columns_chunk(delimited_file_path, delimiter, comment_prefix, start_in
             line = line.rstrip(b"\n")
 
             line_items = line.split(delimiter)
+
             for i in range(start_index, end_index):
                 column_sizes_dict[i] = max([column_sizes_dict[i], len(line_items[i])])
 
