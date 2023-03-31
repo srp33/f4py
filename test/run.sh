@@ -6,7 +6,7 @@ set -o errexit
 # Build the Docker image
 #######################################################
 
-docker build --platform linux/x86_64 -t srp33/f4_test .
+#docker build --platform linux/x86_64 -t srp33/f4_test .
 
 #######################################################
 # Run preparatory steps

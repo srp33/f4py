@@ -649,21 +649,6 @@ def generate_query_row_chunks(num_rows, num_parallel):
     if len(row_indices) > 0:
         yield row_indices
 
-def split_integer_list_into_chunks(int_list, num_parallel):
-    items_per_chunk = ceil(len(int_list) / num_parallel)
-
-    return_indices = list()
-
-    for an_int in int_list:
-        return_indices.append(an_int)
-
-        if len(return_indices) == items_per_chunk:
-            yield return_indices
-            return_indices = list()
-
-    if len(return_indices) > 0:
-        yield return_indices
-
 def parse_data_coords(file_data, indices, data_prefix=""):
     file_key = "cc"
     data_coords = []
@@ -758,6 +743,16 @@ def parse_dictionary_compressed_row_values(file_data, row_index, column_coords, 
         values = list(parse_data_values_from_file(file_data, row_index, file_data.stat_dict["ll"], column_coords, data_prefix, "data"))
 
         return [decompress(values.pop(0), file_data.decompressor[column_name], bigram_size_dict[column_name]) for column_name in column_names]
+
+def parse_values_in_column(file_data, column_name, column_coords, bigram_size_dict):
+    num_rows = file_data.stat_dict["num_rows"]
+    parse_function = get_parse_row_value_function(file_data)
+
+    values = []
+    for row_index in range(num_rows):
+        values.append(parse_function(file_data, row_index, column_coords, bigram_size_dict=bigram_size_dict, column_name=column_name))
+
+    return values
 
 def save_output_line_to_temp(data_file_path, chunk_number, row_indices, parse_function, select_column_coords, bigram_size_dict, select_columns, tmp_dir_path):
     with initialize(data_file_path) as file_data:

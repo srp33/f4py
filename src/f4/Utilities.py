@@ -229,3 +229,18 @@ def get_index_file_path(data_file_path, index_name, custom_index_function=do_not
         index_file_path_extension = f"{index_file_path_extension}_{custom_index_function.__name__}"
 
     return f"{data_file_path}{index_file_path_extension}"
+
+def split_integer_list_into_chunks(int_list, num_parallel):
+    items_per_chunk = ceil(len(int_list) / num_parallel)
+
+    return_indices = list()
+
+    for an_int in int_list:
+        return_indices.append(an_int)
+
+        if len(return_indices) == items_per_chunk:
+            yield return_indices
+            return_indices = list()
+
+    if len(return_indices) > 0:
+        yield return_indices

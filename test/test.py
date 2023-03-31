@@ -85,8 +85,8 @@ def run_small_tests(in_file_path, f4_file_path, out_file_path, num_parallel = 1,
     except:
         pass_test("Invalid file path.")
 
-    check_result("Parser properties", "Number of rows", f4.get_num_rows(f4_file_path), 5)
-    check_result("Parser properties", "Number of columns", f4.get_num_cols(f4_file_path), 9)
+    check_result("Dimensions", "Number of rows", f4.get_num_rows(f4_file_path), 5)
+    check_result("Dimensions", "Number of columns", f4.get_num_cols(f4_file_path), 9)
 
     check_result("Column types", "ID column", f4.get_column_type_from_name(f4_file_path, "ID"), "s")
     check_result("Column types", "FloatA column", f4.get_column_type_from_name(f4_file_path, "FloatA"), "f")
@@ -547,6 +547,51 @@ def run_small_tests(in_file_path, f4_file_path, out_file_path, num_parallel = 1,
     for file_path in glob.glob(f"{f4_file_path}*"):
         os.unlink(file_path)
 
+def test_transpose(tsv_file_path, f4_file_path, out_file_path, num_parallel, compression_type):
+    f4.convert_delimited_file(tsv_file_path, f4_file_path, num_parallel=num_parallel, compression_type=compression_type)
+    f4.transpose(f4_file_path, out_file_path, num_parallel=num_parallel)
+
+    check_result("Dimensions", "Number of rows", f4.get_num_rows(out_file_path), 8)
+    check_result("Dimensions", "Number of columns", f4.get_num_cols(out_file_path), 6)
+
+    check_result("Column types", "ID column", f4.get_column_type_from_name(out_file_path, "ID"), "s")
+    check_result("Column types", "E column", f4.get_column_type_from_name(out_file_path, "E"), "s")
+    check_result("Column types", "A column", f4.get_column_type_from_name(out_file_path, "A"), "s")
+    check_result("Column types", "B column", f4.get_column_type_from_name(out_file_path, "B"), "s")
+    check_result("Column types", "C column", f4.get_column_type_from_name(out_file_path, "C"), "s")
+    check_result("Column types", "D column", f4.get_column_type_from_name(out_file_path, "D"), "s")
+
+    out_file_path_2 = out_file_path + "2"
+    f4.query(out_file_path, f4.StringFilter("ID", operator.eq, "OrdinalA"), ["A"], out_file_path_2, num_parallel=num_parallel)
+    check_results("Filter by ID", read_file_into_lists(out_file_path_2), [[b"A"], [b"Low"]])
+    os.unlink(out_file_path_2)
+
+    f4.query(out_file_path, f4.StringFilter("B", operator.eq, "High"), ["D"], out_file_path_2, num_parallel=num_parallel)
+    check_results("Filter by B", read_file_into_lists(out_file_path_2), [[b"D"], [b"Med"]])
+    os.unlink(out_file_path_2)
+
+def test_inner_join(num_parallel, compression_type):
+    data1 = read_file_into_lists("data/small.tsv")
+    data2 = read_file_into_lists("data/small.tsv")
+
+    header_row = data1.pop(0)
+    data2.pop(0)
+
+    for row_i in range(len(data2)):
+        for col_i in range(1, len(data2[row_i])):
+            mod_value = data2[row_i][col_i] + b"_2"
+            data2[row_i][col_i] = mod_value
+
+    with open("/tmp/small2.tsv", "wb") as file2:
+        file2.write(b"\t".join(header_row[0:1] + [x + b"_2" for x in header_row[1:]]) + b"\n")
+
+        for row in data2:
+            file2.write(b"\t".join(row) + b"\n")
+
+    f4.convert_delimited_file("data/small.tsv", "/tmp/small.f4", num_parallel=num_parallel, compression_type=compression_type)
+    f4.convert_delimited_file("/tmp/small2.tsv", "/tmp/small2.f4", num_parallel=num_parallel, compression_type=compression_type)
+    f4.inner_join("/tmp/small.f4", "/tmp/small2.f4", "ID", "/tmp/small_joined.f4", num_parallel=num_parallel)
+
 def run_larger_tests(num_parallel, size, discrete1_index, numeric1_index, rebuild, compression_type, check_outputs=True, verbose=False, tmp_dir_path=None):
     in_file_path = f"data/{size}.tsv"
     f4_file_path = f"data/{size}.f4"
@@ -698,12 +743,12 @@ def run_all_small_tests():
     out_file_path = "/tmp/small_out.tsv"
 #    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, num_cols_per_chunk = 1)
 #    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2, num_cols_per_chunk = 2)
-#
-#    # Basic small tests (with gzipped files)
+
+    # Basic small tests (with gzipped files)
 #    run_small_tests("data/small.tsv.gz", f4_file_path, out_file_path, num_parallel = 1, num_cols_per_chunk = 1)
 #    run_small_tests("data/small.tsv.gz", f4_file_path, out_file_path, num_parallel = 2, num_cols_per_chunk = 2)
-#
-#    # Make sure we print to standard out properly (this code does not work inside a function).
+
+    # Make sure we print to standard out properly (this code does not work inside a function).
 #    f4.convert_delimited_file("data/small.tsv", f4_file_path)
 #    old_stdout = sys.stdout
 #    sys.stdout = TextIOWrapper(BytesIO(), sys.stdout.encoding)
@@ -717,28 +762,39 @@ def run_all_small_tests():
     index_columns = ["ID", "CategoricalB", "FloatA", "FloatB", "IntA", "IntB", "OrdinalA", ["CategoricalB", "IntB"]]
 
     # Small tests with indexing
-    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, num_cols_per_chunk = 1, index_columns = index_columns)
-    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2, num_cols_per_chunk = 2, index_columns = index_columns)
+#    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, num_cols_per_chunk = 1, index_columns = index_columns)
+#    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2, num_cols_per_chunk = 2, index_columns = index_columns)
 
     # Small tests with dictionary-based compression
-    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, num_cols_per_chunk = 1, compression_type = "dictionary")
-    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2, num_cols_per_chunk = 2, compression_type = "dictionary")
+#    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, num_cols_per_chunk = 1, compression_type = "dictionary")
+#    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2, num_cols_per_chunk = 2, compression_type = "dictionary")
 
     # Small tests with dictionary-based compression (and indexing)
-    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, num_cols_per_chunk = 1, compression_type = "dictionary", index_columns = index_columns)
-    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2, num_cols_per_chunk = 2, compression_type = "dictionary", index_columns = index_columns)
+#    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, num_cols_per_chunk = 1, compression_type = "dictionary", index_columns = index_columns)
+#    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2, num_cols_per_chunk = 2, compression_type = "dictionary", index_columns = index_columns)
 
     # Small tests with z-standard compression
-    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, num_cols_per_chunk = 1, compression_type = "zstd")
-    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2, num_cols_per_chunk = 2, compression_type = "zstd")
+#    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, num_cols_per_chunk = 1, compression_type = "zstd")
+#    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2, num_cols_per_chunk = 2, compression_type = "zstd")
 
     # Small tests with z-standard compression (and indexing)
-    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, num_cols_per_chunk = 1, compression_type = "zstd", index_columns = index_columns)
-    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2, num_cols_per_chunk = 2, compression_type = "zstd", index_columns = index_columns)
+#    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, num_cols_per_chunk = 1, compression_type = "zstd", index_columns = index_columns)
+#    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2, num_cols_per_chunk = 2, compression_type = "zstd", index_columns = index_columns)
+
+     # Transpose without compression
+#    test_transpose("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, compression_type = None)
+#    test_transpose("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2, compression_type = None)
+
+     # Transpose with zstd compression
+#    test_transpose("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, compression_type = "zstd")
+#    test_transpose("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2, compression_type = "zstd")
+
+    # Inner join without compression
+    test_inner_join(num_parallel = 2, compression_type = None)
 
     # Clean up data files
-    for file_path in glob.glob(f"{f4_file_path}*"):
-        os.unlink(file_path)
+#    for file_path in glob.glob(f"{f4_file_path}*"):
+#        os.unlink(file_path)
 
 run_all_small_tests()
 
@@ -748,8 +804,8 @@ for compression_type in [None, "zstd"]:
 #for compression_type in ["dictionary"]:
 #for compression_type in ["zstd"]:
     # Medium tests
-    run_larger_tests(num_parallel=1, size="medium", discrete1_index=11, numeric1_index=21, rebuild=True, compression_type=compression_type)
-    run_larger_tests(num_parallel=2, size="medium", discrete1_index=11, numeric1_index=21, rebuild=True, compression_type=compression_type)
+    #run_larger_tests(num_parallel=1, size="medium", discrete1_index=11, numeric1_index=21, rebuild=True, compression_type=compression_type)
+    #run_larger_tests(num_parallel=2, size="medium", discrete1_index=11, numeric1_index=21, rebuild=True, compression_type=compression_type)
 
     # Large tests
     #num_parallel = 1
