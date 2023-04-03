@@ -57,7 +57,7 @@ def format_column_items(the_list, max_value_length, suffix=""):
 
 def print_message(message, verbose=False):
     if verbose:
-        sys.stderr.buffer.write(f"{message} - {datetime.now().strftime('%d/%m/%Y %H:%M:%S.%f')}")
+        sys.stderr.write(f"{message} - {datetime.now().strftime('%d/%m/%Y %H:%M:%S.%f')}")
         sys.stderr.flush()
 
 def decode_string(x):
