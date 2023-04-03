@@ -122,29 +122,23 @@ def transpose(f4_src_file_path, f4_dest_file_path, num_parallel=1, tmp_dir_path=
     tmp_dir_path = fix_dir_path_ending(tmp_dir_path)
     makedirs(tmp_dir_path, exist_ok=True)
 
-    print_message("got here0")
     with initialize(f4_src_file_path) as src_file_data:
-        print_message("got here1")
         column_names, column_type_dict, column_coords_dict, bigram_size_dict = get_column_meta(src_file_data, set(), [])
-        print_message("got here2")
         tmp_tsv_file_path = tmp_dir_path + "tmp.tsv.gz"
 
         if num_parallel == 1:
             col_coords = [column_coords_dict[name] for name in column_names]
             save_transposed_line_to_temp(src_file_data.data_file_path, tmp_tsv_file_path, column_names, col_coords, bigram_size_dict, tmp_dir_path, verbose)
         else:
-            print_message("got here3")
             col_index_chunks = list(split_integer_list_into_chunks(list(range(1, get_num_cols(f4_src_file_path))), num_parallel))
             col_index_chunks.insert(0, [0])
             col_name_chunks = []
             col_coords_chunks = []
 
-            print_message("got here4")
             for col_index_chunk in col_index_chunks:
                 col_name_chunks.append([column_names[i] for i in col_index_chunk])
                 col_coords_chunks.append([column_coords_dict[column_names[i]] for i in col_index_chunk])
 
-            print_message("got here5")
             joblib.Parallel(n_jobs=num_parallel, mmap_mode=None)(
                 joblib.delayed(save_transposed_line_to_temp)(src_file_data.data_file_path, f"{tmp_dir_path}{chunk_number}", col_name_chunks[chunk_number], col_coords_chunks[chunk_number], bigram_size_dict, tmp_dir_path, verbose) for
                 chunk_number in range(len(col_index_chunks)))
@@ -693,7 +687,6 @@ def prepare_tmp_dirs(tmp_dir_path):
     return tmp_dir_path_chunks, tmp_dir_path_outputs, tmp_dir_path_indexes
 
 def save_transposed_line_to_temp(data_file_path, tmp_file_path, col_names, col_coords, bigram_size_dict, tmp_dir_path, verbose):
-    print_message("got here6")
     with initialize(data_file_path) as file_data:
         print_message(f"Saving transposed lines to temp file at {tmp_file_path}", verbose)
 
