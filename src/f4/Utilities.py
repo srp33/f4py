@@ -87,6 +87,9 @@ def reverse_string(s):
 def get_delimited_file_handle(file_path):
     if file_path.endswith(".gz"):
         return gzip.open(file_path)
+    elif file_path.endswith(".zstd"):
+        with open(file_path, 'rb') as fh:
+            return ZstdCompressor(level=1).stream_reader(fh)
     else:
         return open(file_path, 'rb')
 

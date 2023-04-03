@@ -124,7 +124,7 @@ def transpose(f4_src_file_path, f4_dest_file_path, num_parallel=1, tmp_dir_path=
 
     with initialize(f4_src_file_path) as src_file_data:
         column_names, column_type_dict, column_coords_dict, bigram_size_dict = get_column_meta(src_file_data, set(), [])
-        tmp_tsv_file_path = tmp_dir_path + "tmp.tsv"
+        tmp_tsv_file_path = tmp_dir_path + "tmp.tsv.gz"
 
         if num_parallel == 1:
             col_coords = [column_coords_dict[name] for name in column_names]
@@ -143,26 +143,22 @@ def transpose(f4_src_file_path, f4_dest_file_path, num_parallel=1, tmp_dir_path=
                 joblib.delayed(save_transposed_line_to_temp)(src_file_data.data_file_path, f"{tmp_dir_path}{chunk_number}", col_name_chunks[chunk_number], col_coords_chunks[chunk_number], bigram_size_dict, tmp_dir_path, verbose) for
                 chunk_number in range(len(col_index_chunks)))
 
-            with open(tmp_tsv_file_path, "wb") as tmp_tsv_file:
+            with gzip.open(tmp_tsv_file_path, "wb", compresslevel=1) as tmp_tsv_file:
                 for i in range(0, num_parallel + 1):
                     chunk_file_path = f"{tmp_dir_path}{i}"
 
-                    with open(chunk_file_path, "rb") as chunk_file:
+                    with gzip.open(chunk_file_path, "rb", compresslevel=1) as chunk_file:
                         for line in chunk_file:
                             tmp_tsv_file.write(line)
 
                     remove(chunk_file_path)
 
-        print_message(f"Now converting temp file at {tmp_tsv_file_path} to correct format", verbose)
+        print_message(f"Converting temp file at {tmp_tsv_file_path} to {f4_dest_file_path}", verbose)
         convert_delimited_file(tmp_tsv_file_path, f4_dest_file_path, compression_type=src_file_data.decompression_type, num_parallel=num_parallel, verbose=verbose)
         remove(tmp_tsv_file_path)
 
 def inner_join(f4_left_src_file_path, f4_right_src_file_path, join_column, f4_dest_file_path, num_parallel=1, tmp_dir_path=None, verbose=False):
     join_column = join_column.encode()
-
-    # if num_parallel > 1:
-    #     global joblib
-    #     joblib = __import__('joblib', globals(), locals())
 
     print_message(f"Inner joining {f4_left_src_file_path} and {f4_right_src_file_path} based on the {join_column} column, saving to {f4_dest_file_path}", verbose)
 
@@ -173,7 +169,7 @@ def inner_join(f4_left_src_file_path, f4_right_src_file_path, join_column, f4_de
 
     tmp_dir_path = fix_dir_path_ending(tmp_dir_path)
     makedirs(tmp_dir_path, exist_ok=True)
-    tmp_tsv_file_path = tmp_dir_path + "tmp.tsv"
+    tmp_tsv_file_path = tmp_dir_path + "tmp.tsv.gz"
 
     with initialize(f4_left_src_file_path) as left_file_data:
         with initialize(f4_right_src_file_path) as right_file_data:
@@ -185,19 +181,18 @@ def inner_join(f4_left_src_file_path, f4_right_src_file_path, join_column, f4_de
             right_values = parse_values_in_column(right_file_data, join_column, right_column_coords_dict[join_column], right_bigram_size_dict)
             common_values = set(left_values) & set(right_values)
 
-            left_index_dict = {}
-            for i, value in enumerate(left_values):
-                if value in common_values:
-                    left_index_dict.setdefault(value, []).append(i)
+            right_columns_to_save = [name for name in right_column_names if name != join_column]
 
             right_index_dict = {}
             for i, value in enumerate(right_values):
                 if value in common_values:
                     right_index_dict.setdefault(value, []).append(i)
 
-            #TODO: Parallelize this. Break left_values into chunks and save each chunk to a temp file.
-            with open(tmp_tsv_file_path, "wb") as tmp_tsv_file:
-                right_columns_to_save = [name for name in right_column_names if name != join_column]
+            # TODO: It would be better to save in zstandard format. But the Python package
+            #      doesn't support reading line by line. Come up with a better way than gzip,
+            #      which is very slow.
+            #TODO: Parallelize this?
+            with gzip.open(tmp_tsv_file_path, "wb", compresslevel=1) as tmp_tsv_file:
                 tmp_tsv_file.write(b"\t".join(left_column_names + right_columns_to_save) + b"\n")
 
                 left_parse_function = get_parse_row_values_function(left_file_data)
@@ -205,33 +200,23 @@ def inner_join(f4_left_src_file_path, f4_right_src_file_path, join_column, f4_de
                 left_column_coords = [left_column_coords_dict[name] for name in left_column_names]
                 right_column_coords = [right_column_coords_dict[name] for name in right_columns_to_save]
 
-                for value in left_values:
-                    if value in common_values:
-                        left_indices = left_index_dict[value]
-                        right_indices = right_index_dict[value]
+                for left_row_index, left_value in enumerate(left_values):
+                    if left_value in common_values:
+                        for right_row_index in right_index_dict[left_value]:
+                            left_save_values = left_parse_function(left_file_data, left_row_index, left_column_coords, bigram_size_dict=left_bigram_size_dict)
+                            right_save_values = right_parse_function(right_file_data, right_row_index, right_column_coords, bigram_size_dict=right_bigram_size_dict)
 
-                        for left_row_index in left_indices:
-                            for right_row_index in right_indices:
-                                left_save_values = left_parse_function(left_file_data, left_row_index, left_column_coords, bigram_size_dict=left_bigram_size_dict)
-                                right_save_values = right_parse_function(right_file_data, right_row_index, right_column_coords, bigram_size_dict=right_bigram_size_dict)
+                            tmp_tsv_file.write(b"\t".join(left_save_values + right_save_values) + b"\n")
 
-                                tmp_tsv_file.write(b"\t".join(left_save_values + right_save_values) + b"\n")
+            # TODO: Expand this logic for all compression types. Make sure to document it.
+            compression_type = None
+            if left_file_data.decompression_type == "zstd" or right_file_data.decompression_type == "zstd":
+                compression_type = "zstd"
 
-            #TODO:
-            print(f"saved to {tmp_tsv_file_path}")
+            print_message(f"Converting temp file at {tmp_tsv_file_path} to {f4_dest_file_path}", verbose)
+            convert_delimited_file(tmp_tsv_file_path, f4_dest_file_path, compression_type=compression_type, num_parallel=num_parallel, verbose=verbose)
 
-            # if num_parallel == 1:
-            #
-            # else:
-            #     joblib.Parallel(n_jobs=num_parallel, mmap_mode=None)(
-            #         joblib.delayed(save_transposed_line_to_temp)(src_file_data.data_file_path, f"{tmp_dir_path}{chunk_number}", col_name_chunks[chunk_number], col_coords_chunks[chunk_number], bigram_size_dict, tmp_dir_path, verbose) for
-            #         chunk_number in range(len(col_index_chunks)))
-
-            #TODO: Convert tmp_tsv_file_path to F4 file
-            # print_message(f"Now converting temp file at {tmp_tsv_file_path} to correct format", verbose)
-            # convert_delimited_file(tmp_tsv_file_path, f4_dest_file_path, compression_type=src_file_data.decompression_type, num_parallel=num_parallel, verbose=verbose)
-
-            #remove(tmp_tsv_file_path)
+            remove(tmp_tsv_file_path)
 
 def build_indexes(f4_file_path, index_columns, tmp_dir_path, verbose=False):
     if isinstance(index_columns, str):
@@ -704,7 +689,11 @@ def prepare_tmp_dirs(tmp_dir_path):
 def save_transposed_line_to_temp(data_file_path, tmp_file_path, col_names, col_coords, bigram_size_dict, tmp_dir_path, verbose):
     with initialize(data_file_path) as file_data:
         print_message(f"Saving transposed lines to temp file at {tmp_file_path}", verbose)
-        with open(tmp_file_path, "wb") as tmp_file:
+
+        #TODO: It would be better to save in zstandard format. But the Python package
+        #      doesn't support reading line by line. Come up with a better way than gzip,
+        #      which is very slow.
+        with gzip.open(tmp_file_path, "wb", compresslevel=1) as tmp_file:
             for col_index in range(len(col_names)):
                 col_name = col_names[col_index]
 
