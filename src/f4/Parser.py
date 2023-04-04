@@ -422,7 +422,7 @@ def query(data_file_path, fltr=NoFilter(), select_columns=[], out_file_path=None
                 keep_row_indices = sorted(fltr._filter_column_values(data_file_path, row_indices, column_coords_dict, bigram_size_dict))
             else:
                 # Loop through the rows in parallel and find matching row indices.
-                keep_row_indices = sorted(chain.from_iterable(joblib.Parallel(n_jobs = num_parallel, mmap_mode=None)(joblib.delayed(fltr._filter_column_values)(data_file_path, row_indices, column_coords_dict, bigram_size_dict) for row_indices in generate_query_row_chunks(file_data.stat_dict["num_rows"], num_parallel))))
+                keep_row_indices = sorted(chain.from_iterable(joblib.Parallel(n_jobs = num_parallel)(joblib.delayed(fltr._filter_column_values)(data_file_path, row_indices, column_coords_dict, bigram_size_dict) for row_indices in generate_query_row_chunks(file_data.stat_dict["num_rows"], num_parallel))))
 
         select_column_coords = [column_coords_dict[name] for name in select_columns]
         parse_function = get_parse_row_values_function(file_data)
@@ -457,7 +457,7 @@ def query(data_file_path, fltr=NoFilter(), select_columns=[], out_file_path=None
 
                     row_index_chunks = split_integer_list_into_chunks(keep_row_indices, num_parallel)
 
-                    joblib.Parallel(n_jobs=num_parallel, mmap_mode=None)(
+                    joblib.Parallel(n_jobs=num_parallel)(
                         joblib.delayed(save_output_line_to_temp)(file_data.data_file_path, chunk_number, row_index_chunk, parse_function, select_column_coords, bigram_size_dict, select_columns, tmp_dir_path) for
                         chunk_number, row_index_chunk in enumerate(row_index_chunks))
 
@@ -1007,7 +1007,7 @@ def retrieve_matching_row_indices(file_data, position_coords, positions, num_par
         for i in range(positions[0], positions[1], chunk_size):
             position_chunks.append((i, min(positions[1], i + chunk_size)))
 
-        return set(chain.from_iterable(joblib.Parallel(n_jobs=num_parallel, mmap_mode=None)(
+        return set(chain.from_iterable(joblib.Parallel(n_jobs=num_parallel)(
             joblib.delayed(find_matching_row_indices_parallel)(file_data.data_file_path, position_coords, position_chunk)
             for position_chunk in position_chunks))
         )

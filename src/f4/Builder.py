@@ -65,7 +65,7 @@ def convert_delimited_file(delimited_file_path, f4_file_path, index_columns=[], 
             num_cols_per_chunk = ceil(num_cols / (num_parallel * 2) + 1)
 
         column_chunk_indices = generate_chunk_ranges(num_cols, num_cols_per_chunk)
-        chunk_results = joblib.Parallel(n_jobs=num_parallel, mmap_mode=None)(joblib.delayed(parse_columns_chunk)(delimited_file_path, delimiter, comment_prefix, column_chunk[0], column_chunk[1], num_rows_per_write, compression_type, verbose) for column_chunk in column_chunk_indices)
+        chunk_results = joblib.Parallel(n_jobs=num_parallel)(joblib.delayed(parse_columns_chunk)(delimited_file_path, delimiter, comment_prefix, column_chunk[0], column_chunk[1], num_rows_per_write, compression_type, verbose) for column_chunk in column_chunk_indices)
 
     # Summarize the column sizes and types across the chunks.
     column_sizes = []
@@ -139,15 +139,15 @@ def transpose(f4_src_file_path, f4_dest_file_path, num_parallel=1, tmp_dir_path=
                 col_name_chunks.append([column_names[i] for i in col_index_chunk])
                 col_coords_chunks.append([column_coords_dict[column_names[i]] for i in col_index_chunk])
 
-            joblib.Parallel(n_jobs=num_parallel, mmap_mode=None)(
+            joblib.Parallel(n_jobs=num_parallel)(
                 joblib.delayed(save_transposed_line_to_temp)(src_file_data.data_file_path, f"{tmp_dir_path}{chunk_number}", col_name_chunks[chunk_number], col_coords_chunks[chunk_number], bigram_size_dict, tmp_dir_path, verbose) for
                 chunk_number in range(len(col_index_chunks)))
 
-            with gzip.open(tmp_tsv_file_path, "wb", compresslevel=1) as tmp_tsv_file:
+            with gzip.open(tmp_tsv_file_path, "w", compresslevel=1) as tmp_tsv_file:
                 for i in range(0, num_parallel + 1):
                     chunk_file_path = f"{tmp_dir_path}{i}"
 
-                    with gzip.open(chunk_file_path, "rb", compresslevel=1) as chunk_file:
+                    with gzip.open(chunk_file_path, "r", compresslevel=1) as chunk_file:
                         for line in chunk_file:
                             tmp_tsv_file.write(line)
 
@@ -192,7 +192,7 @@ def inner_join(f4_left_src_file_path, f4_right_src_file_path, join_column, f4_de
             #      doesn't support reading line by line. Come up with a better way than gzip,
             #      which is very slow.
             #TODO: Parallelize this?
-            with gzip.open(tmp_tsv_file_path, "wb", compresslevel=1) as tmp_tsv_file:
+            with gzip.open(tmp_tsv_file_path, "w", compresslevel=1) as tmp_tsv_file:
                 tmp_tsv_file.write(b"\t".join(left_column_names + right_columns_to_save) + b"\n")
 
                 left_parse_function = get_parse_row_values_function(left_file_data)
@@ -386,7 +386,7 @@ def get_line_lengths_dict(delimited_file_path, tmp_dir_path_chunks, delimiter, c
         row_chunk_indices = generate_chunk_ranges(num_rows, ceil(num_rows / num_parallel) + 1)
 
         # We are doing the import here because it is slow.
-        line_lengths_dicts = joblib.Parallel(n_jobs=num_parallel, mmap_mode=None)(joblib.delayed(write_rows_chunk)(delimited_file_path, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes, compression_dicts, i, row_chunk[0], row_chunk[1], num_rows_per_write, verbose) for i, row_chunk in enumerate(row_chunk_indices))
+        line_lengths_dicts = joblib.Parallel(n_jobs=num_parallel)(joblib.delayed(write_rows_chunk)(delimited_file_path, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes, compression_dicts, i, row_chunk[0], row_chunk[1], num_rows_per_write, verbose) for i, row_chunk in enumerate(row_chunk_indices))
 
         line_lengths_dict = {}
         for x in line_lengths_dicts:
@@ -693,7 +693,7 @@ def save_transposed_line_to_temp(data_file_path, tmp_file_path, col_names, col_c
         #TODO: It would be better to save in zstandard format. But the Python package
         #      doesn't support reading line by line. Come up with a better way than gzip,
         #      which is very slow.
-        with gzip.open(tmp_file_path, "wb", compresslevel=1) as tmp_file:
+        with gzip.open(tmp_file_path, "w", compresslevel=1) as tmp_file:
             for col_index in range(len(col_names)):
                 col_name = col_names[col_index]
 
