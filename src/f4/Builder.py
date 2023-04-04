@@ -121,37 +121,37 @@ def transpose(f4_src_file_path, f4_dest_file_path, num_parallel=1, tmp_dir_path=
 
     tmp_dir_path = fix_dir_path_ending(tmp_dir_path)
     makedirs(tmp_dir_path, exist_ok=True)
+    tmp_tsv_file_path = tmp_dir_path + "tmp.tsv.gz"
 
     with initialize(f4_src_file_path) as src_file_data:
         column_names, column_type_dict, column_coords_dict, bigram_size_dict = get_column_meta(src_file_data, set(), [])
-        tmp_tsv_file_path = tmp_dir_path + "tmp.tsv.gz"
 
-        if num_parallel == 1:
-            col_coords = [column_coords_dict[name] for name in column_names]
-            save_transposed_line_to_temp(src_file_data.data_file_path, tmp_tsv_file_path, column_names, col_coords, bigram_size_dict, tmp_dir_path, verbose)
-        else:
-            col_index_chunks = list(split_integer_list_into_chunks(list(range(1, get_num_cols(f4_src_file_path))), num_parallel))
-            col_index_chunks.insert(0, [0])
-            col_name_chunks = []
-            col_coords_chunks = []
+    if num_parallel == 1:
+        col_coords = [column_coords_dict[name] for name in column_names]
+        save_transposed_line_to_temp(f4_src_file_path, tmp_tsv_file_path, column_names, col_coords, bigram_size_dict, tmp_dir_path, verbose)
+    else:
+        col_index_chunks = list(split_integer_list_into_chunks(list(range(1, get_num_cols(f4_src_file_path))), num_parallel))
+        col_index_chunks.insert(0, [0])
+        col_name_chunks = []
+        col_coords_chunks = []
 
-            for col_index_chunk in col_index_chunks:
-                col_name_chunks.append([column_names[i] for i in col_index_chunk])
-                col_coords_chunks.append([column_coords_dict[column_names[i]] for i in col_index_chunk])
+        for col_index_chunk in col_index_chunks:
+            col_name_chunks.append([column_names[i] for i in col_index_chunk])
+            col_coords_chunks.append([column_coords_dict[column_names[i]] for i in col_index_chunk])
 
-            joblib.Parallel(n_jobs=num_parallel)(
-                joblib.delayed(save_transposed_line_to_temp)(src_file_data.data_file_path, f"{tmp_dir_path}{chunk_number}", col_name_chunks[chunk_number], col_coords_chunks[chunk_number], bigram_size_dict, tmp_dir_path, verbose) for
-                chunk_number in range(len(col_index_chunks)))
+        joblib.Parallel(n_jobs=num_parallel)(
+            joblib.delayed(save_transposed_line_to_temp)(f4_src_file_path, f"{tmp_dir_path}{chunk_number}", col_name_chunks[chunk_number], col_coords_chunks[chunk_number], bigram_size_dict, tmp_dir_path, verbose) for
+            chunk_number in range(len(col_index_chunks)))
 
-            with gzip.open(tmp_tsv_file_path, "w", compresslevel=1) as tmp_tsv_file:
-                for i in range(0, num_parallel + 1):
-                    chunk_file_path = f"{tmp_dir_path}{i}"
+        with gzip.open(tmp_tsv_file_path, "w", compresslevel=1) as tmp_tsv_file:
+            for i in range(0, num_parallel + 1):
+                chunk_file_path = f"{tmp_dir_path}{i}"
 
-                    with gzip.open(chunk_file_path, "r", compresslevel=1) as chunk_file:
-                        for line in chunk_file:
-                            tmp_tsv_file.write(line)
+                with gzip.open(chunk_file_path, "r", compresslevel=1) as chunk_file:
+                    for line in chunk_file:
+                        tmp_tsv_file.write(line)
 
-                    remove(chunk_file_path)
+                remove(chunk_file_path)
 
         print_message(f"Converting temp file at {tmp_tsv_file_path} to {f4_dest_file_path}", verbose)
         convert_delimited_file(tmp_tsv_file_path, f4_dest_file_path, compression_type=src_file_data.decompression_type, num_parallel=num_parallel, verbose=verbose)
