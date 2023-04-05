@@ -841,16 +841,16 @@ def run_all_small_tests():
     for file_path in glob.glob(f"{f4_file_path}*"):
         os.unlink(file_path)
 
-#run_all_small_tests()
+run_all_small_tests()
 
 #for compression_type in [None, "dictionary", "zstd"]:
-#for compression_type in [None, "zstd"]:
-for compression_type in [None]:
+for compression_type in [None, "zstd"]:
+#for compression_type in [None]:
 #for compression_type in ["dictionary"]:
 #for compression_type in ["zstd"]:
     # Medium tests
-    #run_larger_tests(num_parallel=1, size="medium", discrete1_index=11, numeric1_index=21, rebuild=True, compression_type=compression_type)
-    #run_larger_tests(num_parallel=2, size="medium", discrete1_index=11, numeric1_index=21, rebuild=True, compression_type=compression_type)
+    run_larger_tests(num_parallel=1, size="medium", discrete1_index=11, numeric1_index=21, rebuild=True, compression_type=compression_type)
+    run_larger_tests(num_parallel=2, size="medium", discrete1_index=11, numeric1_index=21, rebuild=True, compression_type=compression_type)
 
     # Large tests
     #num_parallel = 1
@@ -863,10 +863,10 @@ for compression_type in [None]:
     check_outputs = True
     #check_outputs = False
 
-    #run_larger_tests(num_parallel=num_parallel, size="large_tall", discrete1_index=251, numeric1_index=501, rebuild=rebuild, compression_type=compression_type, verbose=verbose, check_outputs=check_outputs)
-    #run_larger_tests(num_parallel=num_parallel, size="large_wide", discrete1_index=250001, numeric1_index=500001, rebuild=rebuild, compression_type=compression_type, verbose=verbose, check_outputs=check_outputs)
+    run_larger_tests(num_parallel=num_parallel, size="large_tall", discrete1_index=251, numeric1_index=501, rebuild=rebuild, compression_type=compression_type, verbose=verbose, check_outputs=check_outputs)
+    run_larger_tests(num_parallel=num_parallel, size="large_wide", discrete1_index=250001, numeric1_index=500001, rebuild=rebuild, compression_type=compression_type, verbose=verbose, check_outputs=check_outputs)
 
-    f4.transpose("data/medium.f4", "/tmp/medium_transposed.f4", num_parallel=num_parallel, verbose=verbose)
-    #f4.transpose("data/large_tall.f4", "/tmp/large_tall_transposed.f4", num_parallel=num_parallel, verbose=verbose)
+    #f4.transpose("data/medium.f4", "/tmp/medium_transposed.f4", num_parallel=num_parallel, verbose=verbose)
+    f4.transpose("data/large_tall.f4", "/tmp/large_tall_transposed.f4", num_parallel=num_parallel, verbose=verbose)
 
 print("All tests passed!!")

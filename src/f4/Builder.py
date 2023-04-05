@@ -121,41 +121,62 @@ def transpose(f4_src_file_path, f4_dest_file_path, num_parallel=1, tmp_dir_path=
 
     tmp_dir_path = fix_dir_path_ending(tmp_dir_path)
     makedirs(tmp_dir_path, exist_ok=True)
-    tmp_tsv_file_path = tmp_dir_path + "tmp.tsv.gz"
+    tmp_tsv_file_path = f"{tmp_dir_path}tmp.tsv.gz"
 
     with initialize(f4_src_file_path) as src_file_data:
         column_names, column_type_dict, column_coords_dict, bigram_size_dict = get_column_meta(src_file_data, set(), [])
+        column_coords = [column_coords_dict[name] for name in column_names]
+        num_rows = src_file_data.stat_dict["num_rows"]
 
     if num_parallel == 1:
-        col_coords = [column_coords_dict[name] for name in column_names]
-        save_transposed_line_to_temp(f4_src_file_path, tmp_tsv_file_path, column_names, col_coords, bigram_size_dict, tmp_dir_path, verbose)
-    else:
-        col_index_chunks = list(split_integer_list_into_chunks(list(range(1, get_num_cols(f4_src_file_path))), num_parallel))
-        col_index_chunks.insert(0, [0])
-        col_name_chunks = []
-        col_coords_chunks = []
+        chunk_file_path = transpose_lines_to_temp(f4_src_file_path, tmp_dir_path, 0, num_rows, column_names, column_coords, bigram_size_dict, verbose)
 
-        for col_index_chunk in col_index_chunks:
-            col_name_chunks.append([column_names[i] for i in col_index_chunk])
-            col_coords_chunks.append([column_coords_dict[column_names[i]] for i in col_index_chunk])
-
-        joblib.Parallel(n_jobs=num_parallel)(
-            joblib.delayed(save_transposed_line_to_temp)(f4_src_file_path, f"{tmp_dir_path}{chunk_number}", col_name_chunks[chunk_number], col_coords_chunks[chunk_number], bigram_size_dict, tmp_dir_path, verbose) for
-            chunk_number in range(len(col_index_chunks)))
-
+        print_message(f"Extracting transposed values from {chunk_file_path} for {f4_src_file_path}", verbose)
         with gzip.open(tmp_tsv_file_path, "w", compresslevel=1) as tmp_tsv_file:
-            for i in range(0, num_parallel + 1):
-                chunk_file_path = f"{tmp_dir_path}{i}"
+            with open(chunk_file_path, "rb") as chunk_file:
+                for column_index, column_name in enumerate(column_names):
+                    tmp_tsv_file.write(column_name)
 
-                with gzip.open(chunk_file_path, "r", compresslevel=1) as chunk_file:
-                    for line in chunk_file:
-                        tmp_tsv_file.write(line)
+                    column_size = column_coords[column_index][1] - column_coords[column_index][0]
+                    for row_index in range(num_rows):
+                        tmp_tsv_file.write(b"\t" + chunk_file.read(column_size))
 
+                    tmp_tsv_file.write(b"\n")
+
+            remove(chunk_file_path)
+    else:
+        row_index_chunks = list(split_integer_list_into_chunks(list(range(num_rows)), num_parallel))
+
+        chunk_file_paths = joblib.Parallel(n_jobs=num_parallel)(
+             joblib.delayed(transpose_lines_to_temp)(f4_src_file_path, tmp_dir_path, row_index_chunk[0], row_index_chunk[-1] + 1, column_names, column_coords, bigram_size_dict, verbose) for row_index_chunk in row_index_chunks)
+
+        chunk_file_handles = {}
+        for row_index_chunk in row_index_chunks:
+            chunk_file_path = f"{tmp_dir_path}{row_index_chunk[0]}"
+            chunk_file_handles[chunk_file_path] = open(chunk_file_path, "rb")
+
+        try:
+            with gzip.open(tmp_tsv_file_path, "w", compresslevel=1) as tmp_tsv_file:
+                for column_index, column_name in enumerate(column_names):
+                    tmp_tsv_file.write(column_name)
+
+                    column_size = column_coords[column_index][1] - column_coords[column_index][0]
+
+                    for row_index_chunk in row_index_chunks:
+                        chunk_file_path = f"{tmp_dir_path}{row_index_chunk[0]}"
+
+                        for row_index in range(row_index_chunk[0], row_index_chunk[-1] + 1):
+                            tmp_tsv_file.write(b"\t" + chunk_file_handles[chunk_file_path].read(column_size))
+
+                    tmp_tsv_file.write(b"\n")
+        finally:
+            for chunk_file_path in chunk_file_handles:
+                chunk_file_handles[chunk_file_path].close()
                 remove(chunk_file_path)
 
-        print_message(f"Converting temp file at {tmp_tsv_file_path} to {f4_dest_file_path}", verbose)
-        convert_delimited_file(tmp_tsv_file_path, f4_dest_file_path, compression_type=src_file_data.decompression_type, num_parallel=num_parallel, verbose=verbose)
-        remove(tmp_tsv_file_path)
+    print_message(f"Converting temp file at {tmp_tsv_file_path} to {f4_dest_file_path}", verbose)
+    convert_delimited_file(tmp_tsv_file_path, f4_dest_file_path, compression_type=src_file_data.decompression_type, num_parallel=num_parallel, verbose=verbose)
+    remove(tmp_tsv_file_path)
 
 def inner_join(f4_left_src_file_path, f4_right_src_file_path, join_column, f4_dest_file_path, num_parallel=1, tmp_dir_path=None, verbose=False):
     join_column = join_column.encode()
@@ -188,9 +209,8 @@ def inner_join(f4_left_src_file_path, f4_right_src_file_path, join_column, f4_de
                 if value in common_values:
                     right_index_dict.setdefault(value, []).append(i)
 
-            # TODO: It would be better to save in zstandard format. But the Python package
-            #      doesn't support reading line by line. Come up with a better way than gzip,
-            #      which is very slow.
+            # TODO: It would be faster to save in zstandard format. But the Python package
+            #      doesn't support reading line by line.
             #TODO: Parallelize this?
             with gzip.open(tmp_tsv_file_path, "w", compresslevel=1) as tmp_tsv_file:
                 tmp_tsv_file.write(b"\t".join(left_column_names + right_columns_to_save) + b"\n")
@@ -686,16 +706,69 @@ def prepare_tmp_dirs(tmp_dir_path):
 
     return tmp_dir_path_chunks, tmp_dir_path_outputs, tmp_dir_path_indexes
 
-def save_transposed_line_to_temp(data_file_path, tmp_file_path, col_names, col_coords, bigram_size_dict, tmp_dir_path, verbose):
+def transpose_lines_to_temp(data_file_path, tmp_dir_path, start_row_index, end_row_index, column_names, column_coords, bigram_size_dict, verbose):
     with initialize(data_file_path) as file_data:
-        print_message(f"Saving transposed lines to temp file at {tmp_file_path}", verbose)
+        tmp_file_path = f"{tmp_dir_path}{start_row_index}"
+        print_message(f"Transposing lines to {tmp_file_path} for {data_file_path} - start row {start_row_index}, end row {end_row_index}", verbose)
 
-        #TODO: It would be better to save in zstandard format. But the Python package
-        #      doesn't support reading line by line. Come up with a better way than gzip,
-        #      which is very slow.
-        with gzip.open(tmp_file_path, "w", compresslevel=1) as tmp_file:
-            for col_index in range(len(col_names)):
-                col_name = col_names[col_index]
+        with open(tmp_file_path, "wb+") as tmp_file:
+            num_rows = end_row_index - start_row_index
 
-                col_values = [col_name] + parse_values_in_column(file_data, col_name, col_coords[col_index], bigram_size_dict)
-                tmp_file.write(b"\t".join(col_values) + b"\n")
+            for column_index in range(len(column_names)):
+                # Create placeholder space for column values in temp file
+                column_coord = column_coords[column_index]
+                tmp_file.write(b" " * (column_coord[1] - column_coord[0]) * num_rows)
+
+            tmp_file.flush()
+
+            with mmap(tmp_file.fileno(), 0, prot=PROT_WRITE) as mm_handle:
+                # Iterate through each row and save the values in the correct locations in the temp file
+                parse_function = get_parse_row_values_function(file_data)
+
+                # Find the start position of each row
+                out_line_positions = [0]
+                for column_index in range(1, len(column_names)):
+                    previous_column_size = column_coords[column_index - 1][1] - column_coords[column_index - 1][0]
+                    this_line_position = out_line_positions[-1] + previous_column_size * num_rows
+                    out_line_positions.append(this_line_position)
+
+                # Iterate through each row and store the values in the respective column
+                for row_index in range(start_row_index, end_row_index):
+                    row_values = parse_function(file_data, row_index, column_coords, bigram_size_dict=bigram_size_dict)
+
+                    for column_index, value in enumerate(row_values):
+                        out_position = out_line_positions[column_index]
+                        column_size = column_coords[column_index][1] - column_coords[column_index][0]
+                        value = format_string_as_fixed_width(value, column_size)
+                        mm_handle[out_position:(out_position + len(value))] = value
+                        out_line_positions[column_index] += len(value)
+
+        return tmp_file_path
+
+# def save_transposed_line_to_temp(data_file_path, tmp_dir_path, chunk_number, col_indices, col_names, col_coords, bigram_size_dict, verbose):
+#     col_names = list(col_names)
+#
+#     with initialize(data_file_path) as file_data:
+#         # Initialize the temporary files with each column name
+#         print_message(f"Initializing temp files to enable transposing {data_file_path} - chunk {chunk_number}", verbose)
+#         for col_index in col_indices:
+#             # TODO: It would be better to save in zstandard format. But the Python package
+#             #      doesn't support reading line by line.
+#             #with gzip.open(f"{tmp_dir_path}{col_index}", "w", compresslevel=1) as tmp_file:
+#             with open(f"{tmp_dir_path}{col_index}", "wb") as tmp_file:
+#                 tmp_file.write(col_names.pop(0))
+#
+#         parse_function = get_parse_row_values_function(file_data)
+#
+#         for row_index in range(file_data.stat_dict["num_rows"]):
+#             row_values = parse_function(file_data, row_index, col_coords, bigram_size_dict=bigram_size_dict)
+#             # print_message(row_index, verbose)
+#             for col_index in col_indices:
+#                 #with gzip.open(f"{tmp_dir_path}{col_index}", "a", compresslevel=1) as tmp_file:
+#                 with open(f"{tmp_dir_path}{col_index}", "ab") as tmp_file:
+#                     tmp_file.write(b"\t" + row_values.pop(0))
+#
+#         for col_index in col_indices:
+#             #with gzip.open(f"{tmp_dir_path}{col_index}", "a", compresslevel=1) as tmp_file:
+#             with open(f"{tmp_dir_path}{col_index}", "ab") as tmp_file:
+#                 tmp_file.write(b"\n")

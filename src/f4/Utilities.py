@@ -6,7 +6,7 @@ import gzip
 from fastnumbers import isint, isfloat, fast_int, fast_float
 from itertools import chain
 from math import ceil, log
-from mmap import mmap, PROT_READ
+from mmap import mmap, PROT_READ, PROT_WRITE
 from msgspec import msgpack
 from operator import eq, ge, gt, le, lt, ne, itemgetter
 from os import makedirs, path, remove
@@ -45,7 +45,6 @@ def build_string_map(the_list):
     max_value_length = get_max_string_length(the_list)
 
     column_items = format_column_items(the_list, max_value_length)
-    #return b"\n".join(column_items), max_value_length
     return b"".join(column_items), max_value_length
 
 def get_max_string_length(the_list):
