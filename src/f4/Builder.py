@@ -179,9 +179,9 @@ def transpose(f4_src_file_path, f4_dest_file_path, num_parallel=1, tmp_dir_path=
     remove(tmp_tsv_file_path)
 
 def inner_join(f4_left_src_file_path, f4_right_src_file_path, join_column, f4_dest_file_path, num_parallel=1, tmp_dir_path=None, verbose=False):
-    join_column = join_column.encode()
-
     print_message(f"Inner joining {f4_left_src_file_path} and {f4_right_src_file_path} based on the {join_column} column, saving to {f4_dest_file_path}", verbose)
+
+    join_column = join_column.encode()
 
     if tmp_dir_path:
         makedirs(tmp_dir_path, exist_ok=True)
