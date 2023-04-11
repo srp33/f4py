@@ -238,7 +238,12 @@ def inner_join(f4_left_src_file_path, f4_right_src_file_path, join_column, f4_de
 
             remove(tmp_tsv_file_path)
 
-def build_indexes(f4_file_path, index_columns, tmp_dir_path, verbose=False):
+def build_indexes(f4_file_path, index_columns, tmp_dir_path=None, verbose=False):
+    if tmp_dir_path:
+        makedirs(tmp_dir_path, exist_ok=True)
+    else:
+        tmp_dir_path = mkdtemp()
+
     if isinstance(index_columns, str):
         build_one_column_index(f4_file_path, index_columns, tmp_dir_path, verbose)
     elif isinstance(index_columns, list):
