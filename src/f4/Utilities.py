@@ -21,6 +21,9 @@ FILE_KEY_ABBREVIATIONS_STATS = {"mccl": 3, "mctl": 6, "cnmccl": 10, "cnll": 11}
 FILE_KEY_ABBREVIATIONS_OTHER = {"ll": 4, "cmpr": 7}
 FILE_KEY_ABBREVIATIONS_NOCACHE = {"data": 1, "cc": 2, "ct": 5, "cndata": 8, "cncc": 9}
 
+def get_current_version():
+    return "0.5.0"
+
 def read_str_from_file(file_path, file_extension=""):
     with open(file_path + file_extension, 'rb') as the_file:
         return the_file.read()
