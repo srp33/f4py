@@ -331,7 +331,7 @@ def parse_columns_chunk(delimited_file_path, delimiter, comment_prefix, start_in
 
             num_rows += 1
 
-            if num_rows > 0 and num_rows % 100 == 0:
+            if verbose and num_rows > 0 and (num_rows < 100000 and num_rows % 100 == 0) or num_rows % 10000 == 0:
                 print_message(f"Processed line {num_rows} of {delimited_file_path} for columns {start_index} - {end_index - 1}", verbose)
 
     column_types_dict = {}
