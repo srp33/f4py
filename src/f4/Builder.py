@@ -22,15 +22,6 @@ def convert_delimited_file(delimited_file_path, f4_file_path, index_columns=[], 
 
         if comment_prefix == "":
             comment_prefix = None
-    #
-    # # Guess an optimal value for this parameter, if not specified.
-    # if not num_rows_per_write:
-    #     raw_num_rows = 0
-    #     with get_delimited_file_handle(delimited_file_path) as in_file:
-    #         for line in in_file:
-    #             raw_num_rows += 1
-    #
-    #     num_rows_per_write = ceil(raw_num_rows / (num_parallel * 2) + 1)
 
     if num_parallel > 1:
         global joblib
@@ -89,8 +80,11 @@ def convert_delimited_file(delimited_file_path, f4_file_path, index_columns=[], 
     if num_rows == 0:
         raise Exception(f"A header row but no data rows were detected in {delimited_file_path}")
 
+    #num_rows_per_print = ceil(num_rows / (num_parallel * 2) + 1)
+    num_rows_per_print = 100 if num_rows < 100000 else 10000
+
     print_message(f"Parsing chunks of {delimited_file_path} and saving to temp directory ({tmp_dir_path_chunks})", verbose)
-    line_lengths_dict = get_line_lengths_dict(delimited_file_path, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes, column_compression_dicts, num_rows, num_parallel, verbose)
+    line_lengths_dict = get_line_lengths_dict(delimited_file_path, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes, column_compression_dicts, num_rows, num_parallel, num_rows_per_print, verbose)
 
     print_message(f"Saving meta files for {f4_file_path}", verbose)
     write_meta_files(tmp_dir_path_outputs, column_sizes, line_lengths_dict, column_names, column_types, compression_type, column_compression_dicts, num_rows)
@@ -404,13 +398,13 @@ def parse_columns_chunk(delimited_file_path, delimiter, comment_prefix, start_in
 
     return column_sizes_dict, column_types_dict, column_compression_dicts, num_rows
 
-def get_line_lengths_dict(delimited_file_path, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes, compression_dicts, num_rows, num_parallel, verbose):
+def get_line_lengths_dict(delimited_file_path, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes, compression_dicts, num_rows, num_parallel, num_rows_per_print, verbose):
     if num_parallel == 1:
-        line_lengths_dict = write_rows_chunk(delimited_file_path, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes, compression_dicts, 0, 0, num_rows, verbose)
+        line_lengths_dict = write_rows_chunk(delimited_file_path, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes, compression_dicts, 0, 0, num_rows, num_rows_per_print, verbose)
     else:
         row_chunk_indices = generate_chunk_ranges(num_rows, ceil(num_rows / num_parallel) + 1)
 
-        line_lengths_dicts = joblib.Parallel(n_jobs=num_parallel)(joblib.delayed(write_rows_chunk)(delimited_file_path, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes, compression_dicts, i, row_chunk[0], row_chunk[1], verbose) for i, row_chunk in enumerate(row_chunk_indices))
+        line_lengths_dicts = joblib.Parallel(n_jobs=num_parallel)(joblib.delayed(write_rows_chunk)(delimited_file_path, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes, compression_dicts, i, row_chunk[0], row_chunk[1], num_rows_per_print, verbose) for i, row_chunk in enumerate(row_chunk_indices))
 
         line_lengths_dict = {}
         for x in line_lengths_dicts:
@@ -418,7 +412,7 @@ def get_line_lengths_dict(delimited_file_path, tmp_dir_path_chunks, delimiter, c
 
     return line_lengths_dict
 
-def write_rows_chunk(delimited_file_path, tmp_dir_path, delimiter, comment_prefix, compression_type, column_sizes, compression_dicts, chunk_number, start_index, end_index, verbose):
+def write_rows_chunk(delimited_file_path, tmp_dir_path, delimiter, comment_prefix, compression_type, column_sizes, compression_dicts, chunk_number, start_index, end_index, num_rows_per_print, verbose):
     line_lengths_dict = {}
 
     if compression_type == "zstd":
@@ -462,7 +456,7 @@ def write_rows_chunk(delimited_file_path, tmp_dir_path, delimiter, comment_prefi
 
                 line_lengths_dict[line_index] = len(out_line)
 
-                if line_index % 100 == 0:
+                if line_index % num_rows_per_print == 0:
                     print_message(f"Processed chunk of {delimited_file_path} at line {line_index} (start_index = {start_index}, end_index = {end_index})", verbose)
 
                 chunk_file.write(out_line)
