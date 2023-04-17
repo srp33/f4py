@@ -28,5 +28,4 @@ with open("setup.cfg", "w") as out_file:
     print(f"Updating version in setup.cfg to {version}!")
     setup_text = setup_text.replace(setup_version, version)
     out_file.write(setup_text)
-
-print("Done!")
+    print(f"Done updating version in setup.cfg to {version}!")
