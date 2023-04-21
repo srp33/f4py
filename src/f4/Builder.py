@@ -264,6 +264,8 @@ def build_endswith_index(f4_file_path, index_column, tmp_dir_path, verbose=False
 #####################################################
 
 def write_meta_files(tmp_dir_path_outputs, column_sizes, line_lengths_dict, column_names=None, column_types=None, compression_type=None, column_compression_dicts=None, num_rows=None):
+    write_str_to_file(f"{tmp_dir_path_outputs}ver", get_current_version_major().encode())
+
     # Calculate and write the column coordinates and max length of these coordinates.
     column_start_coords = get_column_start_coords(column_sizes)
     column_coords_string, max_column_coord_length = build_string_map(column_start_coords)
@@ -579,6 +581,8 @@ def build_one_column_index(f4_file_path, index_column, tmp_dir_path, verbose, cu
         customize_index_values_positions(values_positions, [index_column_type], sort_first_column, custom_index_function)
         write_index_files(values_positions, tmp_dir_path_data, tmp_dir_path_other)
 
+        write_str_to_file(f"{tmp_dir_path_other}ver", get_current_version_major().encode())
+
         index_file_path = get_index_file_path(f4_file_path, index_column, custom_index_function)
         combine_into_single_file(tmp_dir_path_data, tmp_dir_path_other, index_file_path)
 
@@ -624,6 +628,8 @@ def build_two_column_index(f4_file_path, index_column_1, index_column_2, tmp_dir
         print_message(f"Building index file for {index_name}.", verbose)
         customize_index_values_positions(values_positions, [index_column_1_type, index_column_2_type], sort_first_two_columns, do_nothing)
         write_index_files(values_positions, tmp_dir_path_data, tmp_dir_path_other)
+
+        write_str_to_file(f"{tmp_dir_path_other}ver", get_current_version_major().encode())
 
         index_file_path = get_index_file_path(f4_file_path, index_name)
         combine_into_single_file(tmp_dir_path_data, tmp_dir_path_other, index_file_path)

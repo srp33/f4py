@@ -340,11 +340,12 @@ class StringRangeFilter(__RangeFilter):
         super().__init__(filter1, filter2)
 
 class FileData:
-    def __init__(self, data_file_path, file_handle, file_map_dict, stat_dict, decompression_type, decompressor):
+    def __init__(self, data_file_path, file_handle, file_map_dict, stat_dict, version, decompression_type, decompressor):
         self.data_file_path = data_file_path
         self.file_handle = file_handle
         self.file_map_dict = file_map_dict
         self.stat_dict = stat_dict
+        self.version = version
         self.decompression_type = decompression_type
         self.decompressor = decompressor
 
@@ -494,6 +495,10 @@ def tail(data_file_path, n = 10, select_columns=None, out_file_path=None, out_fi
 
     query(data_file_path, TailFilter(n, select_columns), select_columns, out_file_path=out_file_path, out_file_type=out_file_type)
 
+def get_version(data_file_path):
+    with initialize(data_file_path) as file_data:
+        return file_data.version.decode()
+
 def get_num_rows(data_file_path):
     with initialize(data_file_path) as file_data:
         return file_data.stat_dict["num_rows"]
@@ -566,7 +571,7 @@ def initialize(data_file_path):
             cc_size = file_map_dict2["cc"][1] - file_map_dict2["cc"][0]
             stat_dict["num_cols"] = fast_int(cc_size / stat_dict["mccl"]) - 1
 
-            yield FileData(data_file_path, mmap_handle, file_map_dict2, stat_dict, decompression_type, decompressor)
+            yield FileData(data_file_path, mmap_handle, file_map_dict2, stat_dict, other_dict["ver"], decompression_type, decompressor)
 
             mmap_handle.close()
             file_handle.close()

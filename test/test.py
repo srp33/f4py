@@ -86,6 +86,7 @@ def run_small_tests(in_file_path, f4_file_path, out_file_path, num_parallel = 1,
     except:
         pass_test("Invalid file path.")
 
+    check_result("Version", "Version number - major", f4.get_version(f4_file_path), "0")
     check_result("Dimensions", "Number of rows", f4.get_num_rows(f4_file_path), 5)
     check_result("Dimensions", "Number of columns", f4.get_num_cols(f4_file_path), 9)
 

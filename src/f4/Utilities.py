@@ -18,11 +18,14 @@ from zstandard import ZstdCompressor, ZstdDecompressor
 
 # We use these dictionaries so that when we store the file map, it takes less space on disk.
 FILE_KEY_ABBREVIATIONS_STATS = {"mccl": 3, "mctl": 6, "cnmccl": 10, "cnll": 11}
-FILE_KEY_ABBREVIATIONS_OTHER = {"ll": 4, "cmpr": 7}
+FILE_KEY_ABBREVIATIONS_OTHER = {"ll": 4, "cmpr": 7, "ver": 12}
 FILE_KEY_ABBREVIATIONS_NOCACHE = {"data": 1, "cc": 2, "ct": 5, "cndata": 8, "cncc": 9}
 
 def get_current_version():
-    return "0.5.2"
+    return "0.5.3"
+
+def get_current_version_major():
+    return get_current_version().split(".")[0]
 
 def read_str_from_file(file_path, file_extension=""):
     with open(file_path + file_extension, 'rb') as the_file:
