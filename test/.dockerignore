@@ -1,5 +1,6 @@
 data/*.f4*
 data/medium*
 data/large*
-data/cadd*.tsv*
-data/whole_genome_SNVs_*
+data/super*
+data/cadd
+data/archs4
