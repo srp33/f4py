@@ -24,8 +24,8 @@ dockerCommand="docker run -i -t --rm --platform linux/x86_64 --user $(id -u):$(i
 #$dockerCommand bash -c "time python3 build_tsv.py 250 250 500 1000000 data/large_tall.tsv.gz"
 #$dockerCommand bash -c "time python3 build_tsv.py 250000 250000 500000 1000 data/large_wide.tsv.gz"
 
-$dockerCommand bash -c "time python3 build_tsv.py 2 0 0 10000000000 data/super_tall.tsv.gz"
-#$dockerCommand bash -c "time python3 build_tsv.py 10000000000 0 0 2 data/super_wide.tsv.gz"
+$dockerCommand bash -c "time python3 build_tsv.py 2 0 0 1000000000 data/super_tall.tsv.gz"
+#$dockerCommand bash -c "time python3 build_tsv.py 1000000000 0 0 2 data/super_wide.tsv.gz"
 
 #######################################################
 # Run tests
