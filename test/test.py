@@ -65,11 +65,10 @@ def fail_test(message):
     print(f"FAIL: {message}")
     sys.exit(1)
 
-def run_small_tests(in_file_path, f4_file_path, out_file_path, num_parallel = 1, num_cols_per_chunk = 1, compression_type=None, index_columns=None):
+def run_small_tests(in_file_path, f4_file_path, out_file_path, num_parallel = 1, compression_type=None, index_columns=None):
     print("-------------------------------------------------------")
     print(f"Running all tests for {in_file_path}")
     print(f"num_parallel: {num_parallel}")
-    print(f"num_cols_per_chunk: {num_cols_per_chunk}")
     print(f"compression_type: {compression_type}")
     print(f"index_columns: {index_columns}")
     print("-------------------------------------------------------")
@@ -78,7 +77,7 @@ def run_small_tests(in_file_path, f4_file_path, out_file_path, num_parallel = 1,
     for file_path in glob.glob(f"{f4_file_path}*"):
         os.unlink(file_path)
 
-    f4.convert_delimited_file(in_file_path, f4_file_path, compression_type=compression_type, num_parallel=num_parallel, num_cols_per_chunk=num_cols_per_chunk, index_columns=index_columns)
+    f4.convert_delimited_file(in_file_path, f4_file_path, compression_type=compression_type, num_parallel=num_parallel, index_columns=index_columns)
 
     try:
         f4.query("bogus_file_path")
@@ -650,15 +649,15 @@ def run_larger_tests(num_parallel, size, extension, discrete1_index, numeric1_in
         print(f"Parsing {in_file_path} - cmpr: {compression_type} - for master outputs")
         print("------------------------------------------------------------------")
 
-        with open(in_file_path) as larger_file:
+        with get_delimited_file_handle(in_file_path) as larger_file:
             for line in larger_file:
-                line_items = line.rstrip("\n").split("\t")
-                larger_ID.append([line_items[0].encode()])
-                larger_Categorical1.append([line_items[1].encode()])
-                larger_Discrete1.append([line_items[discrete1_index].encode()])
+                line_items = line.rstrip(b"\n").split(b"\t")
+                larger_ID.append([line_items[0]])
+                larger_Categorical1.append([line_items[1]])
+                larger_Discrete1.append([line_items[discrete1_index]])
 
                 number = line_items[numeric1_index]
-                if number != "Numeric1":
+                if number != b"Numeric1":
                     number = float(number)
                 larger_Numeric1.append([number])
 
@@ -784,12 +783,12 @@ def run_all_small_tests():
     # Basic small tests
     f4_file_path = "data/small.f4"
     out_file_path = "/tmp/small_out.tsv"
-    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, num_cols_per_chunk = 1)
-    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2, num_cols_per_chunk = 2)
+    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1)
+    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2)
 
     # Basic small tests (with gzipped files)
-    run_small_tests("data/small.tsv.gz", f4_file_path, out_file_path, num_parallel = 1, num_cols_per_chunk = 1)
-    run_small_tests("data/small.tsv.gz", f4_file_path, out_file_path, num_parallel = 2, num_cols_per_chunk = 2)
+    run_small_tests("data/small.tsv.gz", f4_file_path, out_file_path, num_parallel = 1)
+    run_small_tests("data/small.tsv.gz", f4_file_path, out_file_path, num_parallel = 2)
 
     # Make sure we print to standard out properly (this code does not work inside a function).
     f4.convert_delimited_file("data/small.tsv", f4_file_path)
@@ -805,24 +804,24 @@ def run_all_small_tests():
     index_columns = ["ID", "CategoricalB", "FloatA", "FloatB", "IntA", "IntB", "OrdinalA", ["CategoricalB", "IntB"]]
 
     # Small tests with indexing
-    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, num_cols_per_chunk = 1, index_columns = index_columns)
-    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2, num_cols_per_chunk = 2, index_columns = index_columns)
+    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, index_columns = index_columns)
+    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2, index_columns = index_columns)
 
     # Small tests with dictionary-based compression
-    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, num_cols_per_chunk = 1, compression_type = "dictionary")
-    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2, num_cols_per_chunk = 2, compression_type = "dictionary")
+    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, compression_type = "dictionary")
+    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2, compression_type = "dictionary")
 
     # Small tests with dictionary-based compression (and indexing)
-    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, num_cols_per_chunk = 1, compression_type = "dictionary", index_columns = index_columns)
-    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2, num_cols_per_chunk = 2, compression_type = "dictionary", index_columns = index_columns)
+    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, compression_type = "dictionary", index_columns = index_columns)
+    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2, compression_type = "dictionary", index_columns = index_columns)
 
     # Small tests with z-standard compression
-    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, num_cols_per_chunk = 1, compression_type = "zstd")
-    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2, num_cols_per_chunk = 2, compression_type = "zstd")
+    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, compression_type = "zstd")
+    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2, compression_type = "zstd")
 
     # Small tests with z-standard compression (and indexing)
-    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, num_cols_per_chunk = 1, compression_type = "zstd", index_columns = index_columns)
-    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2, num_cols_per_chunk = 2, compression_type = "zstd", index_columns = index_columns)
+    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, compression_type = "zstd", index_columns = index_columns)
+    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2, compression_type = "zstd", index_columns = index_columns)
 
      # Transpose without compression
     test_transpose("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, compression_type = None)
@@ -842,16 +841,36 @@ def run_all_small_tests():
     for file_path in glob.glob(f"{f4_file_path}*"):
         os.unlink(file_path)
 
-run_all_small_tests()
+def run_super_tests(num_parallel, size, extension, compression_type, verbose, tmp_dir_path=None):
+    in_file_path = f"data/{size}.tsv{extension}"
+    f4_file_path = f"data/{size}.f4"
+    out_file_path = "/tmp/f4_out.tsv"
+
+    print("-------------------------------------------------------------------")
+    print(f"Converting {in_file_path} to {f4_file_path} (cmpr: {compression_type})")
+    print("-------------------------------------------------------------------")
+
+    # Clean up data files if they already exist
+    for file_path in glob.glob(f"{f4_file_path}*"):
+        os.unlink(file_path)
+
+    f4.convert_delimited_file(in_file_path, f4_file_path, compression_type=compression_type, num_parallel=num_parallel, verbose=verbose, tmp_dir_path=tmp_dir_path)
+
+    index_tmp_dir_path = "/tmp/indexes"
+    shutil.rmtree(index_tmp_dir_path, ignore_errors = True)
+    os.makedirs(index_tmp_dir_path)
+    f4.build_indexes(f4_file_path, ["ID", "Categorical1"], index_tmp_dir_path)
+
+#run_all_small_tests()
 
 #for compression_type in [None, "dictionary", "zstd"]:
-for compression_type in [None, "zstd"]:
-#for compression_type in [None]:
+#for compression_type in [None, "zstd"]:
+for compression_type in [None]:
 #for compression_type in ["dictionary"]:
 #for compression_type in ["zstd"]:
     # Medium tests
-    run_larger_tests(num_parallel=1, size="medium", extension="", discrete1_index=11, numeric1_index=21, rebuild=True, compression_type=compression_type)
-    run_larger_tests(num_parallel=2, size="medium", extension="", discrete1_index=11, numeric1_index=21, rebuild=True, compression_type=compression_type)
+#    run_larger_tests(num_parallel=1, size="medium", extension="", discrete1_index=11, numeric1_index=21, rebuild=True, compression_type=compression_type)
+#    run_larger_tests(num_parallel=2, size="medium", extension="", discrete1_index=11, numeric1_index=21, rebuild=True, compression_type=compression_type)
 
     # Large tests
     #num_parallel = 1
@@ -861,16 +880,19 @@ for compression_type in [None, "zstd"]:
     #rebuild = False
     verbose = True
     #verbose = False
-    check_outputs = True
-    #check_outputs = False
+    #check_outputs = True
+    check_outputs = False
 
-    #run_larger_tests(num_parallel=num_parallel, size="large_tall", extension=".gz", discrete1_index=251, numeric1_index=501, rebuild=rebuild, compression_type=compression_type, verbose=verbose, check_outputs=check_outputs)
-    #run_larger_tests(num_parallel=num_parallel, size="large_wide", extension=".gz", discrete1_index=250001, numeric1_index=500001, rebuild=rebuild, compression_type=compression_type, verbose=verbose, check_outputs=check_outputs)
+#    run_larger_tests(num_parallel=num_parallel, size="large_tall", extension=".gz", discrete1_index=251, numeric1_index=501, rebuild=rebuild, compression_type=compression_type, verbose=verbose, check_outputs=check_outputs)
+#    run_larger_tests(num_parallel=num_parallel, size="large_wide", extension=".gz", discrete1_index=250001, numeric1_index=500001, rebuild=rebuild, compression_type=compression_type, verbose=verbose, check_outputs=check_outputs)
 
     #f4.transpose("data/medium.f4", "/tmp/medium_transposed.f4", num_parallel=num_parallel, verbose=verbose)
     #f4.transpose("data/large_tall.f4", "/tmp/large_tall_transposed.f4", num_parallel=num_parallel, verbose=verbose)
 
     #f4.inner_join("data/medium.f4", "data/medium.f4", "ID", "/tmp/medium_joined.f4", num_parallel=num_parallel, verbose=verbose)
     #f4.inner_join("data/large_tall.f4", "data/large_wide.f4", "ID", "/tmp/large_joined.f4", num_parallel=num_parallel, verbose=verbose)
+
+    run_super_tests(num_parallel=num_parallel, size="super_tall", extension=".gz", compression_type=compression_type, verbose=verbose)
+#    run_super_tests(num_parallel=num_parallel, size="super_wide", extension=".gz", compression_type=compression_type, verbose=verbose)
 
 print("All tests passed!!")

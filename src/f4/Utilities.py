@@ -11,6 +11,7 @@ from msgspec import msgpack
 from operator import eq, ge, gt, le, lt, ne, itemgetter
 from os import makedirs, path, remove
 from re import compile
+import shelve
 from shutil import rmtree
 import sys
 from tempfile import mkdtemp

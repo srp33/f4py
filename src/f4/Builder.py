@@ -5,7 +5,7 @@ from .Utilities import *
 # Public function(s)
 #####################################################
 
-def convert_delimited_file(delimited_file_path, f4_file_path, index_columns=[], delimiter="\t", comment_prefix="#", compression_type=None, num_parallel=1, num_cols_per_chunk=None, tmp_dir_path=None, verbose=False):
+def convert_delimited_file(delimited_file_path, f4_file_path, index_columns=[], delimiter="\t", comment_prefix="#", compression_type=None, num_parallel=1, tmp_dir_path=None, verbose=False):
     if type(delimiter) != str:
         raise Exception("The delimiter value must be a string.")
 
@@ -28,66 +28,17 @@ def convert_delimited_file(delimited_file_path, f4_file_path, index_columns=[], 
         joblib = __import__('joblib', globals(), locals())
 
     print_message(f"Converting from {delimited_file_path}", verbose)
-    tmp_dir_path_chunks, tmp_dir_path_outputs, tmp_dir_path_indexes = prepare_tmp_dirs(tmp_dir_path)
+    tmp_dir_path_colinfo, tmp_dir_path_chunks, tmp_dir_path_outputs, tmp_dir_path_indexes = prepare_tmp_dirs(tmp_dir_path)
 
-    # Get column names. Remove any leading or trailing white space around the column names.
-    with get_delimited_file_handle(delimited_file_path) as in_file:
-        if comment_prefix:
-            for line in in_file:
-                if not line.startswith(comment_prefix):
-                    header_line = line
-                    break
-        else:
-            header_line = in_file.readline()
+    metadata = parse_file_metadata(comment_prefix, compression_type, delimited_file_path, delimiter, num_parallel, tmp_dir_path_colinfo, verbose)
 
-    column_names = [x.strip() for x in header_line.rstrip(b"\n").split(delimiter)]
-    num_cols = len(column_names)
-
-    if num_cols == 0:
-        raise Exception(f"No data was detected in {delimited_file_path}.")
-
-    # Iterate through the lines to summarize each column.
-    print_message(f"Summarizing each column in {delimited_file_path}", verbose)
-    if num_parallel == 1:
-        chunk_results = [parse_columns_chunk(delimited_file_path, delimiter, comment_prefix, 0, num_cols, compression_type, verbose)]
-    else:
-        # Guess an optimal value for this parameter, if not specified.
-        if not num_cols_per_chunk:
-            num_cols_per_chunk = ceil(num_cols / (num_parallel * 2) + 1)
-
-        column_chunk_indices = generate_chunk_ranges(num_cols, num_cols_per_chunk)
-        chunk_results = joblib.Parallel(n_jobs=num_parallel)(joblib.delayed(parse_columns_chunk)(delimited_file_path, delimiter, comment_prefix, column_chunk[0], column_chunk[1], compression_type, verbose) for column_chunk in column_chunk_indices)
-
-    # Summarize the column sizes and types across the chunks.
-    column_sizes = []
-    column_types = []
-    column_compression_dicts = {}
-
-    for chunk_tuple in chunk_results:
-        for i, size in sorted(chunk_tuple[0].items()):
-            column_sizes.append(size)
-
-        for i, the_type in sorted(chunk_tuple[1].items()):
-            column_types.append(the_type)
-
-        if len(chunk_tuple) > 0:
-            # This merges the dictionaries
-            column_compression_dicts = {**column_compression_dicts, **chunk_tuple[2]}
-
-    # When each chunk was processed, we went through all rows, so we can get these numbers from just the first chunk.
-    num_rows = chunk_results[0][3]
-
-    if num_rows == 0:
-        raise Exception(f"A header row but no data rows were detected in {delimited_file_path}")
-
-    #num_rows_per_print = ceil(num_rows / (num_parallel * 2) + 1)
-    num_rows_per_print = 100 if num_rows < 100000 else 10000
+    num_rows_per_print = 100 if metadata.num_rows < 100000 else 10000
 
     print_message(f"Parsing chunks of {delimited_file_path} and saving to temp directory ({tmp_dir_path_chunks})", verbose)
-    line_lengths_dict = get_line_lengths_dict(delimited_file_path, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes, column_compression_dicts, num_rows, num_parallel, num_rows_per_print, verbose)
+    line_lengths_dict = get_line_lengths_dict(delimited_file_path, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, metadata.column_sizes, metadata.column_compression_dicts, metadata.num_rows, num_parallel, num_rows_per_print, verbose)
 
     print_message(f"Saving meta files for {f4_file_path}", verbose)
-    write_meta_files(tmp_dir_path_outputs, column_sizes, line_lengths_dict, column_names, column_types, compression_type, column_compression_dicts, num_rows)
+    write_meta_files(tmp_dir_path_outputs, metadata.column_sizes, line_lengths_dict, metadata.column_names, metadata.column_types, compression_type, metadata.column_compression_dicts, metadata.num_rows)
 
     print_message(f"Combining all data into a single file for {delimited_file_path}", verbose)
     combine_into_single_file(tmp_dir_path_chunks, tmp_dir_path_outputs, f4_file_path, num_parallel)
@@ -263,6 +214,97 @@ def build_endswith_index(f4_file_path, index_column, tmp_dir_path, verbose=False
 # Non-public function(s)
 #####################################################
 
+def parse_file_metadata(comment_prefix, compression_type, delimited_file_path, delimiter, num_parallel, tmp_dir_path, verbose):
+    # Get column names. Remove any leading or trailing white space around the column names.
+    with get_delimited_file_handle(delimited_file_path) as in_file:
+        if comment_prefix:
+            for line in in_file:
+                if not line.startswith(comment_prefix):
+                    header_line = line
+                    break
+        else:
+            header_line = in_file.readline()
+
+    column_names = [x.strip() for x in header_line.rstrip(b"\n").split(delimiter)]
+    num_cols = len(column_names)
+    if num_cols == 0:
+        raise Exception(f"No data was detected in {delimited_file_path}.")
+
+    # Iterate through the lines to summarize each column.
+    print_message(f"Summarizing each column in {delimited_file_path}", verbose)
+
+    # Determine the number of columns per chunk.
+    # When there are fewer than 1000 columns, we will just have one chunk, regardless of num_parallel.
+    # num_cols_per_chunk = max(1000, ceil(num_cols / num_parallel))
+    num_cols_per_chunk = ceil(num_cols / num_parallel)
+
+    # Separate the column indices into chunks
+    column_chunk_indices = list(generate_chunk_ranges(num_cols, num_cols_per_chunk))
+
+    # Parse each column and store the results in temp files
+    if num_parallel == 1:
+        tmp_file_paths = parse_columns_chunk(delimited_file_path, delimiter, comment_prefix, column_chunk_indices[0][0], column_chunk_indices[0][1], compression_type, tmp_dir_path, verbose)
+    else:
+        tmp_file_paths = joblib.Parallel(n_jobs=num_parallel)(joblib.delayed(parse_columns_chunk)(delimited_file_path, delimiter, comment_prefix, column_chunk[0], column_chunk[1], compression_type, tmp_dir_path, verbose) for column_chunk in column_chunk_indices)
+
+    print("Done parsing columns chunks, go from here")
+    import sys
+    sys.exit(0)
+
+    # Summarize the column sizes and types across the chunks.
+    column_sizes = []
+    column_types = []
+    column_compression_dicts = {}
+    for chunk_tuple in chunk_results:
+        for i, size in sorted(chunk_tuple[0].items()):
+            column_sizes.append(size)
+
+        for i, the_type in sorted(chunk_tuple[1].items()):
+            column_types.append(the_type)
+
+        if len(chunk_tuple) > 0:
+            # This merges the dictionaries
+            column_compression_dicts = {**column_compression_dicts, **chunk_tuple[2]}
+
+    # When each chunk was processed, we went through all rows, so we can get these numbers from just the first chunk.
+    num_rows = chunk_results[0][3]
+    if num_rows == 0:
+        raise Exception(f"A header row but no data rows were detected in {delimited_file_path}")
+
+    # # Iterate through the lines to summarize each column.
+    # print_message(f"Summarizing each column in {delimited_file_path}", verbose)
+    # if num_parallel == 1:
+    #     chunk_results = [parse_columns_chunk(delimited_file_path, delimiter, comment_prefix, 0, num_cols, compression_type, tmp_dir_path, verbose)]
+    # else:
+    #     # Guess an optimal value for this parameter, if not specified.
+    #     if not num_cols_per_chunk:
+    #         num_cols_per_chunk = ceil(num_cols / (num_parallel * 2) + 1)
+    #
+    #     column_chunk_indices = generate_chunk_ranges(num_cols, num_cols_per_chunk)
+    #     chunk_results = joblib.Parallel(n_jobs=num_parallel)(joblib.delayed(parse_columns_chunk)(delimited_file_path, delimiter, comment_prefix, column_chunk[0], column_chunk[1], compression_type, tmp_dir_path, verbose) for column_chunk in column_chunk_indices)
+    #
+    # # Summarize the column sizes and types across the chunks.
+    # column_sizes = []
+    # column_types = []
+    # column_compression_dicts = {}
+    # for chunk_tuple in chunk_results:
+    #     for i, size in sorted(chunk_tuple[0].items()):
+    #         column_sizes.append(size)
+    #
+    #     for i, the_type in sorted(chunk_tuple[1].items()):
+    #         column_types.append(the_type)
+    #
+    #     if len(chunk_tuple) > 0:
+    #         # This merges the dictionaries
+    #         column_compression_dicts = {**column_compression_dicts, **chunk_tuple[2]}
+    #
+    # # When each chunk was processed, we went through all rows, so we can get these numbers from just the first chunk.
+    # num_rows = chunk_results[0][3]
+    # if num_rows == 0:
+    #     raise Exception(f"A header row but no data rows were detected in {delimited_file_path}")
+
+    return FileMetadata(column_names, column_sizes, column_types, column_compression_dicts, num_rows)
+
 def write_meta_files(tmp_dir_path_outputs, column_sizes, line_lengths_dict, column_names=None, column_types=None, compression_type=None, column_compression_dicts=None, num_rows=None):
     write_str_to_file(f"{tmp_dir_path_outputs}ver", get_current_version_major().encode())
 
@@ -305,100 +347,117 @@ def write_meta_files(tmp_dir_path_outputs, column_sizes, line_lengths_dict, colu
 
     write_compression_info(tmp_dir_path_outputs, compression_type, column_compression_dicts, column_index_name_dict)
 
-def parse_columns_chunk(delimited_file_path, delimiter, comment_prefix, start_index, end_index, compression_type, verbose):
+def parse_columns_chunk(delimited_file_path, delimiter, comment_prefix, start_column_index, end_column_index, compression_type, tmp_dir_path, verbose):
+    tmp_file_prefix = f"{tmp_dir_path}{start_column_index}_{end_column_index}"
+
+    # Initialize the column sizes and types.
+    with shelve.open(f"{tmp_file_prefix}_column_size", "n") as column_sizes_dict:
+        with shelve.open(f"{tmp_file_prefix}_column_types_values", "n") as column_types_values_dict:
+            for i in range(start_column_index, end_column_index):
+                i = str(i)
+                column_sizes_dict[i] = 0
+                column_types_values_dict[i] = {b"i": 0, b"f": 0, b"s": 0}
+
+    # We will find the max size for each column and count how many there are of each type.
     with get_delimited_file_handle(delimited_file_path) as in_file:
-        exclude_comments_and_header(in_file, comment_prefix)
+        with shelve.open(f"{tmp_file_prefix}_column_size", "w") as column_sizes_dict:
+            with shelve.open(f"{tmp_file_prefix}_column_types_values", "w", writeback=True) as column_types_values_dict:
+                exclude_comments_and_header(in_file, comment_prefix)
 
-        # Initialize the column sizes and types.
-        # We will count how many there are of each type.
-        column_sizes_dict = {}
-        column_types_values_dict = {}
+                # Loop through the file for the specified columns and update the dictionaries.
+                num_rows = 0
+                for line in in_file:
+                    line = line.rstrip(b"\n")
+                    line_items = line.split(delimiter)
 
-        for i in range(start_index, end_index):
-            column_sizes_dict[i] = 0
-            column_types_values_dict[i] = {b"i": 0, b"f": 0, b"s": 0}
+                    for i in range(start_column_index, end_column_index):
+                        this_value = line_items[i]
+                        this_length = len(this_value)
 
-        # Loop through the file for the specified columns.
-        num_rows = 0
-        for line in in_file:
-            line = line.rstrip(b"\n")
+                        i = str(i)
+                        current_max = column_sizes_dict[i]
 
-            line_items = line.split(delimiter)
+                        if this_length > current_max:
+                            column_sizes_dict[i] = this_length
 
-            for i in range(start_index, end_index):
-                column_sizes_dict[i] = max([column_sizes_dict[i], len(line_items[i])])
+                        inferred_type = infer_type(this_value)
+                        column_types_values_dict[i][inferred_type] += 1
 
-                inferred_type = infer_type(line_items[i])
-                column_types_values_dict[i][inferred_type] += 1
+                    num_rows += 1
 
-            num_rows += 1
+                    if verbose and num_rows > 0 and (num_rows < 100000 and num_rows % 100 == 0) or num_rows % 10000 == 0:
+                        print_message(f"Processed line {num_rows} of {delimited_file_path} for columns {start_column_index} - {end_column_index - 1}", verbose)
+                # TODO: See if this commit is faster and works correctly.
+                #column_sizes_dict.commit()
 
-            if verbose and num_rows > 0 and (num_rows < 100000 and num_rows % 100 == 0) or num_rows % 10000 == 0:
-                print_message(f"Processed line {num_rows} of {delimited_file_path} for columns {start_index} - {end_index - 1}", verbose)
+    # column_types_dict = {}
+    # for i in range(start_column_index, end_column_index):
+    #     column_types_dict[i] = infer_type_for_column(column_types_values_dict[i])
+    #
+    # column_compression_dicts = {}
 
-    column_types_dict = {}
-    for i in range(start_index, end_index):
-        column_types_dict[i] = infer_type_for_column(column_types_values_dict[i])
+    # if compression_type == "dictionary":
+    #     # Figure out whether we should use categorical compression.
+    #     # If there are more than 100 unique values, do not use categorical compression.
+    #     # This is a rough threshold. It also means that files with few rows will almost always use categorical compression.
+    #     # TODO: Consider refining this approach.
+    #     UNIQUE_THRESHOLD = 100
+    #
+    #     # Specify the default compression information for each column.
+    #     # The default is categorical.
+    #     for i in range(start_index, end_index):
+    #         column_compression_dicts[i] = {"compression_type": b"c", "map": {}}
+    #
+    #     column_unique_dict = {i: set() for i in range(start_index, end_index)}
+    #     column_max_length_dict = {i: 0 for i in range(start_index, end_index)}
+    #     column_bigrams_dict = {i: set() for i in range(start_index, end_index)}
+    #
+    #     with get_delimited_file_handle(delimited_file_path) as in_file:
+    #         exclude_comments_and_header(in_file, comment_prefix)
+    #
+    #         for line in in_file:
+    #             line_items = line.rstrip(b"\n").split(delimiter)
+    #
+    #             for i in range(start_index, end_index):
+    #                 value = line_items[i]
+    #                 column_max_length_dict[i] = max(column_max_length_dict[i], len(value))
+    #
+    #                 for bigram in find_unique_bigrams(value):
+    #                     column_bigrams_dict[i].add(bigram)
+    #
+    #                 if column_compression_dicts[i]["compression_type"] == b"c":
+    #                     column_unique_dict[i].add(value)
+    #
+    #                     if len(column_unique_dict[i]) >= UNIQUE_THRESHOLD:
+    #                         column_compression_dicts[i]["compression_type"] = column_types_dict[i]
+    #                         column_unique_dict[i] = None
+    #
+    #     for i in range(start_index, end_index):
+    #         if column_compression_dicts[i]["compression_type"] == b"c":
+    #             unique_values = sorted(column_unique_dict[i])
+    #             num_bytes = get_bigram_size(len(unique_values))
+    #
+    #             for j, value in enumerate_for_compression(unique_values):
+    #                 #column_compression_dicts[i]["map"][value] = int2ba(j, length = length).to01()
+    #                 column_compression_dicts[i]["map"][value] = j.to_bytes(length = num_bytes, byteorder = "big")
+    #
+    #             column_sizes_dict[i] = num_bytes
+    #         else:
+    #             bigrams = sorted(column_bigrams_dict[i])
+    #             num_bytes = get_bigram_size(len(bigrams))
+    #
+    #             for j, bigram in enumerate_for_compression(bigrams):
+    #                 #column_compression_dicts[i]["map"][bigram] = int2ba(j, length = length).to01()
+    #                 column_compression_dicts[i]["map"][bigram] = j.to_bytes(length = num_bytes, byteorder = "big")
+    #
+    #             column_sizes_dict[i] = column_max_length_dict[i] * num_bytes
 
-    column_compression_dicts = {}
+    # with open(tmp_file_path, "wb") as tmp_file:
+    #     column_chunk_data = ColumnChunkData(column_sizes_dict, column_types_dict, column_compression_dicts, num_rows)
+    #     tmp_file.write(serialize(column_chunk_data))
 
-    if compression_type == "dictionary":
-        # Figure out whether we should use categorical compression.
-        # If there are more than 100 unique values, do not use categorical compression.
-        # This is a rough threshold. It also means that files with few rows will almost always use categorical compression.
-        # TODO: Consider refining this approach.
-        UNIQUE_THRESHOLD = 100
-
-        # Specify the default compression information for each column.
-        # The default is categorical.
-        for i in range(start_index, end_index):
-            column_compression_dicts[i] = {"compression_type": b"c", "map": {}}
-
-        column_unique_dict = {i: set() for i in range(start_index, end_index)}
-        column_max_length_dict = {i: 0 for i in range(start_index, end_index)}
-        column_bigrams_dict = {i: set() for i in range(start_index, end_index)}
-
-        with get_delimited_file_handle(delimited_file_path) as in_file:
-            exclude_comments_and_header(in_file, comment_prefix)
-
-            for line in in_file:
-                line_items = line.rstrip(b"\n").split(delimiter)
-
-                for i in range(start_index, end_index):
-                    value = line_items[i]
-                    column_max_length_dict[i] = max(column_max_length_dict[i], len(value))
-
-                    for bigram in find_unique_bigrams(value):
-                        column_bigrams_dict[i].add(bigram)
-
-                    if column_compression_dicts[i]["compression_type"] == b"c":
-                        column_unique_dict[i].add(value)
-
-                        if len(column_unique_dict[i]) >= UNIQUE_THRESHOLD:
-                            column_compression_dicts[i]["compression_type"] = column_types_dict[i]
-                            column_unique_dict[i] = None
-
-        for i in range(start_index, end_index):
-            if column_compression_dicts[i]["compression_type"] == b"c":
-                unique_values = sorted(column_unique_dict[i])
-                num_bytes = get_bigram_size(len(unique_values))
-
-                for j, value in enumerate_for_compression(unique_values):
-                    #column_compression_dicts[i]["map"][value] = int2ba(j, length = length).to01()
-                    column_compression_dicts[i]["map"][value] = j.to_bytes(length = num_bytes, byteorder = "big")
-
-                column_sizes_dict[i] = num_bytes
-            else:
-                bigrams = sorted(column_bigrams_dict[i])
-                num_bytes = get_bigram_size(len(bigrams))
-
-                for j, bigram in enumerate_for_compression(bigrams):
-                    #column_compression_dicts[i]["map"][bigram] = int2ba(j, length = length).to01()
-                    column_compression_dicts[i]["map"][bigram] = j.to_bytes(length = num_bytes, byteorder = "big")
-
-                column_sizes_dict[i] = column_max_length_dict[i] * num_bytes
-
-    return column_sizes_dict, column_types_dict, column_compression_dicts, num_rows
+    # return tmp_file_path
+    return None
 
 def get_line_lengths_dict(delimited_file_path, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes, compression_dicts, num_rows, num_parallel, num_rows_per_print, verbose):
     if num_parallel == 1:
@@ -498,15 +557,12 @@ def write_compression_info(tmp_dir_path_outputs, compression_type, column_compre
             cmpr_file.write(b"z")
 
 def generate_chunk_ranges(num_cols, num_cols_per_chunk):
-    if num_cols_per_chunk:
-        last_end_index = 0
+    last_end_index = 0
 
-        while last_end_index != num_cols:
-            last_start_index = last_end_index
-            last_end_index = min([last_start_index + num_cols_per_chunk, num_cols])
-            yield [last_start_index, last_end_index]
-    else:
-        yield [0, num_cols]
+    while last_end_index != num_cols:
+        last_start_index = last_end_index
+        last_end_index = min([last_start_index + num_cols_per_chunk, num_cols])
+        yield [last_start_index, last_end_index]
 
 def infer_type(value):
     if isint(value):
@@ -694,15 +750,17 @@ def prepare_tmp_dirs(tmp_dir_path):
 
     tmp_dir_path = fix_dir_path_ending(tmp_dir_path)
 
+    tmp_dir_path_colinfo = f"{tmp_dir_path}colinfo/"
     tmp_dir_path_chunks = f"{tmp_dir_path}chunks/"
     tmp_dir_path_outputs = f"{tmp_dir_path}outputs/"
     tmp_dir_path_indexes = f"{tmp_dir_path}indexes/"
 
+    makedirs(tmp_dir_path_colinfo, exist_ok=True)
     makedirs(tmp_dir_path_chunks, exist_ok=True)
     makedirs(tmp_dir_path_outputs, exist_ok=True)
     makedirs(tmp_dir_path_indexes, exist_ok=True)
 
-    return tmp_dir_path_chunks, tmp_dir_path_outputs, tmp_dir_path_indexes
+    return tmp_dir_path_colinfo, tmp_dir_path_chunks, tmp_dir_path_outputs, tmp_dir_path_indexes
 
 def transpose_lines_to_temp(data_file_path, tmp_dir_path, start_row_index, end_row_index, column_names, column_coords, bigram_size_dict, verbose):
     with initialize(data_file_path) as file_data:
