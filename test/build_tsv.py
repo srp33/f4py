@@ -10,6 +10,13 @@ num_continuous_vars = int(sys.argv[3])
 num_rows = int(sys.argv[4])
 out_file_path = sys.argv[5]
 
+def save(text, out_file, flush=False):
+    if len(text) > 20000 or flush:
+        out_file.write(text)
+        return b""
+
+    return text
+
 random.seed(0)
 
 few_letters = string.ascii_letters[26:29]
@@ -20,55 +27,50 @@ if out_file_path.endswith(".gz"):
 else:
     out_file = open(out_file_path, 'wb')
 
-out_file.write(b"ID\t")
+output = b"ID\t"
 
 for i in range(num_categorical_vars):
-    out_file.write(("Categorical{}".format(i+1)).encode())
+    output = save(output + ("Categorical{}".format(i+1)).encode(), out_file)
 
     if i < (num_categorical_vars - 1) or num_discrete_vars > 0 or num_continuous_vars > 0:
-        out_file.write(b"\t")
+        output = save(output + b"\t", out_file)
 
 for i in range(num_discrete_vars):
-    out_file.write(("Discrete{}".format(i+1)).encode())
+    output = save(output + ("Discrete{}".format(i+1)).encode(), out_file)
 
     if i < (num_discrete_vars - 1) or num_continuous_vars > 0:
-        out_file.write(b"\t")
+        output = save(output + b"\t", out_file)
 
 for i in range(num_continuous_vars):
-    out_file.write(("Numeric{}".format(i+1)).encode())
+    output = save(output + ("Numeric{}".format(i+1)).encode(), out_file)
 
     if i < (num_continuous_vars - 1):
-        out_file.write(b"\t")
+        output = save(output + b"\t", out_file)
 
-out_file.write(b"\n")
+output = save(output + b"\n", out_file)
 
 for row_num in range(num_rows):
-    out_file.write((f"Row{row_num + 1}\t").encode())
+    output = save(output + (f"Row{row_num + 1}\t").encode(), out_file)
 
     for i in range(num_categorical_vars):
-        output = random.choice(few_letters)
+        output = save(output + random.choice(few_letters).encode(), out_file)
 
         if i < (num_categorical_vars - 1) or num_discrete_vars > 0 or num_continuous_vars > 0:
-            output += "\t"
-
-        out_file.write(output.encode())
+            output = save(output + b"\t", out_file)
 
     for i in range(num_discrete_vars):
-        output = random.choice(all_letters) + random.choice(all_letters)
+        output = save(output + random.choice(all_letters).encode() + random.choice(all_letters).encode(), out_file)
 
         if i < (num_discrete_vars - 1) or num_continuous_vars > 0:
-            output += "\t"
-
-        out_file.write(output.encode())
+            output = save(output + b"\t", out_file)
 
     for i in range(num_continuous_vars):
-        output = "{:.8f}".format(random.random())
+        output = save(output + ("{:.8f}".format(random.random())).encode(), out_file)
 
         if i < (num_continuous_vars - 1):
-            output += "\t"
+            output = save(output + b"\t", out_file)
 
-        out_file.write(output.encode())
+    output = save(output + b"\n", out_file)
 
-    out_file.write(b"\n")
-
+save(output, out_file, flush=True)
 out_file.close()
