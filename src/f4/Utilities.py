@@ -1,5 +1,6 @@
 from contextlib import contextmanager
 from copy import deepcopy
+import csv
 from datetime import datetime
 from glob import glob
 import gzip
@@ -13,14 +14,16 @@ from os import makedirs, path, remove
 from re import compile
 import shelve
 from shutil import rmtree
+#TODO:
+import sqlite3
 import sys
 from tempfile import mkdtemp
 from zstandard import ZstdCompressor, ZstdDecompressor
 
 # We use these dictionaries so that when we store the file map, it takes less space on disk.
-FILE_KEY_ABBREVIATIONS_STATS = {"mccl": 3, "mctl": 6, "cnmccl": 10, "cnll": 11}
-FILE_KEY_ABBREVIATIONS_OTHER = {"ll": 4, "cmpr": 7, "ver": 12}
-FILE_KEY_ABBREVIATIONS_NOCACHE = {"data": 1, "cc": 2, "ct": 5, "cndata": 8, "cncc": 9}
+FILE_KEY_ABBREVIATIONS_STATS = {"mccl": 3, "mctl": 6, "cnmccl": 10, "cnll": 11, "mlll": 13}
+FILE_KEY_ABBREVIATIONS_OTHER = {"cmpr": 7, "ver": 12}
+FILE_KEY_ABBREVIATIONS_NOCACHE = {"data": 1, "cc": 2, "ll": 4, "ct": 5, "cndata": 8, "cncc": 9}
 
 def get_current_version():
     return "0.5.3"
@@ -36,30 +39,63 @@ def write_str_to_file(file_path, the_string):
     with open(file_path, 'wb') as the_file:
         the_file.write(the_string)
 
-def get_column_start_coords(column_sizes):
+def save_column_coords(dict_file_path, out_file_path):
     # Calculate the position where each column starts.
-    column_start_coords = []
-    cumulative_position = 0
-    for column_size in column_sizes:
-        column_start_coords.append(str(cumulative_position).encode())
-        cumulative_position += column_size
-    column_start_coords.append(str(cumulative_position).encode())
+    with shelve.open(dict_file_path, "r") as the_dict:
+        with shelve.open(out_file_path, "n") as column_coords_dict:
+            cumulative_position = 0
 
-    return column_start_coords
+            for column_index in range(len(the_dict)):
+                column_index = str(column_index)
+                column_coords_dict[column_index] = cumulative_position
+                cumulative_position += the_dict[column_index]
 
-def build_string_map(the_list):
-    # Find maximum length of value.
-    max_value_length = get_max_string_length(the_list)
+            column_coords_dict[str(len(the_dict))] = cumulative_position
 
-    column_items = format_column_items(the_list, max_value_length)
-    return b"".join(column_items), max_value_length
+    # column_start_coords = []
+    # cumulative_position = 0
+    #
+    # for column_size in column_sizes:
+    #     column_start_coords.append(str(cumulative_position).encode())
+    #     cumulative_position += column_size
+    #
+    # column_start_coords.append(str(cumulative_position).encode())
+    #
+    # return column_start_coords
 
-def get_max_string_length(the_list):
-    return max([len(x) for x in set(the_list)])
+def save_string_map(dict_file_path, out_values_file_path, out_lengths_file_path):
+    with shelve.open(dict_file_path, "r") as the_dict:
+        # Find maximum length of value.
+        max_value_length = get_max_string_length(the_dict)
+        write_str_to_file(out_lengths_file_path, str(max_value_length).encode())
 
-def format_column_items(the_list, max_value_length, suffix=""):
-    formatter = "{:<" + str(max_value_length) + "}" + suffix
-    return [formatter.format(value.decode()).encode() for value in the_list]
+        with open(out_values_file_path, "wb") as out_file:
+            formatter = "{:<" + str(max_value_length) + "}"
+
+            for index in range(len(the_dict)):
+                value = the_dict[str(index)]
+                out_file.write(formatter.format(value).encode())
+
+    # # Find maximum length of value.
+    # max_value_length = get_max_string_length(the_list)
+    #
+    # column_items = format_column_items(the_list, max_value_length)
+    # return b"".join(column_items), max_value_length
+
+def get_max_string_length(the_dict):
+    max_length = 0
+
+    for key, value in the_dict.items():
+        length = len(str(value))
+        if length > max_length:
+            max_length = length
+
+    return max_length
+    # return max([len(x) for x in set(the_list)])
+
+# def format_column_items(the_list, max_value_length):
+#     formatter = "{:<" + str(max_value_length) + "}"
+#     return [formatter.format(value.decode()).encode() for value in the_list]
 
 def print_message(message, verbose=False):
     if verbose:
@@ -95,10 +131,10 @@ def get_delimited_file_handle(file_path):
     if file_path.endswith(".gz"):
         return gzip.open(file_path)
     elif file_path.endswith(".zstd"):
-        with open(file_path, 'rb') as fh:
+        with open(file_path, "rb") as fh:
             return ZstdCompressor(level=1).stream_reader(fh)
     else:
-        return open(file_path, 'rb')
+        return open(file_path, "rb")
 
 def format_string_as_fixed_width(x, size):
     return x + b" " * (size - len(x))
@@ -115,6 +151,22 @@ def compress_using_2_grams(value, compression_dict):
 
 def get_bigram_size(num_bigrams):
     return ceil(log(num_bigrams, 2) / 8)
+
+# def compress_file_zstd(in_file, out_file):
+#     chunk_size = 262144
+#     compressor = ZstdCompressor(level=1)
+#
+#     read_count, write_count = compressor.copy_stream(in_file, out_file, read_size=chunk_size, write_size=chunk_size)
+#
+#     return write_count
+
+# def decompress_file_zstd(in_file, out_file):
+#     chunk_size = 262144
+#     decompressor = ZstdDecompressor()
+#
+#     read_count, write_count = decompressor.copy_stream(in_file, out_file, read_size=chunk_size, write_size=chunk_size)
+#
+#     return write_count
 
 def decompress(compressed_value, compression_dict, bigram_size):
     if compression_dict["compression_type"] == b"c":
@@ -155,7 +207,7 @@ def remove_tmp_dir(tmp_dir_path):
             print(e)
             pass
 
-def combine_into_single_file(tmp_dir_path_chunks, tmp_dir_path_outputs, f4_file_path, num_parallel=1, num_rows_per_write=1):
+def combine_into_single_file(tmp_dir_path_chunks, tmp_dir_path_outputs, f4_file_path, num_parallel=1):
     def _create_file_map(start_end_positions):
         start_end_dict = {}
 
@@ -207,14 +259,12 @@ def combine_into_single_file(tmp_dir_path_chunks, tmp_dir_path_outputs, f4_file_
     with open(f4_file_path, "wb") as f4_file:
         f4_file.write(file_map_serialized)
 
-        _add_data_chunks(tmp_dir_path_chunks, f4_file, num_parallel, num_rows_per_write)
+        add_data_chunks(tmp_dir_path_chunks, f4_file, num_parallel)
 
         for other_file_path in other_files:
             f4_file.write(read_str_from_file(other_file_path))
 
-def _add_data_chunks(tmp_dir_path_chunks, out_file_handle, num_parallel, num_rows_per_write):
-    out_lines = []
-
+def add_data_chunks(tmp_dir_path_chunks, out_file, num_parallel):
     for i in range(num_parallel):
         chunk_file_path = f"{tmp_dir_path_chunks}{i}"
 
@@ -222,23 +272,27 @@ def _add_data_chunks(tmp_dir_path_chunks, out_file_handle, num_parallel, num_row
             continue
 
         with open(chunk_file_path, "rb") as chunk_file:
-            for line in chunk_file:
-                out_lines.append(line)
+            chunk_size = 100000
+            while chunk := chunk_file.read(chunk_size):
+                out_file.write(chunk)
 
-                if len(out_lines) % num_rows_per_write == 0:
-                    out_file_handle.write(b"".join(out_lines))
-                    out_lines = []
+def get_index_file_path(f4_file_path):
+    return f"{f4_file_path}.idx.db"
 
-    if len(out_lines) > 0:
-        out_file_handle.write(b"".join(out_lines))
+# def get_index_file_path(f4_file_path):
+#     for i in range(1, 1000000000):
+#         index_file_path = f"{f4_file_path}.idx_{i}"
+#
+#         if not path.exists(index_file_path):
+#             return index_file_path
 
-def get_index_file_path(data_file_path, index_name, custom_index_function=do_nothing):
-    index_file_path_extension = f".idx_{index_name}"
-
-    if custom_index_function != do_nothing:
-        index_file_path_extension = f"{index_file_path_extension}_{custom_index_function.__name__}"
-
-    return f"{data_file_path}{index_file_path_extension}"
+# def get_index_file_path(data_file_path, index_name, custom_index_function=do_nothing):
+    # index_file_path_extension = f".idx_{index_name}"
+    #
+    # if custom_index_function != do_nothing:
+    #     index_file_path_extension = f"{index_file_path_extension}_{custom_index_function.__name__}"
+    #
+    # return f"{data_file_path}{index_file_path_extension}"
 
 def split_integer_list_into_chunks(int_list, num_parallel):
     items_per_chunk = ceil(len(int_list) / num_parallel)
@@ -254,3 +308,59 @@ def split_integer_list_into_chunks(int_list, num_parallel):
 
     if len(return_indices) > 0:
         yield return_indices
+
+def connect_sql(file_path):
+    conn = sqlite3.connect(
+        file_path,
+        isolation_level = None,
+        detect_types = sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES,
+        timeout = 30)
+
+    conn.row_factory = sqlite3.Row
+
+    execute_sql(conn, "PRAGMA synchronous = OFF")
+    execute_sql(conn, "PRAGMA cache_size=1000000")
+    execute_sql(conn, "PRAGMA temp_store=MEMORY")
+    execute_sql(conn, "PRAGMA journal_mode=MEMORY")
+
+    return conn
+
+def execute_sql(conn, sql, params=(), commit=True):
+    cursor = conn.cursor()
+    cursor.execute(sql, params)
+    lastrowid = cursor.lastrowid
+    cursor.close()
+
+    if commit:
+        conn.commit()
+
+    return lastrowid
+
+def fetchall_sql(conn, sql, params=()):
+    cursor = conn.cursor()
+    cursor.execute(sql, params)
+    result = cursor.fetchall()
+    cursor.close()
+
+    return result
+
+def convert_to_sql_type(type_abbreviation):
+    if type_abbreviation == "i":
+        return "integer"
+    elif type_abbreviation == "f":
+        return "real"
+    else:
+        return "text"
+
+def convert_operator_to_sql(op):
+    if op == eq:
+        return "="
+    elif op == ge:
+        return ">="
+    elif op == gt:
+        return ">"
+    elif op == le:
+        return "<="
+    elif op == lt:
+        return "<"
+    return "<>"

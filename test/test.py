@@ -224,41 +224,18 @@ def run_small_tests(in_file_path, f4_file_path, out_file_path, num_parallel = 1,
     check_results("Numeric filters and string filters", read_file_into_lists(out_file_path), [[b"FloatA"],[b"9.9"],[b"2.2"],[b"4.4"]])
     os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.LikeFilter("CategoricalB", r"ow$"), ["FloatA"], out_file_path, num_parallel=num_parallel)
-    check_results("Like filter on categorical column", read_file_into_lists(out_file_path), [[b"FloatA"],[b"1.1"],[b"2.2"]])
-    os.unlink(out_file_path)
+    if index_columns:
+        f4.query(f4_file_path, f4.LikeFilter("CategoricalB", "%ow"), ["FloatA"], out_file_path, num_parallel=num_parallel)
+        check_results("Like filter on categorical column", read_file_into_lists(out_file_path), [[b"FloatA"],[b"1.1"],[b"2.2"]])
+        os.unlink(out_file_path)
 
-    f4.query(f4_file_path, f4.NotLikeFilter("CategoricalB", r"ow$"), ["FloatA"], out_file_path, num_parallel=num_parallel)
-    check_results("NotLike filter on categorical column", read_file_into_lists(out_file_path), [[b"FloatA"],[b"9.9"],[b"2.2"],[b"4.4"]])
-    os.unlink(out_file_path)
-
-    f4.query(f4_file_path, f4.StartsWithFilter("CategoricalB", "Yell"), ["FloatA"], out_file_path, num_parallel=num_parallel)
-    check_results("StartsWith - CategoricalB - Yell", read_file_into_lists(out_file_path), [[b"FloatA"],[b"1.1"],[b"2.2"]])
-    os.unlink(out_file_path)
-
-    f4.query(f4_file_path, f4.StartsWithFilter("CategoricalB", "B"), ["FloatA"], out_file_path, num_parallel=num_parallel)
-    check_results("StartsWith - CategoricalB - B", read_file_into_lists(out_file_path), [[b"FloatA"],[b"9.9"],[b"2.2"]])
-    os.unlink(out_file_path)
-
-    f4.query(f4_file_path, f4.StartsWithFilter("CategoricalB", "Or"), ["FloatA"], out_file_path, num_parallel=num_parallel)
-    check_results("StartsWith - CategoricalB - Or", read_file_into_lists(out_file_path), [[b"FloatA"],[b"4.4"]])
-    os.unlink(out_file_path)
-
-    f4.query(f4_file_path, f4.StartsWithFilter("CategoricalB", "Gr"), ["FloatA"], out_file_path, num_parallel=num_parallel)
-    check_results("StartsWith - CategoricalB - Gr", read_file_into_lists(out_file_path), [[b"FloatA"]])
-    os.unlink(out_file_path)
-
-    f4.query(f4_file_path, f4.EndsWithFilter("CategoricalB", "ow"), ["FloatA"], out_file_path, num_parallel=num_parallel)
-    check_results("EndsWith filter on categorical column", read_file_into_lists(out_file_path), [[b"FloatA"],[b"1.1"],[b"2.2"]])
-    os.unlink(out_file_path)
-
-    f4.query(f4_file_path, f4.EndsWithFilter("CategoricalB", "own"), ["FloatA"], out_file_path, num_parallel=num_parallel)
-    check_results("EndsWith filter on categorical column", read_file_into_lists(out_file_path), [[b"FloatA"],[b"9.9"],[b"2.2"]])
-    os.unlink(out_file_path)
-
-    f4.query(f4_file_path, f4.EndsWithFilter("CategoricalB", "x"), ["FloatA"], out_file_path, num_parallel=num_parallel)
-    check_results("EndsWith filter on categorical column", read_file_into_lists(out_file_path), [[b"FloatA"]])
-    os.unlink(out_file_path)
+        f4.query(f4_file_path, f4.NotLikeFilter("CategoricalB", "%ow"), ["FloatA"], out_file_path, num_parallel=num_parallel)
+        check_results("NotLike filter on categorical column", read_file_into_lists(out_file_path), [[b"FloatA"],[b"9.9"],[b"2.2"],[b"4.4"]])
+        os.unlink(out_file_path)
+    else:
+        f4.query(f4_file_path, f4.RegularExpressionFilter("CategoricalB", r"ow$"), ["FloatA"], out_file_path, num_parallel=num_parallel)
+        check_results("Like filter on categorical column", read_file_into_lists(out_file_path), [[b"FloatA"],[b"1.1"],[b"2.2"]])
+        os.unlink(out_file_path)
 
     f4.query(f4_file_path, f4.FloatRangeFilter("FloatA", -9.9, 4.4), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("FloatA within -9.9 and 4.4", read_file_into_lists(out_file_path), [[b"FloatA"], [b"1.1"], [b"2.2"], [b"2.2"], [b"4.4"]])
@@ -693,8 +670,8 @@ def run_larger_tests(num_parallel, size, extension, discrete1_index, numeric1_in
     print(f"Running all tests for {in_file_path} - custom indexing (cmpr: {compression_type})")
     print("-------------------------------------------------------------------------")
 
-    f4.build_endswith_index(f4_file_path, "Discrete1", index_tmp_dir_path)
-    run_larger_tests2(f4_file_path, out_file_path, larger_ID, larger_Categorical1, larger_Discrete1, larger_Numeric1, num_parallel, check_outputs, tmp_dir_path)
+    #f4.build_endswith_index(f4_file_path, "Discrete1", index_tmp_dir_path)
+    #run_larger_tests2(f4_file_path, out_file_path, larger_ID, larger_Categorical1, larger_Discrete1, larger_Numeric1, num_parallel, check_outputs, tmp_dir_path)
 
     #for file_path in glob.glob(f"{f4_file_path}*"):
     #    os.unlink(file_path)
@@ -734,9 +711,9 @@ def run_larger_tests2(f4_file_path, out_file_path, larger_ID, larger_Categorical
     run_string_test("Discrete1", "AA", "ZZ", f4_file_path, larger_ID, larger_Discrete1, out_file_path, num_parallel, check_outputs, tmp_dir_path)
     run_string_test("Discrete1", "FA", "SZ", f4_file_path, larger_ID, larger_Discrete1, out_file_path, num_parallel, check_outputs, tmp_dir_path)
 
-    run_endswith_test("M", f4_file_path, larger_ID, larger_Discrete1, out_file_path, num_parallel, check_outputs, tmp_dir_path)
-    run_endswith_test("PM", f4_file_path, larger_ID, larger_Discrete1, out_file_path, num_parallel, check_outputs, tmp_dir_path)
-    run_endswith_test("ZZZZ", f4_file_path, larger_ID, larger_Discrete1, out_file_path, num_parallel, check_outputs, tmp_dir_path)
+    #run_endswith_test("M", f4_file_path, larger_ID, larger_Discrete1, out_file_path, num_parallel, check_outputs, tmp_dir_path)
+    #run_endswith_test("PM", f4_file_path, larger_ID, larger_Discrete1, out_file_path, num_parallel, check_outputs, tmp_dir_path)
+    #run_endswith_test("ZZZZ", f4_file_path, larger_ID, larger_Discrete1, out_file_path, num_parallel, check_outputs, tmp_dir_path)
 
     run_float_test(0.0, 1.0, f4_file_path, larger_ID, larger_Numeric1, out_file_path, num_parallel, check_outputs, tmp_dir_path)
     run_float_test(0.85, 0.9, f4_file_path, larger_ID, larger_Numeric1, out_file_path, num_parallel, check_outputs, tmp_dir_path)
@@ -757,23 +734,23 @@ def run_string_test(column_name, lower_bound, upper_bound, f4_file_path, larger_
 
     os.unlink(out_file_path)
 
-def run_endswith_test(value, f4_file_path, larger_ID, filter_values, out_file_path, num_parallel, check_outputs, tmp_dir_path):
-    column_name = "Discrete1"
-    f4.query(f4_file_path, f4.EndsWithFilter(column_name, value), ["ID"], out_file_path, num_parallel=num_parallel, tmp_dir_path=tmp_dir_path)
-
-    if check_outputs:
-        indices = [i for i in range(len(filter_values)) if filter_values[i][0] == column_name.encode() or filter_values[i][0].endswith(value.encode())]
-        matches = [larger_ID[i] for i in indices]
-        check_results(f"EndsWith filter - {column_name} - {value} = {len(matches) - 1} matches", read_file_into_lists(out_file_path), matches)
-
-    os.unlink(out_file_path)
+#def run_endswith_test(value, f4_file_path, larger_ID, filter_values, out_file_path, num_parallel, check_outputs, tmp_dir_path):
+#    column_name = "Discrete1"
+#    f4.query(f4_file_path, f4.LikeFilter(column_name, "%" + value), ["ID"], out_file_path, num_parallel=num_parallel, tmp_dir_path=tmp_dir_path)
+#
+#    if check_outputs:
+#        indices = [i for i in range(len(filter_values)) if filter_values[i][0] == column_name.encode() or filter_values[i][0].endswith(value.encode())]
+#        matches = [larger_ID[i] for i in indices]
+#        check_results(f"EndsWith filter - {column_name} - {value} = {len(matches) - 1} matches", read_file_into_lists(out_file_path), matches)
+#
+#    os.unlink(out_file_path)
 
 def run_float_test(lower_bound, upper_bound, f4_file_path, larger_ID, larger_Numeric1, out_file_path, num_parallel, check_outputs, tmp_dir_path):
     column_name = "Numeric1"
     f4.query(f4_file_path, f4.FloatRangeFilter(column_name, lower_bound, upper_bound), ["ID"], out_file_path, num_parallel=num_parallel, tmp_dir_path=tmp_dir_path)
 
     if check_outputs:
-        indices = [i for i in range(len(larger_Numeric1)) if isinstance(larger_Numeric1[i][0], str) or (larger_Numeric1[i][0] >= lower_bound and larger_Numeric1[i][0] <= upper_bound)]
+        indices = [i for i in range(len(larger_Numeric1)) if isinstance(larger_Numeric1[i][0], bytes) or (larger_Numeric1[i][0] >= lower_bound and larger_Numeric1[i][0] <= upper_bound)]
         matches = [larger_ID[i] for i in indices]
         check_results(f"Filter FloatWithin = {lower_bound} <> {upper_bound} = {len(matches) - 1} matches", read_file_into_lists(out_file_path), matches)
 
@@ -807,13 +784,13 @@ def run_all_small_tests():
     run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, index_columns = index_columns)
     run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2, index_columns = index_columns)
 
-    # Small tests with dictionary-based compression
-    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, compression_type = "dictionary")
-    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2, compression_type = "dictionary")
+    ## Small tests with dictionary-based compression
+    #run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, compression_type = "dictionary")
+    #run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2, compression_type = "dictionary")
 
-    # Small tests with dictionary-based compression (and indexing)
-    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, compression_type = "dictionary", index_columns = index_columns)
-    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2, compression_type = "dictionary", index_columns = index_columns)
+    ## Small tests with dictionary-based compression (and indexing)
+    #run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, compression_type = "dictionary", index_columns = index_columns)
+    #run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2, compression_type = "dictionary", index_columns = index_columns)
 
     # Small tests with z-standard compression
     run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, compression_type = "zstd")
@@ -861,13 +838,14 @@ def run_super_tests(num_parallel, size, extension, compression_type, verbose, tm
     os.makedirs(index_tmp_dir_path)
     f4.build_indexes(f4_file_path, ["ID", "Categorical1"], index_tmp_dir_path)
 
-#run_all_small_tests()
+run_all_small_tests()
+#sys.exit()
 
 #for compression_type in [None, "dictionary", "zstd"]:
 #for compression_type in [None, "zstd"]:
-for compression_type in [None]:
+#for compression_type in [None]:
 #for compression_type in ["dictionary"]:
-#for compression_type in ["zstd"]:
+for compression_type in ["zstd"]:
     # Medium tests
 #    run_larger_tests(num_parallel=1, size="medium", extension="", discrete1_index=11, numeric1_index=21, rebuild=True, compression_type=compression_type)
 #    run_larger_tests(num_parallel=2, size="medium", extension="", discrete1_index=11, numeric1_index=21, rebuild=True, compression_type=compression_type)
@@ -883,7 +861,9 @@ for compression_type in [None]:
     #check_outputs = True
     check_outputs = False
 
-#    run_larger_tests(num_parallel=num_parallel, size="large_tall", extension=".gz", discrete1_index=251, numeric1_index=501, rebuild=rebuild, compression_type=compression_type, verbose=verbose, check_outputs=check_outputs)
+    #run_larger_tests(num_parallel=num_parallel, size="large_tall", extension="", discrete1_index=251, numeric1_index=501, rebuild=rebuild, compression_type=compression_type, verbose=verbose, check_outputs=check_outputs, tmp_dir_path="/tmp/larry")
+
+#    run_larger_tests(num_parallel=num_parallel, size="large_tall", extension=".gz", discrete1_index=251, numeric1_index=501, rebuild=rebuild, compression_type=compression_type, verbose=verbose, check_outputs=check_outputs, tmp_dir_path="/tmp/larry")
 #    run_larger_tests(num_parallel=num_parallel, size="large_wide", extension=".gz", discrete1_index=250001, numeric1_index=500001, rebuild=rebuild, compression_type=compression_type, verbose=verbose, check_outputs=check_outputs)
 
     #f4.transpose("data/medium.f4", "/tmp/medium_transposed.f4", num_parallel=num_parallel, verbose=verbose)
@@ -892,7 +872,7 @@ for compression_type in [None]:
     #f4.inner_join("data/medium.f4", "data/medium.f4", "ID", "/tmp/medium_joined.f4", num_parallel=num_parallel, verbose=verbose)
     #f4.inner_join("data/large_tall.f4", "data/large_wide.f4", "ID", "/tmp/large_joined.f4", num_parallel=num_parallel, verbose=verbose)
 
-    run_super_tests(num_parallel=num_parallel, size="super_tall", extension=".gz", compression_type=compression_type, verbose=verbose)
+#    run_super_tests(num_parallel=num_parallel, size="super_tall", extension=".gz", compression_type=compression_type, verbose=verbose)
 #    run_super_tests(num_parallel=num_parallel, size="super_wide", extension=".gz", compression_type=compression_type, verbose=verbose)
 
 print("All tests passed!!")

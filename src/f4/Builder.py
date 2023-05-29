@@ -28,23 +28,23 @@ def convert_delimited_file(delimited_file_path, f4_file_path, index_columns=[], 
         joblib = __import__('joblib', globals(), locals())
 
     print_message(f"Converting from {delimited_file_path}", verbose)
-    tmp_dir_path_colinfo, tmp_dir_path_chunks, tmp_dir_path_outputs, tmp_dir_path_indexes = prepare_tmp_dirs(tmp_dir_path)
+    #TODO: Remove tmp_dir_path_indexes
+    tmp_dir_path_colinfo, tmp_dir_path_rowinfo, tmp_dir_path_chunks, tmp_dir_path_outputs, tmp_dir_path_indexes = prepare_tmp_dirs(tmp_dir_path)
+    num_rows, num_cols, column_names_dict_file_path, column_sizes_dict_file_path, column_types_dict_file_path, column_compression_dicts_file_path = parse_file_metadata(comment_prefix, compression_type, delimited_file_path, delimiter, num_parallel, tmp_dir_path_colinfo, verbose)
 
-    metadata = parse_file_metadata(comment_prefix, compression_type, delimited_file_path, delimiter, num_parallel, tmp_dir_path_colinfo, verbose)
-
-    num_rows_per_print = 100 if metadata.num_rows < 100000 else 10000
+    num_rows_per_print = 100 if num_rows < 100000 else 10000
 
     print_message(f"Parsing chunks of {delimited_file_path} and saving to temp directory ({tmp_dir_path_chunks})", verbose)
-    line_lengths_dict = get_line_lengths_dict(delimited_file_path, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, metadata.column_sizes, metadata.column_compression_dicts, metadata.num_rows, num_parallel, num_rows_per_print, verbose)
+    line_lengths_dict_file_path = write_rows(delimited_file_path, tmp_dir_path_rowinfo, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes_dict_file_path, column_compression_dicts_file_path, num_rows, num_cols, num_parallel, num_rows_per_print, verbose)
 
     print_message(f"Saving meta files for {f4_file_path}", verbose)
-    write_meta_files(tmp_dir_path_outputs, metadata.column_sizes, line_lengths_dict, metadata.column_names, metadata.column_types, compression_type, metadata.column_compression_dicts, metadata.num_rows)
+    write_meta_files(tmp_dir_path_colinfo, tmp_dir_path_outputs, line_lengths_dict_file_path, column_names_dict_file_path, column_sizes_dict_file_path, column_types_dict_file_path, compression_type, column_compression_dicts_file_path, num_rows)
 
     print_message(f"Combining all data into a single file for {delimited_file_path}", verbose)
     combine_into_single_file(tmp_dir_path_chunks, tmp_dir_path_outputs, f4_file_path, num_parallel)
 
     if index_columns:
-        build_indexes(f4_file_path, index_columns, tmp_dir_path_indexes, verbose)
+        build_indexes(f4_file_path, index_columns, verbose)
 
     remove_tmp_dir(tmp_dir_path_chunks)
     remove_tmp_dir(tmp_dir_path_outputs)
@@ -183,32 +183,30 @@ def inner_join(f4_left_src_file_path, f4_right_src_file_path, join_column, f4_de
 
             remove(tmp_tsv_file_path)
 
-def build_indexes(f4_file_path, index_columns, tmp_dir_path=None, verbose=False):
-    if tmp_dir_path:
-        makedirs(tmp_dir_path, exist_ok=True)
-    else:
-        tmp_dir_path = mkdtemp()
+def build_indexes(f4_file_path, index_columns, verbose=False):
+    # TODO: Add logic to verify that index_columns are valid.
+    index_file_path = get_index_file_path(f4_file_path)
 
     if isinstance(index_columns, str):
-        build_one_column_index(f4_file_path, index_columns, tmp_dir_path, verbose)
+        build_one_column_index(f4_file_path, index_file_path, index_columns, verbose)
     elif isinstance(index_columns, list):
         for index_column in index_columns:
             if isinstance(index_column, list):
                 if len(index_column) != 2:
                     raise Exception("If you pass a list as an index_column, it must have exactly two elements.")
 
-                build_two_column_index(f4_file_path, index_column[0], index_column[1], tmp_dir_path, verbose)
+                build_two_column_index(f4_file_path, index_file_path, index_column, verbose)
             else:
                 if not isinstance(index_column, str):
                     raise Exception("When specifying an index column name, it must be a string.")
 
-                build_one_column_index(f4_file_path, index_column, tmp_dir_path, verbose, do_nothing)
+                build_one_column_index(f4_file_path, index_file_path, index_column, verbose)
     else:
         raise Exception("When specifying index_columns, it must either be a string or a list.")
 
 # This function is specifically for the EndsWithFilter.
-def build_endswith_index(f4_file_path, index_column, tmp_dir_path, verbose=False):
-    build_one_column_index(f4_file_path, index_column, tmp_dir_path, verbose, reverse_string)
+# def build_endswith_index(f4_file_path, index_column, tmp_dir_path, verbose=False):
+#     build_one_column_index(f4_file_path, index_column, tmp_dir_path, verbose, reverse_string)
 
 #####################################################
 # Non-public function(s)
@@ -217,16 +215,13 @@ def build_endswith_index(f4_file_path, index_column, tmp_dir_path, verbose=False
 def parse_file_metadata(comment_prefix, compression_type, delimited_file_path, delimiter, num_parallel, tmp_dir_path, verbose):
     # Get column names. Remove any leading or trailing white space around the column names.
     with get_delimited_file_handle(delimited_file_path) as in_file:
-        if comment_prefix:
-            for line in in_file:
-                if not line.startswith(comment_prefix):
-                    header_line = line
-                    break
-        else:
-            header_line = in_file.readline()
+        skip_comments(in_file, comment_prefix=comment_prefix)
 
-    column_names = [x.strip() for x in header_line.rstrip(b"\n").split(delimiter)]
-    num_cols = len(column_names)
+        column_names_dict_file_path = f"{tmp_dir_path}column_names"
+        with shelve.open(column_names_dict_file_path, "n", writeback=True) as column_names_dict:
+            save_column_names(in_file, column_names_dict, delimiter)
+            num_cols = len(column_names_dict)
+
     if num_cols == 0:
         raise Exception(f"No data was detected in {delimited_file_path}.")
 
@@ -234,326 +229,397 @@ def parse_file_metadata(comment_prefix, compression_type, delimited_file_path, d
     print_message(f"Summarizing each column in {delimited_file_path}", verbose)
 
     # Determine the number of columns per chunk.
-    # When there are fewer than 1000 columns, we will just have one chunk, regardless of num_parallel.
-    # num_cols_per_chunk = max(1000, ceil(num_cols / num_parallel))
     num_cols_per_chunk = ceil(num_cols / num_parallel)
 
     # Separate the column indices into chunks
     column_chunk_indices = list(generate_chunk_ranges(num_cols, num_cols_per_chunk))
 
+    column_sizes_dict_file_path = f"{tmp_dir_path}0_column_sizes"
+    column_types_dict_file_path = f"{tmp_dir_path}0_column_types"
+    column_compression_dicts_dict_file_path = f"{tmp_dir_path}0_compression_dicts"
+
     # Parse each column and store the results in temp files
     if num_parallel == 1:
-        tmp_file_paths = parse_columns_chunk(delimited_file_path, delimiter, comment_prefix, column_chunk_indices[0][0], column_chunk_indices[0][1], compression_type, tmp_dir_path, verbose)
+        num_rows = parse_columns_chunk(delimited_file_path, delimiter, comment_prefix, 0, column_chunk_indices[0][0], column_chunk_indices[0][1], compression_type, tmp_dir_path, verbose)
     else:
-        tmp_file_paths = joblib.Parallel(n_jobs=num_parallel)(joblib.delayed(parse_columns_chunk)(delimited_file_path, delimiter, comment_prefix, column_chunk[0], column_chunk[1], compression_type, tmp_dir_path, verbose) for column_chunk in column_chunk_indices)
+        all_num_rows = joblib.Parallel(n_jobs=num_parallel)(joblib.delayed(parse_columns_chunk)(delimited_file_path, delimiter, comment_prefix, chunk_number, chunk_indices[0], chunk_indices[1], compression_type, tmp_dir_path, verbose) for chunk_number, chunk_indices in enumerate(column_chunk_indices))
 
-    print("Done parsing columns chunks, go from here")
-    import sys
-    sys.exit(0)
+        # When each chunk was processed, we went through all rows, so we can get this number from just the first chunk.
+        num_rows = all_num_rows[0]
 
-    # Summarize the column sizes and types across the chunks.
-    column_sizes = []
-    column_types = []
-    column_compression_dicts = {}
-    for chunk_tuple in chunk_results:
-        for i, size in sorted(chunk_tuple[0].items()):
-            column_sizes.append(size)
+        # Summarize the column sizes and types across the chunks into a single shelve file.
+        # We'll add everything to the shelve file for the 0th chunk.
+        with shelve.open(column_sizes_dict_file_path, "w", writeback=True) as column_sizes_dict:
+            with shelve.open(column_types_dict_file_path, "w", writeback=True) as column_types_dict:
+                for i_parallel in range(1, num_parallel):
+                    with shelve.open(f"{tmp_dir_path}{i_parallel}_column_sizes", "r") as chunk_column_sizes_dict:
+                        for key, value in chunk_column_sizes_dict.items():
+                            column_sizes_dict[key] = value
 
-        for i, the_type in sorted(chunk_tuple[1].items()):
-            column_types.append(the_type)
+                    with shelve.open(f"{tmp_dir_path}{i_parallel}_column_types", "r") as chunk_column_types_dict:
+                        for key, value in chunk_column_types_dict.items():
+                            column_types_dict[key] = value
 
-        if len(chunk_tuple) > 0:
-            # This merges the dictionaries
-            column_compression_dicts = {**column_compression_dicts, **chunk_tuple[2]}
+                    #TODO: Do the same for compression dicts
 
-    # When each chunk was processed, we went through all rows, so we can get these numbers from just the first chunk.
-    num_rows = chunk_results[0][3]
     if num_rows == 0:
         raise Exception(f"A header row but no data rows were detected in {delimited_file_path}")
 
-    # # Iterate through the lines to summarize each column.
-    # print_message(f"Summarizing each column in {delimited_file_path}", verbose)
-    # if num_parallel == 1:
-    #     chunk_results = [parse_columns_chunk(delimited_file_path, delimiter, comment_prefix, 0, num_cols, compression_type, tmp_dir_path, verbose)]
-    # else:
-    #     # Guess an optimal value for this parameter, if not specified.
-    #     if not num_cols_per_chunk:
-    #         num_cols_per_chunk = ceil(num_cols / (num_parallel * 2) + 1)
-    #
-    #     column_chunk_indices = generate_chunk_ranges(num_cols, num_cols_per_chunk)
-    #     chunk_results = joblib.Parallel(n_jobs=num_parallel)(joblib.delayed(parse_columns_chunk)(delimited_file_path, delimiter, comment_prefix, column_chunk[0], column_chunk[1], compression_type, tmp_dir_path, verbose) for column_chunk in column_chunk_indices)
-    #
-    # # Summarize the column sizes and types across the chunks.
-    # column_sizes = []
-    # column_types = []
-    # column_compression_dicts = {}
-    # for chunk_tuple in chunk_results:
-    #     for i, size in sorted(chunk_tuple[0].items()):
-    #         column_sizes.append(size)
-    #
-    #     for i, the_type in sorted(chunk_tuple[1].items()):
-    #         column_types.append(the_type)
-    #
-    #     if len(chunk_tuple) > 0:
-    #         # This merges the dictionaries
-    #         column_compression_dicts = {**column_compression_dicts, **chunk_tuple[2]}
-    #
-    # # When each chunk was processed, we went through all rows, so we can get these numbers from just the first chunk.
-    # num_rows = chunk_results[0][3]
-    # if num_rows == 0:
-    #     raise Exception(f"A header row but no data rows were detected in {delimited_file_path}")
+    return num_rows, num_cols, column_names_dict_file_path, column_sizes_dict_file_path, column_types_dict_file_path, column_compression_dicts_dict_file_path
 
-    return FileMetadata(column_names, column_sizes, column_types, column_compression_dicts, num_rows)
-
-def write_meta_files(tmp_dir_path_outputs, column_sizes, line_lengths_dict, column_names=None, column_types=None, compression_type=None, column_compression_dicts=None, num_rows=None):
+def write_meta_files(tmp_dir_path_colinfo, tmp_dir_path_outputs, ll_dict_file_path, column_index_names_dict_file_path, column_sizes_dict_file_path, column_types_dict_file_path, compression_type, column_compression_dicts_file_path, num_rows):
     write_str_to_file(f"{tmp_dir_path_outputs}ver", get_current_version_major().encode())
 
     # Calculate and write the column coordinates and max length of these coordinates.
-    column_start_coords = get_column_start_coords(column_sizes)
-    column_coords_string, max_column_coord_length = build_string_map(column_start_coords)
-    write_str_to_file(f"{tmp_dir_path_outputs}cc", column_coords_string)
-    write_str_to_file(f"{tmp_dir_path_outputs}mccl", str(max_column_coord_length).encode())
+    column_coords_dict_file_path = f"{tmp_dir_path_colinfo}column_coords"
+    save_column_coords(column_sizes_dict_file_path, column_coords_dict_file_path)
+
+    cc_file_path = f"{tmp_dir_path_outputs}cc"
+    mccl_file_path = f"{tmp_dir_path_outputs}mccl"
+    save_string_map(column_coords_dict_file_path, cc_file_path, mccl_file_path)
 
     # Find and write the line length(s).
-    if compression_type == "zstd":
-        # Because each line has a different length, we cannot do simple math.
-        # We need to know the exact start position of each line.
-        line_start_positions = [0]
-        for i in range(len(line_lengths_dict)):
-            line_start_positions.append(line_start_positions[-1] + line_lengths_dict[i])
+    ll_file_path = f"{tmp_dir_path_outputs}ll"
 
-        write_str_to_file(f"{tmp_dir_path_outputs}ll", serialize(line_start_positions))
-    else:
-        # All lines have the same length, so we just use the first one.
-        write_str_to_file(f"{tmp_dir_path_outputs}ll", str(line_lengths_dict[0]).encode())
+    with shelve.open(ll_dict_file_path, "r") as ll_dict:
+        if compression_type == "zstd":
+            # Because each line has a different length, we cannot do simple math.
+            # We need to know the exact start position of each line.
+            tmp_ll_file_path = f"{tmp_dir_path_outputs}ll_tmp"
+            current_start_position = 0
 
-    column_index_name_dict = {}
-    column_name_index_dict = {}
-    for column_index, column_name in enumerate(column_names):
-        column_index_name_dict[column_index] = column_name
-        column_name_index_dict[column_name] = column_index
+            # Find the max length of the row indices and start positions
+            with shelve.open(tmp_ll_file_path, "n", writeback=True) as tmp_ll_dict:
+                for row_index in range(len(ll_dict)):
+                    row_index = str(row_index)
+                    tmp_ll_dict[row_index] = current_start_position
+                    current_start_position += ll_dict[row_index]
+
+                tmp_ll_dict[str(len(ll_dict))] = current_start_position
+
+            save_string_map(tmp_ll_file_path, ll_file_path, f"{tmp_dir_path_outputs}mlll")
+
+            remove(tmp_ll_file_path)
+        else:
+            # All lines have the same length, so we just use the first one.
+            write_str_to_file(ll_file_path, str(ll_dict["0"]).encode())
+
+    column_names_index_dict_file_path = f"{tmp_dir_path_colinfo}column_names_index"
+
+    with shelve.open(column_index_names_dict_file_path, "r") as column_index_names_dict:
+        with shelve.open(column_names_index_dict_file_path, "n", writeback=True) as column_names_index_dict:
+            for index, column_name in column_index_names_dict.items():
+                column_names_index_dict[column_name.decode()] = index
+
+    write_index_files(column_names_index_dict_file_path, None, f"{tmp_dir_path_outputs}cn")
 
     # Build an index of the column names and write this to a file.
-    sorted_column_names = sorted(column_names)
-    values_positions = [[x.decode(), column_name_index_dict[x]] for x in sorted_column_names]
-    customize_index_values_positions(values_positions, ["n"], sort_first_column, do_nothing)
-    write_index_files(values_positions, None, f"{tmp_dir_path_outputs}cn")
+    # sorted_column_names = sorted(column_names)
+    # values_positions = [[x.decode(), column_name_index_dict[x]] for x in sorted_column_names]
+    # customize_index_values_positions(values_positions, ["n"], sort_first_column, do_nothing)
+    # write_index_files(values_positions, None, )
 
-    if column_types:
-        # Build a map of the column types and write this to a file.
-        column_types_string, max_col_type_length = build_string_map(column_types)
-        write_str_to_file(f"{tmp_dir_path_outputs}ct", column_types_string)
-        write_str_to_file(f"{tmp_dir_path_outputs}mctl", str(max_col_type_length).encode())
+    # Build a map of the column types and write this to a file.
+    ct_file_path = f"{tmp_dir_path_outputs}ct"
+    mctl_file_path = f"{tmp_dir_path_outputs}mctl"
+    save_string_map(column_types_dict_file_path, ct_file_path, mctl_file_path)
 
-    write_compression_info(tmp_dir_path_outputs, compression_type, column_compression_dicts, column_index_name_dict)
+    write_compression_info(tmp_dir_path_outputs, compression_type, column_compression_dicts_file_path, column_index_names_dict_file_path)
 
-def parse_columns_chunk(delimited_file_path, delimiter, comment_prefix, start_column_index, end_column_index, compression_type, tmp_dir_path, verbose):
-    tmp_file_prefix = f"{tmp_dir_path}{start_column_index}_{end_column_index}"
+def parse_columns_chunk(delimited_file_path, delimiter, comment_prefix, chunk_number, start_column_index, end_column_index, compression_type, tmp_dir_path, verbose):
+    tmp_file_prefix = f"{tmp_dir_path}{chunk_number}"
 
     # Initialize the column sizes and types.
-    with shelve.open(f"{tmp_file_prefix}_column_size", "n") as column_sizes_dict:
-        with shelve.open(f"{tmp_file_prefix}_column_types_values", "n") as column_types_values_dict:
-            for i in range(start_column_index, end_column_index):
-                i = str(i)
-                column_sizes_dict[i] = 0
-                column_types_values_dict[i] = {b"i": 0, b"f": 0, b"s": 0}
+    with shelve.open(f"{tmp_file_prefix}_column_sizes", "n", writeback=True) as column_sizes_dict:
+        with shelve.open(f"{tmp_file_prefix}_column_types_values", "n", writeback=True) as column_types_values_dict:
+            for column_index in range(start_column_index, end_column_index):
+                column_index = str(column_index)
+                column_sizes_dict[column_index] = 0
+                column_types_values_dict[column_index] = {b"i": 0, b"f": 0, b"s": 0}
 
     # We will find the max size for each column and count how many there are of each type.
     with get_delimited_file_handle(delimited_file_path) as in_file:
-        with shelve.open(f"{tmp_file_prefix}_column_size", "w") as column_sizes_dict:
+        skip_comments(in_file, comment_prefix)
+        skip_line(in_file)
+
+        with shelve.open(f"{tmp_file_prefix}_column_sizes", "w", writeback=True) as column_sizes_dict:
             with shelve.open(f"{tmp_file_prefix}_column_types_values", "w", writeback=True) as column_types_values_dict:
-                exclude_comments_and_header(in_file, comment_prefix)
+                with shelve.open(f"{tmp_file_prefix}_column_types", "n", writeback=True) as column_types_dict:
+                    # with shelve.open(f"{tmp_file_prefix}_column_compression_dicts", "n", writeback=True) as column_compression_dicts:
+                        num_rows = 0
 
-                # Loop through the file for the specified columns and update the dictionaries.
-                num_rows = 0
-                for line in in_file:
-                    line = line.rstrip(b"\n")
-                    line_items = line.split(delimiter)
+                        # Loop through the file for the specified columns and update the dictionaries.
+                        for column_index, value in iterate_delimited_file_column_indices(in_file, delimiter, start_column_index, end_column_index):
+                            if column_index == start_column_index:
+                                num_rows += 1
 
-                    for i in range(start_column_index, end_column_index):
-                        this_value = line_items[i]
-                        this_length = len(this_value)
+                            this_length = len(value)
+                            column_index = str(column_index)
 
-                        i = str(i)
-                        current_max = column_sizes_dict[i]
+                            current_max = column_sizes_dict[column_index]
 
-                        if this_length > current_max:
-                            column_sizes_dict[i] = this_length
+                            if this_length > current_max:
+                                column_sizes_dict[column_index] = this_length
 
-                        inferred_type = infer_type(this_value)
-                        column_types_values_dict[i][inferred_type] += 1
+                            inferred_type = infer_type(value)
+                            column_types_values_dict[column_index][inferred_type] += 1
 
-                    num_rows += 1
+                            if verbose and num_rows > 0 and (num_rows < 100000 and num_rows % 100 == 0) or num_rows % 10000 == 0:
+                                print_message(f"Processed line {num_rows} of {delimited_file_path} for columns {start_column_index} - {end_column_index - 1}", verbose)
 
-                    if verbose and num_rows > 0 and (num_rows < 100000 and num_rows % 100 == 0) or num_rows % 10000 == 0:
-                        print_message(f"Processed line {num_rows} of {delimited_file_path} for columns {start_column_index} - {end_column_index - 1}", verbose)
-                # TODO: See if this commit is faster and works correctly.
-                #column_sizes_dict.commit()
+                        for column_index in range(start_column_index, end_column_index):
+                            column_index = str(column_index)
+                            column_types_dict[column_index] = infer_type_for_column(column_types_values_dict[column_index])
 
-    # column_types_dict = {}
-    # for i in range(start_column_index, end_column_index):
-    #     column_types_dict[i] = infer_type_for_column(column_types_values_dict[i])
-    #
-    # column_compression_dicts = {}
+            remove(f"{tmp_file_prefix}_column_types_values")
 
-    # if compression_type == "dictionary":
-    #     # Figure out whether we should use categorical compression.
-    #     # If there are more than 100 unique values, do not use categorical compression.
-    #     # This is a rough threshold. It also means that files with few rows will almost always use categorical compression.
-    #     # TODO: Consider refining this approach.
-    #     UNIQUE_THRESHOLD = 100
-    #
-    #     # Specify the default compression information for each column.
-    #     # The default is categorical.
-    #     for i in range(start_index, end_index):
-    #         column_compression_dicts[i] = {"compression_type": b"c", "map": {}}
-    #
-    #     column_unique_dict = {i: set() for i in range(start_index, end_index)}
-    #     column_max_length_dict = {i: 0 for i in range(start_index, end_index)}
-    #     column_bigrams_dict = {i: set() for i in range(start_index, end_index)}
-    #
-    #     with get_delimited_file_handle(delimited_file_path) as in_file:
-    #         exclude_comments_and_header(in_file, comment_prefix)
-    #
-    #         for line in in_file:
-    #             line_items = line.rstrip(b"\n").split(delimiter)
-    #
-    #             for i in range(start_index, end_index):
-    #                 value = line_items[i]
-    #                 column_max_length_dict[i] = max(column_max_length_dict[i], len(value))
-    #
-    #                 for bigram in find_unique_bigrams(value):
-    #                     column_bigrams_dict[i].add(bigram)
-    #
-    #                 if column_compression_dicts[i]["compression_type"] == b"c":
-    #                     column_unique_dict[i].add(value)
-    #
-    #                     if len(column_unique_dict[i]) >= UNIQUE_THRESHOLD:
-    #                         column_compression_dicts[i]["compression_type"] = column_types_dict[i]
-    #                         column_unique_dict[i] = None
-    #
-    #     for i in range(start_index, end_index):
-    #         if column_compression_dicts[i]["compression_type"] == b"c":
-    #             unique_values = sorted(column_unique_dict[i])
-    #             num_bytes = get_bigram_size(len(unique_values))
-    #
-    #             for j, value in enumerate_for_compression(unique_values):
-    #                 #column_compression_dicts[i]["map"][value] = int2ba(j, length = length).to01()
-    #                 column_compression_dicts[i]["map"][value] = j.to_bytes(length = num_bytes, byteorder = "big")
-    #
-    #             column_sizes_dict[i] = num_bytes
-    #         else:
-    #             bigrams = sorted(column_bigrams_dict[i])
-    #             num_bytes = get_bigram_size(len(bigrams))
-    #
-    #             for j, bigram in enumerate_for_compression(bigrams):
-    #                 #column_compression_dicts[i]["map"][bigram] = int2ba(j, length = length).to01()
-    #                 column_compression_dicts[i]["map"][bigram] = j.to_bytes(length = num_bytes, byteorder = "big")
-    #
-    #             column_sizes_dict[i] = column_max_length_dict[i] * num_bytes
+                            # if compression_type == "dictionary":
+                            #     # Figure out whether we should use categorical compression.
+                            #     # If there are more than 100 unique values, do not use categorical compression.
+                            #     # This is a rough threshold. It also means that files with few rows will almost always use categorical compression.
+                            #     # TODO: Consider refining this approach.
+                            #     UNIQUE_THRESHOLD = 100
+                            #
+                            #     # Specify the default compression information for each column.
+                            #     # The default is categorical.
+                            #     for i in range(start_column_index, end_column_index):
+                            #         column_compression_dicts[i] = {"compression_type": b"c", "map": {}}
+                            #
+                            #     column_unique_dict = {i: set() for i in range(start_column_index, end_column_index)}
+                            #     column_max_length_dict = {i: 0 for i in range(start_column_index, end_column_index)}
+                            #     column_bigrams_dict = {i: set() for i in range(start_column_index, end_column_index)}
+                            #
+                            #     with get_delimited_file_handle(delimited_file_path) as in_file:
+                            #         exclude_comments_and_header(in_file, comment_prefix)
+                            #
+                            #         for line in in_file:
+                            #             line_items = line.rstrip(b"\n").split(delimiter)
+                            #
+                            #             for i in range(start_column_index, end_column_index):
+                            #                 value = line_items[i]
+                            #                 column_max_length_dict[i] = max(column_max_length_dict[i], len(value))
+                            #
+                            #                 for bigram in find_unique_bigrams(value):
+                            #                     column_bigrams_dict[i].add(bigram)
+                            #
+                            #                 if column_compression_dicts[i]["compression_type"] == b"c":
+                            #                     column_unique_dict[i].add(value)
+                            #
+                            #                     if len(column_unique_dict[i]) >= UNIQUE_THRESHOLD:
+                            #                         column_compression_dicts[i]["compression_type"] = column_types_dict[i]
+                            #                         column_unique_dict[i] = None
+                            #
+                            #     for i in range(start_column_index, end_column_index):
+                            #         if column_compression_dicts[i]["compression_type"] == b"c":
+                            #             unique_values = sorted(column_unique_dict[i])
+                            #             num_bytes = get_bigram_size(len(unique_values))
+                            #
+                            #             for j, value in enumerate_for_compression(unique_values):
+                            #                 #column_compression_dicts[i]["map"][value] = int2ba(j, length = length).to01()
+                            #                 column_compression_dicts[i]["map"][value] = j.to_bytes(length = num_bytes, byteorder = "big")
+                            #
+                            #             column_sizes_dict[i] = num_bytes
+                            #         else:
+                            #             bigrams = sorted(column_bigrams_dict[i])
+                            #             num_bytes = get_bigram_size(len(bigrams))
+                            #
+                            #             for j, bigram in enumerate_for_compression(bigrams):
+                            #                 #column_compression_dicts[i]["map"][bigram] = int2ba(j, length = length).to01()
+                            #                 column_compression_dicts[i]["map"][bigram] = j.to_bytes(length = num_bytes, byteorder = "big")
+                            #
+                            #             column_sizes_dict[i] = column_max_length_dict[i] * num_bytes
 
-    # with open(tmp_file_path, "wb") as tmp_file:
-    #     column_chunk_data = ColumnChunkData(column_sizes_dict, column_types_dict, column_compression_dicts, num_rows)
-    #     tmp_file.write(serialize(column_chunk_data))
+    return num_rows
 
-    # return tmp_file_path
-    return None
-
-def get_line_lengths_dict(delimited_file_path, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes, compression_dicts, num_rows, num_parallel, num_rows_per_print, verbose):
+def write_rows(delimited_file_path, tmp_dir_path_rowinfo, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes_dict_file_path, compression_dicts_dict_file_path, num_rows, num_cols, num_parallel, num_rows_per_print, verbose):
     if num_parallel == 1:
-        line_lengths_dict = write_rows_chunk(delimited_file_path, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes, compression_dicts, 0, 0, num_rows, num_rows_per_print, verbose)
+        write_rows_chunk(delimited_file_path, tmp_dir_path_rowinfo, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes_dict_file_path, compression_dicts_dict_file_path, 0, 0, num_rows, num_rows_per_print, num_cols, verbose)
     else:
         row_chunk_indices = generate_chunk_ranges(num_rows, ceil(num_rows / num_parallel) + 1)
 
-        line_lengths_dicts = joblib.Parallel(n_jobs=num_parallel)(joblib.delayed(write_rows_chunk)(delimited_file_path, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes, compression_dicts, i, row_chunk[0], row_chunk[1], num_rows_per_print, verbose) for i, row_chunk in enumerate(row_chunk_indices))
+        joblib.Parallel(n_jobs=num_parallel)(joblib.delayed(write_rows_chunk)(delimited_file_path, tmp_dir_path_rowinfo, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes_dict_file_path, compression_dicts_dict_file_path, i, row_chunk[0], row_chunk[1], num_rows_per_print, num_cols, verbose) for i, row_chunk in enumerate(row_chunk_indices))
 
-        line_lengths_dict = {}
-        for x in line_lengths_dicts:
-            line_lengths_dict = {**line_lengths_dict, **x}
+        with shelve.open(f"{tmp_dir_path_rowinfo}0", "w", writeback=True) as main_line_lengths_dict:
+            for i in range(1, num_parallel):
+                with shelve.open(f"{tmp_dir_path_rowinfo}{i}", "r") as chunk_line_lengths_dict:
+                    for key, value in chunk_line_lengths_dict.items():
+                        main_line_lengths_dict[key] = value
 
-    return line_lengths_dict
+    return f"{tmp_dir_path_rowinfo}0"
 
-def write_rows_chunk(delimited_file_path, tmp_dir_path, delimiter, comment_prefix, compression_type, column_sizes, compression_dicts, chunk_number, start_index, end_index, num_rows_per_print, verbose):
-    line_lengths_dict = {}
+def write_rows_chunk(delimited_file_path, tmp_dir_path_rowinfo, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes_dict_file_path, compression_dicts_dict_file_path, chunk_number, start_row_index, end_row_index, num_rows_per_print, num_cols, verbose):
+    line_lengths_dict_file_path = f"{tmp_dir_path_rowinfo}{chunk_number}"
 
-    if compression_type == "zstd":
-        compressor = ZstdCompressor(level = 1)
+    with shelve.open(line_lengths_dict_file_path, "n", writeback=True) as line_lengths_dict:
+        with shelve.open(column_sizes_dict_file_path, "r") as column_sizes_dict:
+            # Write the data to output file. Ignore the header line.
+            with get_delimited_file_handle(delimited_file_path) as in_file:
+                skip_comments(in_file, comment_prefix)
+                skip_line(in_file) # Header line
+                skip_lines(in_file, start_row_index)
 
-    # Write the data to output file. Ignore the header line.
-    with get_delimited_file_handle(delimited_file_path) as in_file:
-        exclude_comments_and_header(in_file, comment_prefix)
-
-        with open(f"{tmp_dir_path}{chunk_number}", 'wb') as chunk_file:
-            line_index = -1
-            for line in in_file:
-                # Check whether we should process the specified line.
-                line_index += 1
-                if line_index < start_index:
-                    continue
-                if line_index == end_index:
-                    break
-
-                # Parse the data from the input file.
-                line_items = line.rstrip(b"\n").split(delimiter)
-
-                out_items = []
-
-                if compression_type == "dictionary":
-                    for i, size in enumerate(column_sizes):
-                        if compression_dicts[i]["compression_type"] == b"c":
-                            compressed_value = compression_dicts[i]["map"][line_items[i]]
-                        else:
-                            compressed_value = compress_using_2_grams(line_items[i], compression_dicts[i]["map"])
-
-                        out_items.append(format_string_as_fixed_width(compressed_value, size))
-                else:
-                    for i, size in enumerate(column_sizes):
-                        out_items.append(format_string_as_fixed_width(line_items[i], size))
-
-                out_line = b"".join(out_items)
-
+                compressor = None
                 if compression_type == "zstd":
-                    out_line = compressor.compress(out_line)
+                    compressor = ZstdCompressor(level=1)
 
-                line_lengths_dict[line_index] = len(out_line)
+                with open(f"{tmp_dir_path_chunks}{chunk_number}", 'wb') as chunk_file:
+                    previous_text = b""
 
-                if line_index % num_rows_per_print == 0:
-                    print_message(f"Processed chunk of {delimited_file_path} at line {line_index} (start_index = {start_index}, end_index = {end_index})", verbose)
+                    for line_index in range(start_row_index, end_row_index):
+                        line_length, previous_text = save_fixed_width_line(in_file, previous_text, chunk_file, delimiter, column_sizes_dict, compressor)
+                        # elif compression_type == "dictionary":
+                            # TODO: Implement this logic
+                            # raise Exception("Not yet supported")
+                            # for i, size in enumerate(column_sizes):
+                            #     if compression_dicts[i]["compression_type"] == b"c":
+                            #         compressed_value = compression_dicts[i]["map"][line_items[i]]
+                            #     else:
+                            #         compressed_value = compress_using_2_grams(line_items[i], compression_dicts[i]["map"])
+                            #
+                            #     out_items.append(format_string_as_fixed_width(compressed_value, size))
 
-                chunk_file.write(out_line)
+                        line_lengths_dict[str(line_index)] = line_length
 
-    return line_lengths_dict
+                        if line_index > 0 and line_index % num_rows_per_print == 0:
+                            print_message(f"Processed chunk {chunk_number} of {delimited_file_path} at line {line_index} (start row index = {start_row_index}, end row index = {end_row_index})", verbose)
 
-def exclude_comments_and_header(in_file, comment_prefix):
-    # Ignore the header because we don't need column names here. Also ignore commented lines.
-    if comment_prefix:
-        for line in in_file:
-            if not line.startswith(comment_prefix):
-                break
-    else:
-        in_file.readline()
+def skip_comments(in_file, comment_prefix):
+    next_text = in_file.read(len(comment_prefix))
 
-def write_compression_info(tmp_dir_path_outputs, compression_type, column_compression_dicts, column_index_name_dict):
+    while next_text == comment_prefix:
+        skip_line(in_file)
+        next_text = in_file.read(len(comment_prefix))
+
+    in_file.seek(in_file.tell() - len(next_text))
+
+# This function is slow when working with gzipped files because of the backwards seek(). Only use it sparingly.
+def skip_line(in_file):
+    chunk_size = 100000
+    current_index = in_file.tell()
+
+    while (newline_index := (next_text := in_file.read(chunk_size)).find(b"\n")) == -1:
+        current_index += len(next_text)
+
+    in_file.seek(current_index + newline_index + 1)
+
+def skip_lines(in_file, num_lines_to_skip):
+    if num_lines_to_skip <= 0:
+        return
+
+    chunk_size = 100000
+    num_lines_skipped = 0
+
+    while next_text := in_file.read(chunk_size):
+        how_far_to_reverse = len(next_text)
+
+        while (newline_index := next_text.find(b"\n")) > -1:
+            num_lines_skipped += 1
+            how_far_to_reverse -= newline_index + 1
+
+            if num_lines_skipped == num_lines_to_skip:
+                in_file.seek(in_file.tell() - how_far_to_reverse)
+                return
+            else:
+                next_text = next_text[newline_index + 1:]
+
+def save_column_names(in_file, column_names_dict, delimiter):
+    chunk_size = 100000
+    current_index = in_file.tell()
+    previous_text = b""
+    current_column_index = -1
+
+    while (newline_index := (next_text := previous_text + in_file.read(chunk_size)).find(b"\n")) == -1:
+        if len(next_text) == 0:
+            break
+
+        last_delimiter_index = next_text.rfind(delimiter)
+
+        if last_delimiter_index == -1:
+            previous_text = next_text
+        else:
+            previous_text = next_text[(last_delimiter_index + 1):]
+
+            for item in next_text[:last_delimiter_index].split(delimiter):
+                current_column_index += 1
+                column_names_dict[str(current_column_index)] = item
+
+    for item in next_text[:newline_index].split(delimiter):
+        current_column_index += 1
+        column_names_dict[str(current_column_index)] = item
+
+    in_file.seek(current_index + newline_index + 1)
+
+def iterate_delimited_file_column_indices(in_file, delimiter, start_column_index, end_column_index):
+    chunk_size = 100000
+    previous_text = b""
+    current_column_index = -1
+
+    while next_text := in_file.read(chunk_size):
+        next_text = previous_text + next_text
+        lines = next_text.split(b"\n")
+
+        for line_index, line in enumerate(lines):
+            line_items = line.split(delimiter)
+
+            if line_index == (len(lines) - 1):
+                previous_text = line_items.pop(-1)
+
+            for column_index, item in enumerate(line_items):
+                current_column_index += 1
+
+                if current_column_index >= start_column_index and current_column_index < end_column_index:
+                    yield current_column_index, item
+
+            if line_index != (len(lines) - 1):
+                current_column_index = -1
+
+def save_fixed_width_line(in_file, previous_text, out_file, delimiter, column_sizes_dict, compressor):
+    chunk_size = 100000
+    items = []
+
+    while (newline_index := (next_text := previous_text + in_file.read(chunk_size)).find(b"\n")) == -1:
+        last_delimiter_index = next_text.rfind(delimiter)
+
+        if last_delimiter_index == -1:
+            previous_text = next_text
+        else:
+            previous_text = next_text[(last_delimiter_index + 1):]
+
+            for item in next_text[:last_delimiter_index].split(delimiter):
+                items.append(format_string_as_fixed_width(item, column_sizes_dict[str(len(items))]))
+
+    for item in next_text[:newline_index].split(delimiter):
+        items.append(format_string_as_fixed_width(item, column_sizes_dict[str(len(items))]))
+
+    out_text = b"".join(items)
+    if compressor:
+        out_text = compressor.compress(out_text)
+
+    out_file.write(out_text)
+
+    return len(out_text), next_text[(newline_index + 1):]
+
+def write_compression_info(tmp_dir_path_outputs, compression_type, column_compression_dicts_file_path, column_index_name_dict_file_path):
     if not compression_type:
         return
 
     with open(f"{tmp_dir_path_outputs}cmpr", "wb") as cmpr_file:
-        if compression_type == "dictionary":
-            column_decompression_dicts = {}
-            # To enable decompression, we need to invert the column indices and column names.
-            # We also need to invert the values and compressed values.
-            for column_index, compression_dict in column_compression_dicts.items():
-                column_name = column_index_name_dict[column_index]
-                column_decompression_dicts[column_name] = column_compression_dicts[column_index]
-
-                decompression_dict = {}
-                for value, compressed_value in compression_dict["map"].items():
-                    decompression_dict[convert_bytes_to_int(compressed_value)] = value
-
-                column_decompression_dicts[column_name]["map"] = decompression_dict
-
-            cmpr_file.write(serialize(column_decompression_dicts))
-        else:
+        # if compression_type == "dictionary":
+        #     column_decompression_dicts = {}
+        #     # To enable decompression, we need to invert the column indices and column names.
+        #     # We also need to invert the values and compressed values.
+        #     for column_index, compression_dict in column_compression_dicts.items():
+        #         column_name = column_index_name_dict[column_index]
+        #         column_decompression_dicts[column_name] = column_compression_dicts[column_index]
+        #
+        #         decompression_dict = {}
+        #         for value, compressed_value in compression_dict["map"].items():
+        #             decompression_dict[convert_bytes_to_int(compressed_value)] = value
+        #
+        #         column_decompression_dicts[column_name]["map"] = decompression_dict
+        #
+        #     cmpr_file.write(serialize(column_decompression_dicts))
+        # else:
             cmpr_file.write(b"z")
 
 def generate_chunk_ranges(num_cols, num_cols_per_chunk):
@@ -576,11 +642,14 @@ def infer_type_for_column(types_dict):
         return None
 
     if types_dict[b"s"] > 0:
-        return b"s"
+        # return b"s"
+        return "s"
     elif types_dict[b"f"] > 0:
-        return b"f"
+        # return b"f"
+        return "f"
 
-    return b"i"
+    return "i"
+    # return b"i"
 
 def find_unique_bigrams(value):
     grams = set()
@@ -607,91 +676,176 @@ def enumerate_for_compression(values):
     for i in ints:
         yield i, values.pop(0)
 
-def build_one_column_index(f4_file_path, index_column, tmp_dir_path, verbose, custom_index_function):
-    tmp_dir_path = fix_dir_path_ending(tmp_dir_path)
-    tmp_dir_path_data = f"{tmp_dir_path}data/"
-    tmp_dir_path_other = f"{tmp_dir_path}other/"
-    makedirs(tmp_dir_path_data, exist_ok=True)
-    makedirs(tmp_dir_path_other, exist_ok=True)
-
-    # TODO: Add logic to verify that index_column is valid. But where?
+def build_one_column_index(f4_file_path, index_file_path, index_column, verbose):
     print_message(f"Saving index for {index_column}.", verbose)
+    # table_name = f"table_{index_position}"
+    # index_name = f"index_{index_position}"
     index_column_encoded = index_column.encode()
 
     print_message(f"Getting column meta information for {index_column} index for {f4_file_path}.", verbose)
     with initialize(f4_file_path) as file_data:
-        select_columns, column_type_dict, column_coords_dict, bigram_size_dict = get_column_meta(file_data, set([index_column_encoded]), [])
-
-        index_column_type = column_type_dict[index_column_encoded]
-        coords = column_coords_dict[index_column_encoded]
-        values_positions = []
-
+        index_column_index = get_column_index_from_name(file_data, index_column)
+        index_column_type = get_column_type_from_index(file_data, index_column_index)
+        index_column_coords = parse_data_coords(file_data, [index_column_index])[0]
+        sql_type = convert_to_sql_type(index_column_type)
         parse_function = get_parse_row_value_function(file_data)
 
-        print_message(f"Parsing values and positions for {index_column} index for {f4_file_path}.", verbose)
-        for row_index in range(file_data.stat_dict["num_rows"]):
-            value = parse_function(file_data, row_index, coords, bigram_size_dict=bigram_size_dict, column_name=index_column_encoded)
-            values_positions.append([value, row_index])
+        conn = connect_sql(index_file_path)
+
+        sql = f'''CREATE TABLE {index_column} (
+                     value {sql_type} NOT NULL
+            )'''
+        execute_sql(conn, sql)
 
         print_message(f"Building index file for {index_column} index for {f4_file_path}.", verbose)
-        customize_index_values_positions(values_positions, [index_column_type], sort_first_column, custom_index_function)
-        write_index_files(values_positions, tmp_dir_path_data, tmp_dir_path_other)
+        for row_index in range(file_data.stat_dict["num_rows"]):
+            value = parse_function(file_data, row_index, index_column_coords, bigram_size_dict=None, column_name=index_column_encoded).decode()
 
-        write_str_to_file(f"{tmp_dir_path_other}ver", get_current_version_major().encode())
+            sql = f'''INSERT INTO {index_column} (value)
+                      VALUES (?)'''
+            execute_sql(conn, sql, (value, ), commit=False)
 
-        index_file_path = get_index_file_path(f4_file_path, index_column, custom_index_function)
-        combine_into_single_file(tmp_dir_path_data, tmp_dir_path_other, index_file_path)
+        conn.commit()
+
+        sql = f'CREATE INDEX index_{index_column} ON {index_column} (value ASC)'
+        execute_sql(conn, sql)
+
+        conn.close()
 
         print_message(f"Done building index file for {index_column} index for {f4_file_path}.", verbose)
 
+    # # TODO: Add logic to verify that index_column is valid. But where?
+    # print_message(f"Saving index for {index_column}.", verbose)
+    # index_column_encoded = index_column.encode()
+    #
+    # print_message(f"Getting column meta information for {index_column} index for {f4_file_path}.", verbose)
+    # with initialize(f4_file_path) as file_data:
+    #     select_columns, column_type_dict, column_coords_dict, bigram_size_dict = get_column_meta(file_data, set([index_column_encoded]), [])
+    #
+    #     index_column_type = column_type_dict[index_column_encoded]
+    #     coords = column_coords_dict[index_column_encoded]
+    #     # values_positions = []
+    #
+    #     parse_function = get_parse_row_value_function(file_data)
+    #
+    #     print_message(f"Parsing values and positions for {index_column} index for {f4_file_path}.", verbose)
+    #     dict_file_path = f"{tmp_dir_path}values_positions"
+    #     with shelve.open(dict_file_path, "n") as tmp_dict:
+    #         for row_index in range(file_data.stat_dict["num_rows"]):
+    #             value = parse_function(file_data, row_index, coords, bigram_size_dict=bigram_size_dict, column_name=index_column_encoded).decode()
+    #             tmp_dict[value] = str(row_index)
+    #             # values_positions.append([value, row_index])
+    #
+    #     print_message(f"Building index file for {index_column} index for {f4_file_path}.", verbose)
+    #     write_index_files(dict_file_path, tmp_dir_path_data, tmp_dir_path_other)
+    #
+    #     # customize_index_values_positions(values_positions, [index_column_type], sort_first_column, custom_index_function)
+    #     # write_index_files(values_positions, tmp_dir_path_data, tmp_dir_path_other)
+    #
+    #     write_str_to_file(f"{tmp_dir_path_other}ver", get_current_version_major().encode())
+    #
+    #     index_file_path = get_index_file_path(f4_file_path, index_column, custom_index_function)
+    #     combine_into_single_file(tmp_dir_path_data, tmp_dir_path_other, index_file_path)
+    #     remove(dict_file_path)
+    #
+    #     print_message(f"Done building index file for {index_column} index for {f4_file_path}.", verbose)
+
 # TODO: Combine this function with the above one and make it generic enough to handle indexes with more columns.
-def build_two_column_index(f4_file_path, index_column_1, index_column_2, tmp_dir_path, verbose):
-    tmp_dir_path = fix_dir_path_ending(tmp_dir_path)
-    tmp_dir_path_data = f"{tmp_dir_path}data/"
-    tmp_dir_path_other = f"{tmp_dir_path}other/"
-    makedirs(tmp_dir_path_data, exist_ok=True)
-    makedirs(tmp_dir_path_other, exist_ok=True)
+def build_two_column_index(f4_file_path, index_file_path, index_columns, verbose):
+    index_description = '_'.join(index_columns)
+    print_message(f"Saving index for {index_description}.", verbose)
+    # table_name = f"table_{index_position}"
+    # index_name = f"index_{index_position}"
 
-    if not isinstance(index_column_1, str) or not isinstance(index_column_2, str):
-        raise Exception("When specifying an index column name, it must be a string.")
-
-    print_message(f"Saving two-column index for {index_column_1} and {index_column_2}.", verbose)
-
-    index_name = "____".join([index_column_1, index_column_2])
-    index_column_1_encoded = index_column_1.encode()
-    index_column_2_encoded = index_column_2.encode()
-
-    print_message(f"Getting column meta information for {index_name} index.", verbose)
+    print_message(f"Getting column meta information for {index_file_path} for {index_description}.", verbose)
     with initialize(f4_file_path) as file_data:
-        select_columns, column_type_dict, column_coords_dict, bigram_size_dict = get_column_meta(file_data, set([index_column_1_encoded, index_column_2_encoded]), [])
-        # TODO: Add logic to verify that index_column_1 and index_column_2 are valid.
-
-        index_column_1_type = column_type_dict[index_column_1_encoded]
-        index_column_2_type = column_type_dict[index_column_2_encoded]
-        coords_1 = column_coords_dict[index_column_1_encoded]
-        coords_2 = column_coords_dict[index_column_2_encoded]
-
+        index_column_index_1 = get_column_index_from_name(file_data, index_columns[0])
+        index_column_index_2 = get_column_index_from_name(file_data, index_columns[1])
+        index_column_type_1 = get_column_type_from_index(file_data, index_column_index_1)
+        index_column_type_2 = get_column_type_from_index(file_data, index_column_index_2)
+        index_column_coords = parse_data_coords(file_data, [index_column_index_1, index_column_index_2])
+        index_column_coords_1 = index_column_coords[0]
+        index_column_coords_2 = index_column_coords[1]
+        sql_type_1 = convert_to_sql_type(index_column_type_1)
+        sql_type_2 = convert_to_sql_type(index_column_type_2)
         parse_function = get_parse_row_value_function(file_data)
 
-        values_positions = []
-        print_message(f"Parsing values and positions for {index_name} index.", verbose)
+        conn = connect_sql(index_file_path)
+
+        sql = f'''CREATE TABLE {index_description} (
+                     value1 {sql_type_1} NOT NULL,
+                     value2 {sql_type_2} NOT NULL
+            )'''
+        execute_sql(conn, sql)
+
+        print_message(f"Populating index file for {index_file_path} for table {index_description}.", verbose)
         for row_index in range(file_data.stat_dict["num_rows"]):
-            value_1 = parse_function(file_data, row_index, coords_1, bigram_size_dict=bigram_size_dict, column_name=index_column_1_encoded)
-            value_2 = parse_function(file_data, row_index, coords_2, bigram_size_dict=bigram_size_dict, column_name=index_column_2_encoded)
+            value1 = parse_function(file_data, row_index, index_column_coords_1, bigram_size_dict=None, column_name=index_columns[0]).decode()
+            value2 = parse_function(file_data, row_index, index_column_coords_2, bigram_size_dict=None, column_name=index_columns[1]).decode()
 
-            values_positions.append([value_1, value_2, row_index])
+            sql = f'''INSERT INTO {index_description} (value1, value2)
+                      VALUES (?, ?)'''
+            execute_sql(conn, sql, (value1, value2), commit=False)
 
-        print_message(f"Building index file for {index_name}.", verbose)
-        customize_index_values_positions(values_positions, [index_column_1_type, index_column_2_type], sort_first_two_columns, do_nothing)
-        write_index_files(values_positions, tmp_dir_path_data, tmp_dir_path_other)
+        conn.commit()
 
-        write_str_to_file(f"{tmp_dir_path_other}ver", get_current_version_major().encode())
+        sql = f'CREATE INDEX index_{index_description} ON {index_description} (value1 ASC, value2 ASC)'
+        execute_sql(conn, sql)
 
-        index_file_path = get_index_file_path(f4_file_path, index_name)
-        combine_into_single_file(tmp_dir_path_data, tmp_dir_path_other, index_file_path)
+        conn.close()
 
-        print_message(f"Done building two-column index file for {index_name}.", verbose)
+        print_message(f"Done building index file for {index_file_path} for table {index_description}.", verbose)
 
+
+
+
+    # tmp_dir_path = fix_dir_path_ending(tmp_dir_path)
+    # tmp_dir_path_data = f"{tmp_dir_path}data/"
+    # tmp_dir_path_other = f"{tmp_dir_path}other/"
+    # makedirs(tmp_dir_path_data, exist_ok=True)
+    # makedirs(tmp_dir_path_other, exist_ok=True)
+    #
+    # if not isinstance(index_column_1, str) or not isinstance(index_column_2, str):
+    #     raise Exception("When specifying an index column name, it must be a string.")
+    #
+    # print_message(f"Saving two-column index for {index_column_1} and {index_column_2}.", verbose)
+    #
+    # index_name = "____".join([index_column_1, index_column_2])
+    # index_column_1_encoded = index_column_1.encode()
+    # index_column_2_encoded = index_column_2.encode()
+    #
+    # print_message(f"Getting column meta information for {index_name} index.", verbose)
+    # with initialize(f4_file_path) as file_data:
+    #     select_columns, column_type_dict, column_coords_dict, bigram_size_dict = get_column_meta(file_data, set([index_column_1_encoded, index_column_2_encoded]), [])
+    #     # TODO: Add logic to verify that index_column_1 and index_column_2 are valid.
+    #
+    #     index_column_1_type = column_type_dict[index_column_1_encoded]
+    #     index_column_2_type = column_type_dict[index_column_2_encoded]
+    #     coords_1 = column_coords_dict[index_column_1_encoded]
+    #     coords_2 = column_coords_dict[index_column_2_encoded]
+    #
+    #     parse_function = get_parse_row_value_function(file_data)
+    #
+    #     values_positions = []
+    #     print_message(f"Parsing values and positions for {index_name} index.", verbose)
+    #     for row_index in range(file_data.stat_dict["num_rows"]):
+    #         value_1 = parse_function(file_data, row_index, coords_1, bigram_size_dict=bigram_size_dict, column_name=index_column_1_encoded)
+    #         value_2 = parse_function(file_data, row_index, coords_2, bigram_size_dict=bigram_size_dict, column_name=index_column_2_encoded)
+    #
+    #         values_positions.append([value_1, value_2, row_index])
+    #
+    #     print_message(f"Building index file for {index_name}.", verbose)
+    #     customize_index_values_positions(values_positions, [index_column_1_type, index_column_2_type], sort_first_two_columns, do_nothing)
+    #     write_index_files(values_positions, tmp_dir_path_data, tmp_dir_path_other)
+    #
+    #     write_str_to_file(f"{tmp_dir_path_other}ver", get_current_version_major().encode())
+    #
+    #     index_file_path = get_index_file_path(f4_file_path, index_name)
+    #     combine_into_single_file(tmp_dir_path_data, tmp_dir_path_other, index_file_path)
+    #
+    #     print_message(f"Done building two-column index file for {index_name}.", verbose)
+
+#TODO: Remove this function?
 def customize_index_values_positions(values_positions, column_types, sort_function, custom_index_function):
     # Iterate through each "column" except the last one (which has row_indices) and convert the data.
     for i in range(len(column_types)):
@@ -705,41 +859,76 @@ def customize_index_values_positions(values_positions, column_types, sort_functi
     # Sort the rows.
     sort_function(values_positions)
 
-def write_index_files(values_positions, tmp_dir_path_data, tmp_dir_path_prefix_other):
-    column_dict = {}
-    for i in range(len(values_positions[0])):
-        column_dict[i] = [x[i] if isinstance(x[i], bytes) else str(x[i]).encode() for x in values_positions]
-
-    max_lengths = []
-    for i in range(len(values_positions[0])):
-        max_lengths.append(get_max_string_length(column_dict[i]))
-
-    for i in range(len(values_positions[0])):
-        column_dict[i] = format_column_items(column_dict[i], max_lengths[i])
-
-    rows = []
-    for row_num in range(len(column_dict[0])):
-        row_value = b""
-
-        for col_num in sorted(column_dict.keys()):
-            row_value += column_dict[col_num][row_num]
-
-        rows.append(row_value)
-
-    column_coords_string, rows_max_length = build_string_map(rows)
-
+def write_index_files(dict_file_path, tmp_dir_path_data, tmp_dir_path_prefix_other):
+    out_file_path = f"{tmp_dir_path_prefix_other}data"
     if tmp_dir_path_data:
-        write_str_to_file(f"{tmp_dir_path_data}0", column_coords_string)
-    else:
-        write_str_to_file(f"{tmp_dir_path_prefix_other}data", column_coords_string)
+        out_file_path = f"{tmp_dir_path_data}0"
 
-    column_start_coords = get_column_start_coords(max_lengths)
-    column_coords_string, max_column_coord_length = build_string_map(column_start_coords)
-    write_str_to_file(f"{tmp_dir_path_prefix_other}cc", column_coords_string)
-    write_str_to_file(f"{tmp_dir_path_prefix_other}mccl", str(max_column_coord_length).encode())
+    max_key_length = 0
+    max_value_length = 0
 
-    # Find and write the line length.
-    write_str_to_file(f"{tmp_dir_path_prefix_other}ll", str(rows_max_length).encode())
+    with shelve.open(dict_file_path, "r") as the_dict:
+        for key, value in the_dict.items():
+            key_length = len(key)
+            if key_length > max_key_length:
+                max_key_length = key_length
+
+            value_length = len(value)
+            if value_length > max_value_length:
+                max_value_length = value_length
+
+    with shelve.open(dict_file_path, "r") as the_dict:
+        with open(out_file_path, "wb") as out_file:
+            for key, value in sorted(the_dict.items()):
+                out_line = format_string_as_fixed_width(key.encode(), max_key_length) + format_string_as_fixed_width(value.encode(), max_value_length)
+                out_file.write(out_line)
+
+    write_str_to_file(f"{tmp_dir_path_prefix_other}ll", str(len(out_line)).encode())
+
+    mccl = max(len(str(max_key_length)), len(str(max_key_length + max_value_length)))
+    write_str_to_file(f"{tmp_dir_path_prefix_other}mccl", str(mccl).encode())
+
+    cc = format_string_as_fixed_width(b"0", mccl)
+    cc += format_string_as_fixed_width(str(max_key_length).encode(), mccl)
+    cc += format_string_as_fixed_width(str(max_key_length + max_value_length).encode(), mccl)
+
+    write_str_to_file(f"{tmp_dir_path_prefix_other}cc", cc)
+
+# def write_index_files(values_positions, tmp_dir_path_data, tmp_dir_path_prefix_other):
+#     column_dict = {}
+#     for i in range(len(values_positions[0])):
+#         column_dict[i] = [x[i] if isinstance(x[i], bytes) else str(x[i]).encode() for x in values_positions]
+#
+#     max_lengths = []
+#     for i in range(len(values_positions[0])):
+#         max_lengths.append(get_max_string_length(column_dict[i]))
+#
+#     for i in range(len(values_positions[0])):
+#         column_dict[i] = format_column_items(column_dict[i], max_lengths[i])
+#
+#     rows = []
+#     for row_num in range(len(column_dict[0])):
+#         row_value = b""
+#
+#         for col_num in sorted(column_dict.keys()):
+#             row_value += column_dict[col_num][row_num]
+#
+#         rows.append(row_value)
+#
+#     column_coords_string, rows_max_length = save_string_map(rows)
+#
+#     if tmp_dir_path_data:
+#         write_str_to_file(f"{tmp_dir_path_data}0", column_coords_string)
+#     else:
+#         write_str_to_file(f"{tmp_dir_path_prefix_other}data", column_coords_string)
+#
+#     column_start_coords = save_column_coords(max_lengths)
+#     column_coords_string, max_column_coord_length = save_string_map(column_start_coords)
+#     write_str_to_file(f"{tmp_dir_path_prefix_other}cc", column_coords_string)
+#     write_str_to_file(f"{tmp_dir_path_prefix_other}mccl", str(max_column_coord_length).encode())
+#
+#     # Find and write the line length.
+#     write_str_to_file(f"{tmp_dir_path_prefix_other}ll", str(rows_max_length).encode())
 
 def prepare_tmp_dirs(tmp_dir_path):
     # Figure out where temp files will be stored and create directory, if needed.
@@ -751,16 +940,18 @@ def prepare_tmp_dirs(tmp_dir_path):
     tmp_dir_path = fix_dir_path_ending(tmp_dir_path)
 
     tmp_dir_path_colinfo = f"{tmp_dir_path}colinfo/"
+    tmp_dir_path_rowinfo = f"{tmp_dir_path}rowinfo/"
     tmp_dir_path_chunks = f"{tmp_dir_path}chunks/"
     tmp_dir_path_outputs = f"{tmp_dir_path}outputs/"
     tmp_dir_path_indexes = f"{tmp_dir_path}indexes/"
 
     makedirs(tmp_dir_path_colinfo, exist_ok=True)
+    makedirs(tmp_dir_path_rowinfo, exist_ok=True)
     makedirs(tmp_dir_path_chunks, exist_ok=True)
     makedirs(tmp_dir_path_outputs, exist_ok=True)
     makedirs(tmp_dir_path_indexes, exist_ok=True)
 
-    return tmp_dir_path_colinfo, tmp_dir_path_chunks, tmp_dir_path_outputs, tmp_dir_path_indexes
+    return tmp_dir_path_colinfo, tmp_dir_path_rowinfo, tmp_dir_path_chunks, tmp_dir_path_outputs, tmp_dir_path_indexes
 
 def transpose_lines_to_temp(data_file_path, tmp_dir_path, start_row_index, end_row_index, column_names, column_coords, bigram_size_dict, verbose):
     with initialize(data_file_path) as file_data:
