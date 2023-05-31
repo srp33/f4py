@@ -666,9 +666,9 @@ def run_larger_tests(num_parallel, size, extension, discrete1_index, numeric1_in
     f4.build_indexes(f4_file_path, ["ID", "Categorical1", "Discrete1", "Numeric1"], index_tmp_dir_path)
     run_larger_tests2(f4_file_path, out_file_path, larger_ID, larger_Categorical1, larger_Discrete1, larger_Numeric1, num_parallel, check_outputs, tmp_dir_path)
 
-    print("-------------------------------------------------------------------------")
-    print(f"Running all tests for {in_file_path} - custom indexing (cmpr: {compression_type})")
-    print("-------------------------------------------------------------------------")
+    #print("-------------------------------------------------------------------------")
+    #print(f"Running all tests for {in_file_path} - custom indexing (cmpr: {compression_type})")
+    #print("-------------------------------------------------------------------------")
 
     #f4.build_endswith_index(f4_file_path, "Discrete1", index_tmp_dir_path)
     #run_larger_tests2(f4_file_path, out_file_path, larger_ID, larger_Categorical1, larger_Discrete1, larger_Numeric1, num_parallel, check_outputs, tmp_dir_path)
@@ -838,14 +838,14 @@ def run_super_tests(num_parallel, size, extension, compression_type, verbose, tm
     os.makedirs(index_tmp_dir_path)
     f4.build_indexes(f4_file_path, ["ID", "Categorical1"], index_tmp_dir_path)
 
-run_all_small_tests()
+#run_all_small_tests()
 #sys.exit()
 
 #for compression_type in [None, "dictionary", "zstd"]:
 #for compression_type in [None, "zstd"]:
-#for compression_type in [None]:
+for compression_type in [None]:
 #for compression_type in ["dictionary"]:
-for compression_type in ["zstd"]:
+#for compression_type in ["zstd"]:
     # Medium tests
 #    run_larger_tests(num_parallel=1, size="medium", extension="", discrete1_index=11, numeric1_index=21, rebuild=True, compression_type=compression_type)
 #    run_larger_tests(num_parallel=2, size="medium", extension="", discrete1_index=11, numeric1_index=21, rebuild=True, compression_type=compression_type)
@@ -858,13 +858,14 @@ for compression_type in ["zstd"]:
     #rebuild = False
     verbose = True
     #verbose = False
-    #check_outputs = True
-    check_outputs = False
+    check_outputs = True
+    #check_outputs = False
 
-    #run_larger_tests(num_parallel=num_parallel, size="large_tall", extension="", discrete1_index=251, numeric1_index=501, rebuild=rebuild, compression_type=compression_type, verbose=verbose, check_outputs=check_outputs, tmp_dir_path="/tmp/larry")
+#    run_larger_tests(num_parallel=num_parallel, size="large_tall", extension="", discrete1_index=251, numeric1_index=501, rebuild=rebuild, compression_type=compression_type, verbose=verbose, check_outputs=check_outputs, tmp_dir_path="/tmp/large_tall")
+#    run_larger_tests(num_parallel=num_parallel, size="large_wide", extension="", discrete1_index=250001, numeric1_index=500001, rebuild=rebuild, compression_type=compression_type, verbose=verbose, check_outputs=check_outputs, tmp_dir_path="/tmp/large_wide")
 
-#    run_larger_tests(num_parallel=num_parallel, size="large_tall", extension=".gz", discrete1_index=251, numeric1_index=501, rebuild=rebuild, compression_type=compression_type, verbose=verbose, check_outputs=check_outputs, tmp_dir_path="/tmp/larry")
-#    run_larger_tests(num_parallel=num_parallel, size="large_wide", extension=".gz", discrete1_index=250001, numeric1_index=500001, rebuild=rebuild, compression_type=compression_type, verbose=verbose, check_outputs=check_outputs)
+    run_larger_tests(num_parallel=num_parallel, size="large_tall", extension=".gz", discrete1_index=251, numeric1_index=501, rebuild=rebuild, compression_type=compression_type, verbose=verbose, check_outputs=check_outputs, tmp_dir_path="/tmp/large_tall_gz")
+#    run_larger_tests(num_parallel=num_parallel, size="large_wide", extension=".gz", discrete1_index=250001, numeric1_index=500001, rebuild=rebuild, compression_type=compression_type, verbose=verbose, check_outputs=check_outputs, tmp_dir_path="/tmp/large_wide_gz")
 
     #f4.transpose("data/medium.f4", "/tmp/medium_transposed.f4", num_parallel=num_parallel, verbose=verbose)
     #f4.transpose("data/large_tall.f4", "/tmp/large_tall_transposed.f4", num_parallel=num_parallel, verbose=verbose)

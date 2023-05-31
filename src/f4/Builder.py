@@ -247,8 +247,12 @@ def parse_file_metadata(comment_prefix, compression_type, delimited_file_path, d
         # When each chunk was processed, we went through all rows, so we can get this number from just the first chunk.
         num_rows = all_num_rows[0]
 
+        #TODO
+        # num_rows = 1000000
+
         # Summarize the column sizes and types across the chunks into a single shelve file.
         # We'll add everything to the shelve file for the 0th chunk.
+        print_message(f"Summarizing the column sizes and types across the chunks for {delimited_file_path}", verbose)
         with shelve.open(column_sizes_dict_file_path, "w", writeback=True) as column_sizes_dict:
             with shelve.open(column_types_dict_file_path, "w", writeback=True) as column_types_dict:
                 for i_parallel in range(1, num_parallel):
@@ -261,7 +265,6 @@ def parse_file_metadata(comment_prefix, compression_type, delimited_file_path, d
                             column_types_dict[key] = value
 
                     #TODO: Do the same for compression dicts
-
     if num_rows == 0:
         raise Exception(f"A header row but no data rows were detected in {delimited_file_path}")
 
@@ -353,6 +356,9 @@ def parse_columns_chunk(delimited_file_path, delimiter, comment_prefix, chunk_nu
                             if column_index == start_column_index:
                                 num_rows += 1
 
+                                if verbose and num_rows > 0 and (num_rows < 100000 and num_rows % 100 == 0) or num_rows % 10000 == 0:
+                                    print_message(f"Processed line {num_rows} of {delimited_file_path} for columns {start_column_index} - {end_column_index - 1}", verbose)
+
                             this_length = len(value)
                             column_index = str(column_index)
 
@@ -363,9 +369,6 @@ def parse_columns_chunk(delimited_file_path, delimiter, comment_prefix, chunk_nu
 
                             inferred_type = infer_type(value)
                             column_types_values_dict[column_index][inferred_type] += 1
-
-                            if verbose and num_rows > 0 and (num_rows < 100000 and num_rows % 100 == 0) or num_rows % 10000 == 0:
-                                print_message(f"Processed line {num_rows} of {delimited_file_path} for columns {start_column_index} - {end_column_index - 1}", verbose)
 
                         for column_index in range(start_column_index, end_column_index):
                             column_index = str(column_index)
@@ -467,6 +470,7 @@ def write_rows_chunk(delimited_file_path, tmp_dir_path_rowinfo, tmp_dir_path_chu
 
                     for line_index in range(start_row_index, end_row_index):
                         line_length, previous_text = save_fixed_width_line(in_file, previous_text, chunk_file, delimiter, column_sizes_dict, compressor)
+
                         # elif compression_type == "dictionary":
                             # TODO: Implement this logic
                             # raise Exception("Not yet supported")
@@ -573,31 +577,65 @@ def iterate_delimited_file_column_indices(in_file, delimiter, start_column_index
             if line_index != (len(lines) - 1):
                 current_column_index = -1
 
-def save_fixed_width_line(in_file, previous_text, out_file, delimiter, column_sizes_dict, compressor):
-    chunk_size = 100000
-    items = []
+def save_fixed_width_line(in_file, text, out_file, delimiter, column_sizes_dict, compressor):
+    size_to_read = 100000
+    size_to_write = 100000
+    column_index = 0
+    line_length = 0
 
-    while (newline_index := (next_text := previous_text + in_file.read(chunk_size)).find(b"\n")) == -1:
-        last_delimiter_index = next_text.rfind(delimiter)
+    while (newline_index := text.find(b"\n")) == -1:
+        next_text = in_file.read(size_to_read)
 
-        if last_delimiter_index == -1:
-            previous_text = next_text
+        # See if we are at the end of the file
+        if next_text:
+            text = text + next_text
         else:
-            previous_text = next_text[(last_delimiter_index + 1):]
+            break
 
-            for item in next_text[:last_delimiter_index].split(delimiter):
-                items.append(format_string_as_fixed_width(item, column_sizes_dict[str(len(items))]))
+    out_text = b""
 
-    for item in next_text[:newline_index].split(delimiter):
-        items.append(format_string_as_fixed_width(item, column_sizes_dict[str(len(items))]))
+    for item in text[:newline_index].split(delimiter):
+        out_text += format_string_as_fixed_width(item, column_sizes_dict[str(column_index)])
+        column_index += 1
 
-    out_text = b"".join(items)
-    if compressor:
-        out_text = compressor.compress(out_text)
+        if len(out_text) >= size_to_write:
+            text_to_write = out_text[:size_to_write]
+            out_text = out_text[size_to_write:]
 
-    out_file.write(out_text)
+            if compressor:
+                text_to_write = compressor.compress(text_to_write)
 
-    return len(out_text), next_text[(newline_index + 1):]
+            line_length += out_file.write(text_to_write)
+
+    if len(out_text) > 0:
+        if compressor:
+            out_text = compressor.compress(out_text)
+
+        line_length += out_file.write(out_text)
+
+    return line_length, text[(newline_index + 1):]
+
+    # while (newline_index := (next_text := previous_text + in_file.read(chunk_size)).find(b"\n")) == -1:
+    #     last_delimiter_index = next_text.rfind(delimiter)
+    #
+    #     if last_delimiter_index == -1:
+    #         previous_text = next_text
+    #     else:
+    #         previous_text = next_text[(last_delimiter_index + 1):]
+    #
+    #         for item in next_text[:last_delimiter_index].split(delimiter):
+    #             items.append(format_string_as_fixed_width(item, column_sizes_dict[str(len(items))]))
+    #
+    # for item in next_text[:newline_index].split(delimiter):
+    #     items.append(format_string_as_fixed_width(item, column_sizes_dict[str(len(items))]))
+    #
+    # out_text = b"".join(items)
+    # if compressor:
+    #     out_text = compressor.compress(out_text)
+    #
+    # out_file.write(out_text)
+    #
+    # return len(out_text), next_text[(newline_index + 1):]
 
 def write_compression_info(tmp_dir_path_outputs, compression_type, column_compression_dicts_file_path, column_index_name_dict_file_path):
     if not compression_type:
@@ -795,9 +833,6 @@ def build_two_column_index(f4_file_path, index_file_path, index_columns, verbose
         conn.close()
 
         print_message(f"Done building index file for {index_file_path} for table {index_description}.", verbose)
-
-
-
 
     # tmp_dir_path = fix_dir_path_ending(tmp_dir_path)
     # tmp_dir_path_data = f"{tmp_dir_path}data/"
