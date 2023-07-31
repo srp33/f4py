@@ -32,10 +32,11 @@ def convert_delimited_file(delimited_file_path, f4_file_path, index_columns=[], 
     tmp_dir_path_colinfo, tmp_dir_path_rowinfo, tmp_dir_path_chunks, tmp_dir_path_outputs, tmp_dir_path_indexes = prepare_tmp_dirs(tmp_dir_path)
     num_rows, num_cols, column_names_dict_file_path, column_sizes_dict_file_path, column_types_dict_file_path, column_compression_dicts_file_path = parse_file_metadata(comment_prefix, compression_type, delimited_file_path, delimiter, num_parallel, tmp_dir_path_colinfo, verbose)
 
-    num_rows_per_print = 100 if num_rows < 100000 else 10000
-
+    # import sys
+    # print("got here33")
+    # sys.exit(1)
     print_message(f"Parsing chunks of {delimited_file_path} and saving to temp directory ({tmp_dir_path_chunks})", verbose)
-    line_lengths_dict_file_path = write_rows(delimited_file_path, tmp_dir_path_rowinfo, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes_dict_file_path, column_compression_dicts_file_path, num_rows, num_cols, num_parallel, num_rows_per_print, verbose)
+    line_lengths_dict_file_path = write_rows(delimited_file_path, tmp_dir_path_rowinfo, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes_dict_file_path, column_compression_dicts_file_path, num_rows, num_cols, num_parallel, verbose)
 
     print_message(f"Saving meta files for {f4_file_path}", verbose)
     write_meta_files(tmp_dir_path_colinfo, tmp_dir_path_outputs, line_lengths_dict_file_path, column_names_dict_file_path, column_sizes_dict_file_path, column_types_dict_file_path, compression_type, column_compression_dicts_file_path, num_rows)
@@ -187,6 +188,9 @@ def build_indexes(f4_file_path, index_columns, verbose=False):
     # TODO: Add logic to verify that index_columns are valid.
     index_file_path = get_index_file_path(f4_file_path)
 
+    if path.exists(index_file_path):
+        remove(index_file_path)
+
     if isinstance(index_columns, str):
         build_one_column_index(f4_file_path, index_file_path, index_columns, verbose)
     elif isinstance(index_columns, list):
@@ -203,10 +207,6 @@ def build_indexes(f4_file_path, index_columns, verbose=False):
                 build_one_column_index(f4_file_path, index_file_path, index_column, verbose)
     else:
         raise Exception("When specifying index_columns, it must either be a string or a list.")
-
-# This function is specifically for the EndsWithFilter.
-# def build_endswith_index(f4_file_path, index_column, tmp_dir_path, verbose=False):
-#     build_one_column_index(f4_file_path, index_column, tmp_dir_path, verbose, reverse_string)
 
 #####################################################
 # Non-public function(s)
@@ -256,13 +256,19 @@ def parse_file_metadata(comment_prefix, compression_type, delimited_file_path, d
         with shelve.open(column_sizes_dict_file_path, "w", writeback=True) as column_sizes_dict:
             with shelve.open(column_types_dict_file_path, "w", writeback=True) as column_types_dict:
                 for i_parallel in range(1, num_parallel):
-                    with shelve.open(f"{tmp_dir_path}{i_parallel}_column_sizes", "r") as chunk_column_sizes_dict:
-                        for key, value in chunk_column_sizes_dict.items():
-                            column_sizes_dict[key] = value
+                    # This file might not exist if the number of threads > # of columns.
+                    file_path = f"{tmp_dir_path}{i_parallel}_column_sizes"
+                    if path.exists(file_path):
+                        with shelve.open(file_path, "r") as chunk_column_sizes_dict:
+                            for key, value in chunk_column_sizes_dict.items():
+                                column_sizes_dict[key] = value
 
-                    with shelve.open(f"{tmp_dir_path}{i_parallel}_column_types", "r") as chunk_column_types_dict:
-                        for key, value in chunk_column_types_dict.items():
-                            column_types_dict[key] = value
+                    # This file might not exist if the number of threads > # of columns.
+                    file_path = f"{tmp_dir_path}{i_parallel}_column_types"
+                    if path.exists(file_path):
+                        with shelve.open(file_path, "r") as chunk_column_types_dict:
+                            for key, value in chunk_column_types_dict.items():
+                                column_types_dict[key] = value
 
                     #TODO: Do the same for compression dicts
     if num_rows == 0:
@@ -355,9 +361,7 @@ def parse_columns_chunk(delimited_file_path, delimiter, comment_prefix, chunk_nu
                         for column_index, value in iterate_delimited_file_column_indices(in_file, delimiter, start_column_index, end_column_index):
                             if column_index == start_column_index:
                                 num_rows += 1
-
-                                if verbose and num_rows > 0 and (num_rows < 100000 and num_rows % 100 == 0) or num_rows % 10000 == 0:
-                                    print_message(f"Processed line {num_rows} of {delimited_file_path} for columns {start_column_index} - {end_column_index - 1}", verbose)
+                                print_message(f"Inferring column types in {delimited_file_path} for columns {start_column_index} - {end_column_index - 1}", verbose, num_rows)
 
                             this_length = len(value)
                             column_index = str(column_index)
@@ -434,13 +438,13 @@ def parse_columns_chunk(delimited_file_path, delimiter, comment_prefix, chunk_nu
 
     return num_rows
 
-def write_rows(delimited_file_path, tmp_dir_path_rowinfo, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes_dict_file_path, compression_dicts_dict_file_path, num_rows, num_cols, num_parallel, num_rows_per_print, verbose):
+def write_rows(delimited_file_path, tmp_dir_path_rowinfo, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes_dict_file_path, compression_dicts_dict_file_path, num_rows, num_cols, num_parallel, verbose):
     if num_parallel == 1:
-        write_rows_chunk(delimited_file_path, tmp_dir_path_rowinfo, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes_dict_file_path, compression_dicts_dict_file_path, 0, 0, num_rows, num_rows_per_print, num_cols, verbose)
+        write_rows_chunk(delimited_file_path, tmp_dir_path_rowinfo, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes_dict_file_path, compression_dicts_dict_file_path, 0, 0, num_rows, num_cols, verbose)
     else:
         row_chunk_indices = generate_chunk_ranges(num_rows, ceil(num_rows / num_parallel) + 1)
 
-        joblib.Parallel(n_jobs=num_parallel)(joblib.delayed(write_rows_chunk)(delimited_file_path, tmp_dir_path_rowinfo, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes_dict_file_path, compression_dicts_dict_file_path, i, row_chunk[0], row_chunk[1], num_rows_per_print, num_cols, verbose) for i, row_chunk in enumerate(row_chunk_indices))
+        joblib.Parallel(n_jobs=num_parallel)(joblib.delayed(write_rows_chunk)(delimited_file_path, tmp_dir_path_rowinfo, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes_dict_file_path, compression_dicts_dict_file_path, i, row_chunk[0], row_chunk[1], num_cols, verbose) for i, row_chunk in enumerate(row_chunk_indices))
 
         with shelve.open(f"{tmp_dir_path_rowinfo}0", "w", writeback=True) as main_line_lengths_dict:
             for i in range(1, num_parallel):
@@ -450,7 +454,7 @@ def write_rows(delimited_file_path, tmp_dir_path_rowinfo, tmp_dir_path_chunks, d
 
     return f"{tmp_dir_path_rowinfo}0"
 
-def write_rows_chunk(delimited_file_path, tmp_dir_path_rowinfo, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes_dict_file_path, compression_dicts_dict_file_path, chunk_number, start_row_index, end_row_index, num_rows_per_print, num_cols, verbose):
+def write_rows_chunk(delimited_file_path, tmp_dir_path_rowinfo, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes_dict_file_path, compression_dicts_dict_file_path, chunk_number, start_row_index, end_row_index, num_cols, verbose):
     line_lengths_dict_file_path = f"{tmp_dir_path_rowinfo}{chunk_number}"
 
     with shelve.open(line_lengths_dict_file_path, "n", writeback=True) as line_lengths_dict:
@@ -484,8 +488,7 @@ def write_rows_chunk(delimited_file_path, tmp_dir_path_rowinfo, tmp_dir_path_chu
 
                         line_lengths_dict[str(line_index)] = line_length
 
-                        if line_index > 0 and line_index % num_rows_per_print == 0:
-                            print_message(f"Processed chunk {chunk_number} of {delimited_file_path} at line {line_index} (start row index = {start_row_index}, end row index = {end_row_index})", verbose)
+                        print_message(f"Writing rows chunk {chunk_number} for {delimited_file_path} (start row index = {start_row_index}, end row index = {end_row_index})", verbose, line_index)
 
 def skip_comments(in_file, comment_prefix):
     next_text = in_file.read(len(comment_prefix))
@@ -735,7 +738,7 @@ def build_one_column_index(f4_file_path, index_file_path, index_column, verbose)
             )'''
         execute_sql(conn, sql)
 
-        print_message(f"Building index file for {index_column} index for {f4_file_path}.", verbose)
+        print_message(f"Building index file for {index_column} column in {f4_file_path}.", verbose)
         for row_index in range(file_data.stat_dict["num_rows"]):
             value = parse_function(file_data, row_index, index_column_coords, bigram_size_dict=None, column_name=index_column_encoded).decode()
 
@@ -750,7 +753,7 @@ def build_one_column_index(f4_file_path, index_file_path, index_column, verbose)
 
         conn.close()
 
-        print_message(f"Done building index file for {index_column} index for {f4_file_path}.", verbose)
+        print_message(f"Done building index file for {index_column} column in {f4_file_path}.", verbose)
 
     # # TODO: Add logic to verify that index_column is valid. But where?
     # print_message(f"Saving index for {index_column}.", verbose)
