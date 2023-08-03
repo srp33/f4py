@@ -435,23 +435,19 @@ def parse_columns_chunk(delimited_file_path, delimiter, comment_prefix, chunk_nu
     return num_rows
 
 def write_rows(delimited_file_path, tmp_dir_path_rowinfo, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes_dict_file_path, compression_dicts_dict_file_path, num_rows, num_parallel, verbose):
-    compressor = None
-    if compression_type == "zstd":
-        compressor = ZstdCompressor(level=1)
-
     line_lengths_file_path = f"{tmp_dir_path_rowinfo}0"
 
     if num_parallel == 1:
-        line_length_result = write_rows_chunk(delimited_file_path, tmp_dir_path_rowinfo, tmp_dir_path_chunks, delimiter, comment_prefix, compressor, column_sizes_dict_file_path, compression_dicts_dict_file_path, 0, 0, num_rows, verbose)
+        line_length_result = write_rows_chunk(delimited_file_path, tmp_dir_path_rowinfo, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes_dict_file_path, compression_dicts_dict_file_path, 0, 0, num_rows, verbose)
 
-        if not compressor:
+        if not compression_type:
             write_str_to_file(line_lengths_file_path, str(line_length_result).encode())
     else:
         row_chunk_indices = generate_chunk_ranges(num_rows, ceil(num_rows / num_parallel) + 1)
 
-        line_length_results = joblib.Parallel(n_jobs=num_parallel)(joblib.delayed(write_rows_chunk)(delimited_file_path, tmp_dir_path_rowinfo, tmp_dir_path_chunks, delimiter, comment_prefix, compressor, column_sizes_dict_file_path, compression_dicts_dict_file_path, i, row_chunk[0], row_chunk[1], verbose) for i, row_chunk in enumerate(row_chunk_indices))
+        line_length_results = joblib.Parallel(n_jobs=num_parallel)(joblib.delayed(write_rows_chunk)(delimited_file_path, tmp_dir_path_rowinfo, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes_dict_file_path, compression_dicts_dict_file_path, i, row_chunk[0], row_chunk[1], verbose) for i, row_chunk in enumerate(row_chunk_indices))
 
-        if compressor:
+        if compression_type:
             with shelve.open(line_lengths_file_path, "w", writeback=True) as main_line_lengths_dict:
                 for chunk_number in range(1, num_parallel):
                     with shelve.open(f"{tmp_dir_path_rowinfo}{chunk_number}", "r") as chunk_line_lengths_dict:
@@ -467,7 +463,7 @@ def write_rows(delimited_file_path, tmp_dir_path_rowinfo, tmp_dir_path_chunks, d
 
     return line_lengths_file_path
 
-def write_rows_chunk(delimited_file_path, tmp_dir_path_rowinfo, tmp_dir_path_chunks, delimiter, comment_prefix, compressor, column_sizes_dict_file_path, compression_dicts_dict_file_path, chunk_number, start_row_index, end_row_index, verbose):
+def write_rows_chunk(delimited_file_path, tmp_dir_path_rowinfo, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes_dict_file_path, compression_dicts_dict_file_path, chunk_number, start_row_index, end_row_index, verbose):
     with shelve.open(column_sizes_dict_file_path, "r") as column_sizes_dict:
         with get_delimited_file_handle(delimited_file_path) as in_file:
             skip_comments(in_file, comment_prefix)
@@ -477,7 +473,12 @@ def write_rows_chunk(delimited_file_path, tmp_dir_path_rowinfo, tmp_dir_path_chu
             with open(f"{tmp_dir_path_chunks}{chunk_number}", 'wb') as chunk_file:
                 previous_text = b""
 
-                if compressor:
+                if compression_type:
+                    if compression_type == "zstd":
+                        compressor = ZstdCompressor(level=1)
+                    else:
+                        raise Exception(f"You specified a compression type ({compression_type}) that is not supported.")
+
                     line_lengths_dict_file_path = f"{tmp_dir_path_rowinfo}{chunk_number}"
 
                     with shelve.open(line_lengths_dict_file_path, "n", writeback=True) as line_lengths_dict:
@@ -504,7 +505,7 @@ def write_rows_chunk(delimited_file_path, tmp_dir_path_rowinfo, tmp_dir_path_chu
                         return line_lengths_dict_file_path
                 else:
                     for line_index in range(start_row_index, end_row_index):
-                        line_length, previous_text = save_fixed_width_line(in_file, previous_text, chunk_file, delimiter, column_sizes_dict, compressor)
+                        line_length, previous_text = save_fixed_width_line(in_file, previous_text, chunk_file, delimiter, column_sizes_dict, None)
 
                         print_message(f"Writing rows chunk {chunk_number} for {delimited_file_path} (start row index = {start_row_index}, end row index = {end_row_index})", verbose, line_index)
 
