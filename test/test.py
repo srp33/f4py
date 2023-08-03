@@ -813,7 +813,9 @@ def run_super_tests(num_parallel, size, extension, compression_type, verbose, tm
     f4.convert_delimited_file(in_file_path, f4_file_path, compression_type=compression_type, num_parallel=num_parallel, verbose=verbose, tmp_dir_path=tmp_dir_path)
     f4.build_indexes(f4_file_path, ["ID", "Categorical1"])
 
-#run_all_small_tests()
+run_all_small_tests()
+import sys
+sys.exit()
 
 #for compression_type in [None, "dictionary", "zstd"]:
 #for compression_type in [None, "zstd"]:

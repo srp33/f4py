@@ -2,8 +2,8 @@
 
 set -o errexit
 
-#run_in_background=no
-run_in_background=yes
+run_in_background=no
+#run_in_background=yes
 
 rm -rf f4
 cp -r ../src/f4 .
