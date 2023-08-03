@@ -271,7 +271,7 @@ def parse_file_metadata(comment_prefix, compression_type, delimited_file_path, d
 
     return num_rows, num_cols, column_names_dict_file_path, column_sizes_dict_file_path, column_types_dict_file_path, column_compression_dicts_dict_file_path
 
-def write_meta_files(tmp_dir_path_colinfo, tmp_dir_path_outputs, ll_dict_file_path, column_index_names_dict_file_path, column_sizes_dict_file_path, column_types_dict_file_path, compression_type, column_compression_dicts_file_path, num_rows):
+def write_meta_files(tmp_dir_path_colinfo, tmp_dir_path_outputs, ll_in_file_path, column_index_names_dict_file_path, column_sizes_dict_file_path, column_types_dict_file_path, compression_type, column_compression_dicts_file_path, num_rows):
     write_str_to_file(f"{tmp_dir_path_outputs}ver", get_current_version_major().encode())
 
     # Calculate and write the column coordinates and max length of these coordinates.
@@ -283,10 +283,10 @@ def write_meta_files(tmp_dir_path_colinfo, tmp_dir_path_outputs, ll_dict_file_pa
     save_string_map(column_coords_dict_file_path, cc_file_path, mccl_file_path)
 
     # Find and write the line length(s).
-    ll_file_path = f"{tmp_dir_path_outputs}ll"
+    ll_out_file_path = f"{tmp_dir_path_outputs}ll"
 
-    with shelve.open(ll_dict_file_path, "r") as ll_dict:
-        if compression_type == "zstd":
+    if compression_type == "zstd":
+        with shelve.open(ll_in_file_path, "r") as ll_dict:
             # Because each line has a different length, we cannot do simple math.
             # We need to know the exact start position of each line.
             tmp_ll_file_path = f"{tmp_dir_path_outputs}ll_tmp"
@@ -294,6 +294,7 @@ def write_meta_files(tmp_dir_path_colinfo, tmp_dir_path_outputs, ll_dict_file_pa
 
             # Find the max length of the row indices and start positions
             with shelve.open(tmp_ll_file_path, "n", writeback=True) as tmp_ll_dict:
+                print_message(f"Saving line lengths to {ll_out_file_path}")
                 for row_index in range(len(ll_dict)):
                     row_index = str(row_index)
                     tmp_ll_dict[row_index] = current_start_position
@@ -301,12 +302,12 @@ def write_meta_files(tmp_dir_path_colinfo, tmp_dir_path_outputs, ll_dict_file_pa
 
                 tmp_ll_dict[str(len(ll_dict))] = current_start_position
 
-            save_string_map(tmp_ll_file_path, ll_file_path, f"{tmp_dir_path_outputs}mlll")
+            save_string_map(tmp_ll_file_path, ll_out_file_path, f"{tmp_dir_path_outputs}mlll")
 
             remove(tmp_ll_file_path)
-        else:
-            # All lines have the same length, so we just use the first one.
-            write_str_to_file(ll_file_path, str(ll_dict["0"]).encode())
+    else:
+        # All lines have the same length, so we just use the first one.
+        copy(ll_in_file_path, ll_out_file_path)
 
     column_names_index_dict_file_path = f"{tmp_dir_path_colinfo}column_names_index"
 
