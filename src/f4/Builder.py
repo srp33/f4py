@@ -463,7 +463,7 @@ def write_rows(delimited_file_path, tmp_dir_path_rowinfo, tmp_dir_path_chunks, d
 
                             main_line_lengths_dict[key] = value
         else:
-            write_str_to_file(line_lengths_file_path, str(line_length_results[0]))
+            write_str_to_file(line_lengths_file_path, str(line_length_results[0]).encode())
 
     return line_lengths_file_path
 
