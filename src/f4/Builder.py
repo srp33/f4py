@@ -28,18 +28,14 @@ def convert_delimited_file(delimited_file_path, f4_file_path, index_columns=[], 
         joblib = __import__('joblib', globals(), locals())
 
     print_message(f"Converting from {delimited_file_path}", verbose)
-    #TODO: Remove tmp_dir_path_indexes
-    tmp_dir_path_colinfo, tmp_dir_path_rowinfo, tmp_dir_path_chunks, tmp_dir_path_outputs, tmp_dir_path_indexes = prepare_tmp_dirs(tmp_dir_path)
+    tmp_dir_path_colinfo, tmp_dir_path_rowinfo, tmp_dir_path_chunks, tmp_dir_path_outputs = prepare_tmp_dirs(tmp_dir_path)
     num_rows, num_cols, column_names_dict_file_path, column_sizes_dict_file_path, column_types_dict_file_path, column_compression_dicts_file_path = parse_file_metadata(comment_prefix, compression_type, delimited_file_path, delimiter, num_parallel, tmp_dir_path_colinfo, verbose)
 
-    # import sys
-    # print("got here33")
-    # sys.exit(1)
     print_message(f"Parsing chunks of {delimited_file_path} and saving to temp directory ({tmp_dir_path_chunks})", verbose)
-    line_lengths_dict_file_path = write_rows(delimited_file_path, tmp_dir_path_rowinfo, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes_dict_file_path, column_compression_dicts_file_path, num_rows, num_cols, num_parallel, verbose)
+    line_lengths_file_path = write_rows(delimited_file_path, tmp_dir_path_rowinfo, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes_dict_file_path, column_compression_dicts_file_path, num_rows, num_parallel, verbose)
 
     print_message(f"Saving meta files for {f4_file_path}", verbose)
-    write_meta_files(tmp_dir_path_colinfo, tmp_dir_path_outputs, line_lengths_dict_file_path, column_names_dict_file_path, column_sizes_dict_file_path, column_types_dict_file_path, compression_type, column_compression_dicts_file_path, num_rows)
+    write_meta_files(tmp_dir_path_colinfo, tmp_dir_path_outputs, line_lengths_file_path, column_names_dict_file_path, column_sizes_dict_file_path, column_types_dict_file_path, compression_type, column_compression_dicts_file_path, num_rows)
 
     print_message(f"Combining all data into a single file for {delimited_file_path}", verbose)
     combine_into_single_file(tmp_dir_path_chunks, tmp_dir_path_outputs, f4_file_path, num_parallel)
@@ -49,7 +45,6 @@ def convert_delimited_file(delimited_file_path, f4_file_path, index_columns=[], 
 
     remove_tmp_dir(tmp_dir_path_chunks)
     remove_tmp_dir(tmp_dir_path_outputs)
-    remove_tmp_dir(tmp_dir_path_indexes)
 
     print_message(f"Done converting {delimited_file_path} to {f4_file_path}", verbose)
 
@@ -438,57 +433,121 @@ def parse_columns_chunk(delimited_file_path, delimiter, comment_prefix, chunk_nu
 
     return num_rows
 
-def write_rows(delimited_file_path, tmp_dir_path_rowinfo, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes_dict_file_path, compression_dicts_dict_file_path, num_rows, num_cols, num_parallel, verbose):
+def write_rows(delimited_file_path, tmp_dir_path_rowinfo, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes_dict_file_path, compression_dicts_dict_file_path, num_rows, num_parallel, verbose):
+    compressor = None
+    if compression_type == "zstd":
+        compressor = ZstdCompressor(level=1)
+
+    line_lengths_file_path = f"{tmp_dir_path_rowinfo}0"
+
     if num_parallel == 1:
-        write_rows_chunk(delimited_file_path, tmp_dir_path_rowinfo, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes_dict_file_path, compression_dicts_dict_file_path, 0, 0, num_rows, num_cols, verbose)
+        line_length_result = write_rows_chunk(delimited_file_path, tmp_dir_path_rowinfo, tmp_dir_path_chunks, delimiter, comment_prefix, compressor, column_sizes_dict_file_path, compression_dicts_dict_file_path, 0, 0, num_rows, verbose)
+
+        if not compressor:
+            write_str_to_file(line_lengths_file_path, str(line_length_result))
     else:
         row_chunk_indices = generate_chunk_ranges(num_rows, ceil(num_rows / num_parallel) + 1)
 
-        joblib.Parallel(n_jobs=num_parallel)(joblib.delayed(write_rows_chunk)(delimited_file_path, tmp_dir_path_rowinfo, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes_dict_file_path, compression_dicts_dict_file_path, i, row_chunk[0], row_chunk[1], num_cols, verbose) for i, row_chunk in enumerate(row_chunk_indices))
+        line_length_results = joblib.Parallel(n_jobs=num_parallel)(joblib.delayed(write_rows_chunk)(delimited_file_path, tmp_dir_path_rowinfo, tmp_dir_path_chunks, delimiter, comment_prefix, compressor, column_sizes_dict_file_path, compression_dicts_dict_file_path, i, row_chunk[0], row_chunk[1], verbose) for i, row_chunk in enumerate(row_chunk_indices))
 
-        with shelve.open(f"{tmp_dir_path_rowinfo}0", "w", writeback=True) as main_line_lengths_dict:
-            for i in range(1, num_parallel):
-                with shelve.open(f"{tmp_dir_path_rowinfo}{i}", "r") as chunk_line_lengths_dict:
-                    for key, value in chunk_line_lengths_dict.items():
-                        main_line_lengths_dict[key] = value
+        if compressor:
+            with shelve.open(line_lengths_file_path, "w", writeback=True) as main_line_lengths_dict:
+                for chunk_number in range(1, num_parallel):
+                    with shelve.open(f"{tmp_dir_path_rowinfo}{chunk_number}", "r") as chunk_line_lengths_dict:
+                        item_count = 0
 
-    return f"{tmp_dir_path_rowinfo}0"
+                        for key, value in chunk_line_lengths_dict.items():
+                            item_count += 1
+                            print_message(f"Merging line length information {delimited_file_path} - chunk {chunk_number}", verbose, item_count)
 
-def write_rows_chunk(delimited_file_path, tmp_dir_path_rowinfo, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes_dict_file_path, compression_dicts_dict_file_path, chunk_number, start_row_index, end_row_index, num_cols, verbose):
-    line_lengths_dict_file_path = f"{tmp_dir_path_rowinfo}{chunk_number}"
+                            main_line_lengths_dict[key] = value
+        else:
+            write_str_to_file(line_lengths_file_path, str(line_length_results[0]))
 
-    with shelve.open(line_lengths_dict_file_path, "n", writeback=True) as line_lengths_dict:
-        with shelve.open(column_sizes_dict_file_path, "r") as column_sizes_dict:
-            # Write the data to output file. Ignore the header line.
-            with get_delimited_file_handle(delimited_file_path) as in_file:
-                skip_comments(in_file, comment_prefix)
-                skip_line(in_file) # Header line
-                skip_lines(in_file, start_row_index)
+    return line_lengths_file_path
 
-                compressor = None
-                if compression_type == "zstd":
-                    compressor = ZstdCompressor(level=1)
+def write_rows_chunk(delimited_file_path, tmp_dir_path_rowinfo, tmp_dir_path_chunks, delimiter, comment_prefix, compressor, column_sizes_dict_file_path, compression_dicts_dict_file_path, chunk_number, start_row_index, end_row_index, verbose):
+    with shelve.open(column_sizes_dict_file_path, "r") as column_sizes_dict:
+        with get_delimited_file_handle(delimited_file_path) as in_file:
+            skip_comments(in_file, comment_prefix)
+            skip_line(in_file)  # Header line
+            skip_lines(in_file, start_row_index)
 
-                with open(f"{tmp_dir_path_chunks}{chunk_number}", 'wb') as chunk_file:
-                    previous_text = b""
+            with open(f"{tmp_dir_path_chunks}{chunk_number}", 'wb') as chunk_file:
+                previous_text = b""
 
+                if compressor:
+                    line_lengths_dict_file_path = f"{tmp_dir_path_rowinfo}{chunk_number}"
+
+                    with shelve.open(line_lengths_dict_file_path, "n", writeback=True) as line_lengths_dict:
+                        for line_index in range(start_row_index, end_row_index):
+                            line_length, previous_text = save_fixed_width_line(in_file, previous_text, chunk_file, delimiter, column_sizes_dict, compressor)
+
+                            # elif compression_type == "dictionary":
+                                # TODO: Implement this logic
+                                # raise Exception("Not yet supported")
+                                # for i, size in enumerate(column_sizes):
+                                #     if compression_dicts[i]["compression_type"] == b"c":
+                                #         compressed_value = compression_dicts[i]["map"][line_items[i]]
+                                #     else:
+                                #         compressed_value = compress_using_2_grams(line_items[i], compression_dicts[i]["map"])
+                                #
+                                #     out_items.append(format_string_as_fixed_width(compressed_value, size))
+
+                            line_lengths_dict[str(line_index)] = line_length
+
+                            print_message(f"Writing rows chunk {chunk_number} for {delimited_file_path} (start row index = {start_row_index}, end row index = {end_row_index})", verbose, line_index)
+
+                        print_message(f"Done writing rows chunks {chunk_number} for {delimited_file_path} (start row index = {start_row_index}, end row index = {end_row_index})", verbose)
+
+                        return line_lengths_dict_file_path
+                else:
                     for line_index in range(start_row_index, end_row_index):
                         line_length, previous_text = save_fixed_width_line(in_file, previous_text, chunk_file, delimiter, column_sizes_dict, compressor)
 
-                        # elif compression_type == "dictionary":
-                            # TODO: Implement this logic
-                            # raise Exception("Not yet supported")
-                            # for i, size in enumerate(column_sizes):
-                            #     if compression_dicts[i]["compression_type"] == b"c":
-                            #         compressed_value = compression_dicts[i]["map"][line_items[i]]
-                            #     else:
-                            #         compressed_value = compress_using_2_grams(line_items[i], compression_dicts[i]["map"])
-                            #
-                            #     out_items.append(format_string_as_fixed_width(compressed_value, size))
-
-                        line_lengths_dict[str(line_index)] = line_length
-
                         print_message(f"Writing rows chunk {chunk_number} for {delimited_file_path} (start row index = {start_row_index}, end row index = {end_row_index})", verbose, line_index)
+
+                    print_message(f"Done writing rows chunks {chunk_number} for {delimited_file_path} (start row index = {start_row_index}, end row index = {end_row_index})", verbose)
+
+                    return line_length
+
+# def write_rows_chunk(delimited_file_path, tmp_dir_path_rowinfo, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes_dict_file_path, compression_dicts_dict_file_path, chunk_number, start_row_index, end_row_index, num_cols, verbose):
+#     line_lengths_dict_file_path = f"{tmp_dir_path_rowinfo}{chunk_number}"
+#
+#     with shelve.open(line_lengths_dict_file_path, "n", writeback=True) as line_lengths_dict:
+#         with shelve.open(column_sizes_dict_file_path, "r") as column_sizes_dict:
+#             # Write the data to output file. Ignore the header line.
+#             with get_delimited_file_handle(delimited_file_path) as in_file:
+#                 skip_comments(in_file, comment_prefix)
+#                 skip_line(in_file) # Header line
+#                 skip_lines(in_file, start_row_index)
+#
+#                 compressor = None
+#                 if compression_type == "zstd":
+#                     compressor = ZstdCompressor(level=1)
+#
+#                 with open(f"{tmp_dir_path_chunks}{chunk_number}", 'wb') as chunk_file:
+#                     previous_text = b""
+#
+#                     for line_index in range(start_row_index, end_row_index):
+#                         line_length, previous_text = save_fixed_width_line(in_file, previous_text, chunk_file, delimiter, column_sizes_dict, compressor)
+#
+#                         # elif compression_type == "dictionary":
+#                             # TODO: Implement this logic
+#                             # raise Exception("Not yet supported")
+#                             # for i, size in enumerate(column_sizes):
+#                             #     if compression_dicts[i]["compression_type"] == b"c":
+#                             #         compressed_value = compression_dicts[i]["map"][line_items[i]]
+#                             #     else:
+#                             #         compressed_value = compress_using_2_grams(line_items[i], compression_dicts[i]["map"])
+#                             #
+#                             #     out_items.append(format_string_as_fixed_width(compressed_value, size))
+#
+#                         line_lengths_dict[str(line_index)] = line_length
+#
+#                         print_message(f"Writing rows chunk {chunk_number} for {delimited_file_path} (start row index = {start_row_index}, end row index = {end_row_index})", verbose, line_index)
+#
+#                     print_message(f"Done writing rows chunks {chunk_number} for {delimited_file_path} (start row index = {start_row_index}, end row index = {end_row_index})", verbose)
 
 def skip_comments(in_file, comment_prefix):
     next_text = in_file.read(len(comment_prefix))
@@ -981,15 +1040,13 @@ def prepare_tmp_dirs(tmp_dir_path):
     tmp_dir_path_rowinfo = f"{tmp_dir_path}rowinfo/"
     tmp_dir_path_chunks = f"{tmp_dir_path}chunks/"
     tmp_dir_path_outputs = f"{tmp_dir_path}outputs/"
-    tmp_dir_path_indexes = f"{tmp_dir_path}indexes/"
 
     makedirs(tmp_dir_path_colinfo, exist_ok=True)
     makedirs(tmp_dir_path_rowinfo, exist_ok=True)
     makedirs(tmp_dir_path_chunks, exist_ok=True)
     makedirs(tmp_dir_path_outputs, exist_ok=True)
-    makedirs(tmp_dir_path_indexes, exist_ok=True)
 
-    return tmp_dir_path_colinfo, tmp_dir_path_rowinfo, tmp_dir_path_chunks, tmp_dir_path_outputs, tmp_dir_path_indexes
+    return tmp_dir_path_colinfo, tmp_dir_path_rowinfo, tmp_dir_path_chunks, tmp_dir_path_outputs
 
 def transpose_lines_to_temp(data_file_path, tmp_dir_path, start_row_index, end_row_index, column_names, column_coords, bigram_size_dict, verbose):
     with initialize(data_file_path) as file_data:
