@@ -445,7 +445,7 @@ def write_rows(delimited_file_path, tmp_dir_path_rowinfo, tmp_dir_path_chunks, d
         line_length_result = write_rows_chunk(delimited_file_path, tmp_dir_path_rowinfo, tmp_dir_path_chunks, delimiter, comment_prefix, compressor, column_sizes_dict_file_path, compression_dicts_dict_file_path, 0, 0, num_rows, verbose)
 
         if not compressor:
-            write_str_to_file(line_lengths_file_path, str(line_length_result))
+            write_str_to_file(line_lengths_file_path, str(line_length_result).encode())
     else:
         row_chunk_indices = generate_chunk_ranges(num_rows, ceil(num_rows / num_parallel) + 1)
 
