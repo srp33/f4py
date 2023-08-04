@@ -39,18 +39,18 @@ def write_str_to_file(file_path, the_string):
     with open(file_path, 'wb') as the_file:
         the_file.write(the_string)
 
-def save_column_coords(dict_file_path, out_file_path):
+def save_column_coords(column_sizes_dict_file_path, column_coords_dict_file_path):
     # Calculate the position where each column starts.
-    with shelve.open(dict_file_path, "r") as the_dict:
-        with shelve.open(out_file_path, "n") as column_coords_dict:
+    with shelve.open(column_sizes_dict_file_path, "r") as column_sizes_dict:
+        with shelve.open(column_coords_dict_file_path, "n") as column_coords_dict:
             cumulative_position = 0
 
-            for column_index in range(len(the_dict)):
+            for column_index in range(len(column_sizes_dict)):
                 column_index = str(column_index)
                 column_coords_dict[column_index] = cumulative_position
-                cumulative_position += the_dict[column_index]
+                cumulative_position += column_sizes_dict[column_index]
 
-            column_coords_dict[str(len(the_dict))] = cumulative_position
+            column_coords_dict[str(len(column_sizes_dict))] = cumulative_position
 
     # column_start_coords = []
     # cumulative_position = 0

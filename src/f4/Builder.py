@@ -31,6 +31,22 @@ def convert_delimited_file(delimited_file_path, f4_file_path, index_columns=[], 
     tmp_dir_path_colinfo, tmp_dir_path_rowinfo, tmp_dir_path_chunks, tmp_dir_path_outputs = prepare_tmp_dirs(tmp_dir_path)
     num_rows, num_cols, column_names_dict_file_path, column_sizes_dict_file_path, column_types_dict_file_path, column_compression_dicts_file_path = parse_file_metadata(comment_prefix, compression_type, delimited_file_path, delimiter, num_parallel, tmp_dir_path_colinfo, verbose)
 
+    with shelve.open(column_sizes_dict_file_path, "r") as column_sizes_dict:
+        print(len(column_sizes_dict))
+        for key in column_sizes_dict.keys():
+            print(key)
+        # with shelve.open("/tmp/abc", "n") as column_coords_dict:
+        #     cumulative_position = 0
+        #
+        #     for column_index in range(len(column_sizes_dict)):
+        #         column_index = str(column_index)
+        #         column_coords_dict[column_index] = cumulative_position
+        #         cumulative_position += column_sizes_dict[column_index]
+        #
+        #     column_coords_dict[str(len(column_sizes_dict))] = cumulative_position
+    import sys
+    sys.exit(1)
+
     print_message(f"Parsing chunks of {delimited_file_path} and saving to temp directory ({tmp_dir_path_chunks})", verbose)
     line_lengths_file_path = write_rows(delimited_file_path, tmp_dir_path_rowinfo, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes_dict_file_path, column_compression_dicts_file_path, num_rows, num_parallel, verbose)
 
@@ -500,7 +516,7 @@ def write_rows_chunk(delimited_file_path, tmp_dir_path_rowinfo, tmp_dir_path_chu
 
                             print_message(f"Writing rows chunk {chunk_number} for {delimited_file_path} (start row index = {start_row_index}, end row index = {end_row_index})", verbose, line_index)
 
-                        print_message(f"Done writing rows chunks {chunk_number} for {delimited_file_path} (start row index = {start_row_index}, end row index = {end_row_index})", verbose)
+                        print_message(f"Done writing rows chunk {chunk_number} for {delimited_file_path} (start row index = {start_row_index}, end row index = {end_row_index})", verbose)
 
                         return line_lengths_dict_file_path
                 else:
@@ -509,7 +525,7 @@ def write_rows_chunk(delimited_file_path, tmp_dir_path_rowinfo, tmp_dir_path_chu
 
                         print_message(f"Writing rows chunk {chunk_number} for {delimited_file_path} (start row index = {start_row_index}, end row index = {end_row_index})", verbose, line_index)
 
-                    print_message(f"Done writing rows chunks {chunk_number} for {delimited_file_path} (start row index = {start_row_index}, end row index = {end_row_index})", verbose)
+                    print_message(f"Done writing rows chunk {chunk_number} for {delimited_file_path} (start row index = {start_row_index}, end row index = {end_row_index})", verbose)
 
                     return line_length
 
