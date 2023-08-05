@@ -32,9 +32,8 @@ def convert_delimited_file(delimited_file_path, f4_file_path, index_columns=[], 
     num_rows, num_cols, column_names_dict_file_path, column_sizes_dict_file_path, column_types_dict_file_path, column_compression_dicts_file_path = parse_file_metadata(comment_prefix, compression_type, delimited_file_path, delimiter, num_parallel, tmp_dir_path_colinfo, verbose)
 
     with shelve.open(column_sizes_dict_file_path, "r") as column_sizes_dict:
-        print(len(column_sizes_dict))
-        for key in column_sizes_dict.keys():
-            print(key)
+        for key, value in sorted(column_sizes_dict.items()):
+            print(key, value)
         # with shelve.open("/tmp/abc", "n") as column_coords_dict:
         #     cumulative_position = 0
         #
@@ -44,8 +43,6 @@ def convert_delimited_file(delimited_file_path, f4_file_path, index_columns=[], 
         #         cumulative_position += column_sizes_dict[column_index]
         #
         #     column_coords_dict[str(len(column_sizes_dict))] = cumulative_position
-    import sys
-    sys.exit(1)
 
     print_message(f"Parsing chunks of {delimited_file_path} and saving to temp directory ({tmp_dir_path_chunks})", verbose)
     line_lengths_file_path = write_rows(delimited_file_path, tmp_dir_path_rowinfo, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes_dict_file_path, column_compression_dicts_file_path, num_rows, num_parallel, verbose)
