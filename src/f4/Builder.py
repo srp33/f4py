@@ -247,9 +247,9 @@ def parse_file_metadata(comment_prefix, compression_type, delimited_file_path, d
 
         print_message("This is what we have in the merged dict before merging:")
         with shelve.open(column_sizes_dict_file_path, "r") as column_sizes_dict:
-            print(column_sizes_dict_file_path)
+            print_message(column_sizes_dict_file_path, True)
             for key, value in sorted(column_sizes_dict.items()):
-                print(key, value)
+                print_message(f"{key}, {value}", True)
 
         # Summarize the column sizes and types across the chunks into a single shelve file.
         # We'll add everything to the shelve file for the 0th chunk.
@@ -259,10 +259,11 @@ def parse_file_metadata(comment_prefix, compression_type, delimited_file_path, d
                 for i_parallel in range(1, num_parallel):
                     # This file might not exist if the number of threads > # of columns.
                     file_path = f"{tmp_dir_path}{i_parallel}_column_sizes"
+                    print_message(f"{file_path} - {path.exists(file_path)}", True)
                     if path.exists(file_path):
                         with shelve.open(file_path, "r") as chunk_column_sizes_dict:
                             for key, value in chunk_column_sizes_dict.items():
-                                print_message(f"{file_path} - {key} - {value}")
+                                print_message(f"{file_path} - {key} - {value}", True)
                                 column_sizes_dict[key] = value
 
                     # This file might not exist if the number of threads > # of columns.
@@ -274,11 +275,11 @@ def parse_file_metadata(comment_prefix, compression_type, delimited_file_path, d
 
                     #TODO: Do the same for compression dicts
 
-        print_message("This is what we have in the merged dict after merging:")
+        print_message("This is what we have in the merged dict after merging:", True)
         with shelve.open(column_sizes_dict_file_path, "r") as column_sizes_dict:
-            print(column_sizes_dict_file_path)
+            print_message(column_sizes_dict_file_path, True)
             for key, value in sorted(column_sizes_dict.items()):
-                print(key, value)
+                print_message(f"{key}, {value}", True)
 
     print_message("got here def", True)
     import sys
