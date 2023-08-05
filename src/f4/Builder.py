@@ -31,19 +31,6 @@ def convert_delimited_file(delimited_file_path, f4_file_path, index_columns=[], 
     tmp_dir_path_colinfo, tmp_dir_path_rowinfo, tmp_dir_path_chunks, tmp_dir_path_outputs = prepare_tmp_dirs(tmp_dir_path)
     num_rows, num_cols, column_names_dict_file_path, column_sizes_dict_file_path, column_types_dict_file_path, column_compression_dicts_file_path = parse_file_metadata(comment_prefix, compression_type, delimited_file_path, delimiter, num_parallel, tmp_dir_path_colinfo, verbose)
 
-    with shelve.open(column_sizes_dict_file_path, "r") as column_sizes_dict:
-        for key, value in sorted(column_sizes_dict.items()):
-            print(key, value)
-        # with shelve.open("/tmp/abc", "n") as column_coords_dict:
-        #     cumulative_position = 0
-        #
-        #     for column_index in range(len(column_sizes_dict)):
-        #         column_index = str(column_index)
-        #         column_coords_dict[column_index] = cumulative_position
-        #         cumulative_position += column_sizes_dict[column_index]
-        #
-        #     column_coords_dict[str(len(column_sizes_dict))] = cumulative_position
-
     print_message(f"Parsing chunks of {delimited_file_path} and saving to temp directory ({tmp_dir_path_chunks})", verbose)
     line_lengths_file_path = write_rows(delimited_file_path, tmp_dir_path_rowinfo, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes_dict_file_path, column_compression_dicts_file_path, num_rows, num_parallel, verbose)
 
@@ -252,6 +239,10 @@ def parse_file_metadata(comment_prefix, compression_type, delimited_file_path, d
     else:
         all_num_rows = joblib.Parallel(n_jobs=num_parallel)(joblib.delayed(parse_columns_chunk)(delimited_file_path, delimiter, comment_prefix, chunk_number, chunk_indices[0], chunk_indices[1], compression_type, tmp_dir_path, verbose) for chunk_number, chunk_indices in enumerate(column_chunk_indices))
 
+        print_message("got here abc", True)
+        import sys
+        sys.exit(1)
+
         # When each chunk was processed, we went through all rows, so we can get this number from just the first chunk.
         num_rows = all_num_rows[0]
 
@@ -279,6 +270,7 @@ def parse_file_metadata(comment_prefix, compression_type, delimited_file_path, d
                                 column_types_dict[key] = value
 
                     #TODO: Do the same for compression dicts
+
     if num_rows == 0:
         raise Exception(f"A header row but no data rows were detected in {delimited_file_path}")
 
@@ -346,21 +338,27 @@ def write_meta_files(tmp_dir_path_colinfo, tmp_dir_path_outputs, ll_in_file_path
 
 def parse_columns_chunk(delimited_file_path, delimiter, comment_prefix, chunk_number, start_column_index, end_column_index, compression_type, tmp_dir_path, verbose):
     tmp_file_prefix = f"{tmp_dir_path}{chunk_number}"
+    column_sizes_dict_file_path = f"{tmp_file_prefix}_column_sizes"
 
     # Initialize the column sizes and types.
-    with shelve.open(f"{tmp_file_prefix}_column_sizes", "n", writeback=True) as column_sizes_dict:
+    with shelve.open(column_sizes_dict_file_path, "n", writeback=True) as column_sizes_dict:
         with shelve.open(f"{tmp_file_prefix}_column_types_values", "n", writeback=True) as column_types_values_dict:
             for column_index in range(start_column_index, end_column_index):
                 column_index = str(column_index)
                 column_sizes_dict[column_index] = 0
                 column_types_values_dict[column_index] = {b"i": 0, b"f": 0, b"s": 0}
 
+    with shelve.open(column_sizes_dict_file_path, "r") as column_sizes_dict:
+        print(column_sizes_dict_file_path)
+        for key, value in sorted(column_sizes_dict.items()):
+            print(key, value)
+
     # We will find the max size for each column and count how many there are of each type.
     with get_delimited_file_handle(delimited_file_path) as in_file:
         skip_comments(in_file, comment_prefix)
         skip_line(in_file)
 
-        with shelve.open(f"{tmp_file_prefix}_column_sizes", "w", writeback=True) as column_sizes_dict:
+        with shelve.open(column_sizes_dict_file_path, "w", writeback=True) as column_sizes_dict:
             with shelve.open(f"{tmp_file_prefix}_column_types_values", "w", writeback=True) as column_types_values_dict:
                 with shelve.open(f"{tmp_file_prefix}_column_types", "n", writeback=True) as column_types_dict:
                     # with shelve.open(f"{tmp_file_prefix}_column_compression_dicts", "n", writeback=True) as column_compression_dicts:
