@@ -373,13 +373,12 @@ def parse_columns_chunk(delimited_file_path, delimiter, comment_prefix, chunk_nu
                             if this_length > current_max:
                                 column_sizes_dict[column_index] = this_length
 
-#TODO: uncomment
-                        #     inferred_type = infer_type(value)
-                        #     column_types_values_dict[column_index][inferred_type] += 1
-                        #
-                        # for column_index in range(start_column_index, end_column_index):
-                        #     column_index = str(column_index)
-                        #     column_types_dict[column_index] = infer_type_for_column(column_types_values_dict[column_index])
+                            inferred_type = infer_type(value)
+                            column_types_values_dict[column_index][inferred_type] += 1
+
+                        for column_index in range(start_column_index, end_column_index):
+                            column_index = str(column_index)
+                            column_types_dict[column_index] = infer_type_for_column(column_types_values_dict[column_index])
 
             remove(f"{tmp_file_prefix}_column_types_values")
 
