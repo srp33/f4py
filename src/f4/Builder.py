@@ -348,12 +348,11 @@ def parse_columns_chunk(delimited_file_path, delimiter, comment_prefix, chunk_nu
                 column_sizes_dict[column_index] = 0
                 column_types_values_dict[column_index] = {b"i": 0, b"f": 0, b"s": 0}
 
-    print(column_sizes_dict_file_path)
-    return
     with shelve.open(column_sizes_dict_file_path, "r") as column_sizes_dict:
         print(column_sizes_dict_file_path)
         for key, value in sorted(column_sizes_dict.items()):
             print(key, value)
+    return
 
     # We will find the max size for each column and count how many there are of each type.
     with get_delimited_file_handle(delimited_file_path) as in_file:
