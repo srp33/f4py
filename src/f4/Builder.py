@@ -239,15 +239,17 @@ def parse_file_metadata(comment_prefix, compression_type, delimited_file_path, d
     else:
         all_num_rows = joblib.Parallel(n_jobs=num_parallel)(joblib.delayed(parse_columns_chunk)(delimited_file_path, delimiter, comment_prefix, chunk_number, chunk_indices[0], chunk_indices[1], compression_type, tmp_dir_path, verbose) for chunk_number, chunk_indices in enumerate(column_chunk_indices))
 
-        print_message("got here abc", True)
-        import sys
-        sys.exit(1)
-
         # When each chunk was processed, we went through all rows, so we can get this number from just the first chunk.
         num_rows = all_num_rows[0]
 
         #TODO
         # num_rows = 1000000
+
+        print_message("This is what we have in the merged dict before merging:")
+        with shelve.open(column_sizes_dict_file_path, "r") as column_sizes_dict:
+            print(column_sizes_dict_file_path)
+            for key, value in sorted(column_sizes_dict.items()):
+                print(key, value)
 
         # Summarize the column sizes and types across the chunks into a single shelve file.
         # We'll add everything to the shelve file for the 0th chunk.
@@ -260,6 +262,7 @@ def parse_file_metadata(comment_prefix, compression_type, delimited_file_path, d
                     if path.exists(file_path):
                         with shelve.open(file_path, "r") as chunk_column_sizes_dict:
                             for key, value in chunk_column_sizes_dict.items():
+                                print_message(f"{file_path} - {key} - {value}")
                                 column_sizes_dict[key] = value
 
                     # This file might not exist if the number of threads > # of columns.
@@ -270,6 +273,16 @@ def parse_file_metadata(comment_prefix, compression_type, delimited_file_path, d
                                 column_types_dict[key] = value
 
                     #TODO: Do the same for compression dicts
+
+        print_message("This is what we have in the merged dict after merging:")
+        with shelve.open(column_sizes_dict_file_path, "r") as column_sizes_dict:
+            print(column_sizes_dict_file_path)
+            for key, value in sorted(column_sizes_dict.items()):
+                print(key, value)
+
+    print_message("got here def", True)
+    import sys
+    sys.exit(1)
 
     if num_rows == 0:
         raise Exception(f"A header row but no data rows were detected in {delimited_file_path}")
@@ -437,12 +450,6 @@ def parse_columns_chunk(delimited_file_path, delimiter, comment_prefix, chunk_nu
                             #                 column_compression_dicts[i]["map"][bigram] = j.to_bytes(length = num_bytes, byteorder = "big")
                             #
                             #             column_sizes_dict[i] = column_max_length_dict[i] * num_bytes
-
-    with shelve.open(column_sizes_dict_file_path, "r") as column_sizes_dict:
-        print(column_sizes_dict_file_path)
-        for key, value in sorted(column_sizes_dict.items()):
-            print(key, value)
-    return
 
     return num_rows
 
