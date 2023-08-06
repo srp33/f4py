@@ -228,10 +228,6 @@ def parse_file_metadata(comment_prefix, compression_type, delimited_file_path, d
 
     # Separate the column indices into chunks
     column_chunk_indices = list(generate_chunk_ranges(num_cols, num_cols_per_chunk))
-    for i, value in enumerate(column_chunk_indices):
-        print_message(f"Chunk {i}, length {len(value)}", True)
-    import sys
-    sys.exit()
 
     column_sizes_dict_file_path = f"{tmp_dir_path}0_column_sizes"
     column_types_dict_file_path = f"{tmp_dir_path}0_column_types"
@@ -241,6 +237,8 @@ def parse_file_metadata(comment_prefix, compression_type, delimited_file_path, d
     if num_parallel == 1:
         num_rows = parse_columns_chunk(delimited_file_path, delimiter, comment_prefix, 0, column_chunk_indices[0][0], column_chunk_indices[0][1], compression_type, tmp_dir_path, verbose)
     else:
+        # TODO: CHECK everywhere for logic where number of items to parallelize
+        #       is smaller than num_parallel.
         all_num_rows = joblib.Parallel(n_jobs=num_parallel)(joblib.delayed(parse_columns_chunk)(delimited_file_path, delimiter, comment_prefix, chunk_number, chunk_indices[0], chunk_indices[1], compression_type, tmp_dir_path, verbose) for chunk_number, chunk_indices in enumerate(column_chunk_indices))
 
         # When each chunk was processed, we went through all rows, so we can get this number from just the first chunk.
@@ -260,7 +258,7 @@ def parse_file_metadata(comment_prefix, compression_type, delimited_file_path, d
         print_message(f"Summarizing the column sizes and types across the chunks for {delimited_file_path}", verbose)
         with shelve.open(column_sizes_dict_file_path, "w", writeback=True) as column_sizes_dict:
             with shelve.open(column_types_dict_file_path, "w", writeback=True) as column_types_dict:
-                for i_parallel in range(1, num_parallel):
+                for i_parallel in range(1, len(column_chunk_indices)):
                     # This file might not exist if the number of threads > # of columns.
                     file_path = f"{tmp_dir_path}{i_parallel}_column_sizes"
                     # print_message(f"{file_path} - {path.exists(file_path)}", True)
