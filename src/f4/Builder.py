@@ -228,6 +228,10 @@ def parse_file_metadata(comment_prefix, compression_type, delimited_file_path, d
 
     # Separate the column indices into chunks
     column_chunk_indices = list(generate_chunk_ranges(num_cols, num_cols_per_chunk))
+    for i, value in enumerate(column_chunk_indices):
+        print_message(f"Chunk {i}, length {len(value)}", True)
+    import sys
+    sys.exit()
 
     column_sizes_dict_file_path = f"{tmp_dir_path}0_column_sizes"
     column_types_dict_file_path = f"{tmp_dir_path}0_column_types"
@@ -245,11 +249,11 @@ def parse_file_metadata(comment_prefix, compression_type, delimited_file_path, d
         #TODO
         # num_rows = 1000000
 
-        print_message("This is what we have in the merged dict before merging:", True)
-        with shelve.open(column_sizes_dict_file_path, "r") as column_sizes_dict:
-            print_message(column_sizes_dict_file_path, True)
-            for key, value in sorted(column_sizes_dict.items()):
-                print_message(f"{key}, {value}", True)
+        # print_message("This is what we have in the merged dict before merging:", True)
+        # with shelve.open(column_sizes_dict_file_path, "r") as column_sizes_dict:
+        #     print_message(column_sizes_dict_file_path, True)
+        #     for key, value in sorted(column_sizes_dict.items()):
+        #         print_message(f"{key}, {value}", True)
 
         # Summarize the column sizes and types across the chunks into a single shelve file.
         # We'll add everything to the shelve file for the 0th chunk.
@@ -259,11 +263,11 @@ def parse_file_metadata(comment_prefix, compression_type, delimited_file_path, d
                 for i_parallel in range(1, num_parallel):
                     # This file might not exist if the number of threads > # of columns.
                     file_path = f"{tmp_dir_path}{i_parallel}_column_sizes"
-                    print_message(f"{file_path} - {path.exists(file_path)}", True)
+                    # print_message(f"{file_path} - {path.exists(file_path)}", True)
                     if path.exists(file_path):
                         with shelve.open(file_path, "r") as chunk_column_sizes_dict:
                             for key, value in chunk_column_sizes_dict.items():
-                                print_message(f"{file_path} - {key} - {value}", True)
+                                # print_message(f"{file_path} - {key} - {value}", True)
                                 column_sizes_dict[key] = value
 
                     # This file might not exist if the number of threads > # of columns.
