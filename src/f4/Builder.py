@@ -245,7 +245,7 @@ def parse_file_metadata(comment_prefix, compression_type, delimited_file_path, d
         #TODO
         # num_rows = 1000000
 
-        print_message("This is what we have in the merged dict before merging:")
+        print_message("This is what we have in the merged dict before merging:", True)
         with shelve.open(column_sizes_dict_file_path, "r") as column_sizes_dict:
             print_message(column_sizes_dict_file_path, True)
             for key, value in sorted(column_sizes_dict.items()):
