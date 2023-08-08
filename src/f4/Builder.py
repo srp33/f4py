@@ -247,12 +247,6 @@ def parse_file_metadata(comment_prefix, compression_type, delimited_file_path, d
         #TODO
         # num_rows = 1000000
 
-        # print_message("This is what we have in the merged dict before merging:", True)
-        # with shelve.open(column_sizes_dict_file_path, "r") as column_sizes_dict:
-        #     print_message(column_sizes_dict_file_path, True)
-        #     for key, value in sorted(column_sizes_dict.items()):
-        #         print_message(f"{key}, {value}", True)
-
         # Summarize the column sizes and types across the chunks into a single shelve file.
         # We'll add everything to the shelve file for the 0th chunk.
         print_message(f"Summarizing the column sizes and types across the chunks for {delimited_file_path}", verbose)
@@ -261,11 +255,10 @@ def parse_file_metadata(comment_prefix, compression_type, delimited_file_path, d
                 for i_parallel in range(1, len(column_chunk_indices)):
                     # This file might not exist if the number of threads > # of columns.
                     file_path = f"{tmp_dir_path}{i_parallel}_column_sizes"
-                    # print_message(f"{file_path} - {path.exists(file_path)}", True)
+
                     if path.exists(file_path):
                         with shelve.open(file_path, "r") as chunk_column_sizes_dict:
                             for key, value in chunk_column_sizes_dict.items():
-                                # print_message(f"{file_path} - {key} - {value}", True)
                                 column_sizes_dict[key] = value
 
                     # This file might not exist if the number of threads > # of columns.
@@ -276,16 +269,6 @@ def parse_file_metadata(comment_prefix, compression_type, delimited_file_path, d
                                 column_types_dict[key] = value
 
                     #TODO: Do the same for compression dicts
-
-        print_message("This is what we have in the merged dict after merging:", True)
-        with shelve.open(column_sizes_dict_file_path, "r") as column_sizes_dict:
-            print_message(column_sizes_dict_file_path, True)
-            for key, value in sorted(column_sizes_dict.items()):
-                print_message(f"{key}, {value}", True)
-
-    print_message("got here def", True)
-    import sys
-    sys.exit(1)
 
     if num_rows == 0:
         raise Exception(f"A header row but no data rows were detected in {delimited_file_path}")
@@ -472,14 +455,15 @@ def write_rows(delimited_file_path, tmp_dir_path_rowinfo, tmp_dir_path_chunks, d
         if compression_type:
             with shelve.open(line_lengths_file_path, "w", writeback=True) as main_line_lengths_dict:
                 for chunk_number in range(1, num_parallel):
-                    with shelve.open(f"{tmp_dir_path_rowinfo}{chunk_number}", "r") as chunk_line_lengths_dict:
-                        item_count = 0
+                    if path.exists(f"{tmp_dir_path_rowinfo}{chunk_number}"):
+                        with shelve.open(f"{tmp_dir_path_rowinfo}{chunk_number}", "r") as chunk_line_lengths_dict:
+                            item_count = 0
 
-                        for key, value in chunk_line_lengths_dict.items():
-                            item_count += 1
-                            print_message(f"Merging line length information {delimited_file_path} - chunk {chunk_number}", verbose, item_count)
+                            for key, value in chunk_line_lengths_dict.items():
+                                item_count += 1
+                                print_message(f"Merging line length information {delimited_file_path} - chunk {chunk_number}", verbose, item_count)
 
-                            main_line_lengths_dict[key] = value
+                                main_line_lengths_dict[key] = value
         else:
             write_str_to_file(line_lengths_file_path, str(line_length_results[0]).encode())
 
