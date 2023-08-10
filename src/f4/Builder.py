@@ -28,7 +28,7 @@ def convert_delimited_file(delimited_file_path, f4_file_path, index_columns=[], 
         joblib = __import__('joblib', globals(), locals())
 
     print_message(f"Converting from {delimited_file_path}", verbose)
-    tmp_dir_path_colinfo, tmp_dir_path_rowinfo, tmp_dir_path_chunks, tmp_dir_path_outputs = prepare_tmp_dirs(tmp_dir_path)
+    tmp_dir_path_colinfo, tmp_dir_path_rowinfo, tmp_dir_path_chunks, tmp_dir_path_indexes, tmp_dir_path_outputs = prepare_tmp_dirs(tmp_dir_path)
     num_rows, num_cols, column_names_dict_file_path, column_sizes_dict_file_path, column_types_dict_file_path, column_compression_dicts_file_path = parse_file_metadata(comment_prefix, compression_type, delimited_file_path, delimiter, num_parallel, tmp_dir_path_colinfo, verbose)
 
     print_message(f"Parsing chunks of {delimited_file_path} and saving to temp directory ({tmp_dir_path_chunks})", verbose)
@@ -37,12 +37,14 @@ def convert_delimited_file(delimited_file_path, f4_file_path, index_columns=[], 
     print_message(f"Saving meta files for {f4_file_path}", verbose)
     write_meta_files(tmp_dir_path_colinfo, tmp_dir_path_outputs, line_lengths_file_path, column_names_dict_file_path, column_sizes_dict_file_path, column_types_dict_file_path, compression_type, column_compression_dicts_file_path, num_rows)
 
+    if index_columns:
+        build_indexes(f4_file_path, index_columns, tmp_dir_path_indexes, verbose)
+
     print_message(f"Combining all data into a single file for {delimited_file_path}", verbose)
     combine_into_single_file(tmp_dir_path_chunks, tmp_dir_path_outputs, f4_file_path, num_parallel)
 
-    if index_columns:
-        build_indexes(f4_file_path, index_columns, verbose)
-
+    remove_tmp_dir(tmp_dir_path_colinfo)
+    remove_tmp_dir(tmp_dir_path_rowinfo)
     remove_tmp_dir(tmp_dir_path_chunks)
     remove_tmp_dir(tmp_dir_path_outputs)
 
@@ -179,27 +181,21 @@ def inner_join(f4_left_src_file_path, f4_right_src_file_path, join_column, f4_de
 
             remove(tmp_tsv_file_path)
 
-def build_indexes(f4_file_path, index_columns, verbose=False):
-    # TODO: Add logic to verify that index_columns are valid.
-    index_file_path = get_index_file_path(f4_file_path)
-
-    if path.exists(index_file_path):
-        remove(index_file_path)
-
+def build_indexes(f4_file_path, index_columns, tmp_dir_path_indexes, verbose=False):
     if isinstance(index_columns, str):
-        build_one_column_index(f4_file_path, index_file_path, index_columns, verbose)
+        build_one_column_index(f4_file_path, index_columns, tmp_dir_path_indexes, verbose)
     elif isinstance(index_columns, list):
         for index_column in index_columns:
             if isinstance(index_column, list):
                 if len(index_column) != 2:
                     raise Exception("If you pass a list as an index_column, it must have exactly two elements.")
 
-                build_two_column_index(f4_file_path, index_file_path, index_column, verbose)
+                build_two_column_index(f4_file_path, index_column, tmp_dir_path_indexes, verbose)
             else:
                 if not isinstance(index_column, str):
                     raise Exception("When specifying an index column name, it must be a string.")
 
-                build_one_column_index(f4_file_path, index_file_path, index_column, verbose)
+                build_one_column_index(f4_file_path, index_column, tmp_dir_path_indexes, verbose)
     else:
         raise Exception("When specifying index_columns, it must either be a string or a list.")
 
@@ -759,36 +755,40 @@ def infer_type_for_column(types_dict):
     return "i"
     # return b"i"
 
-def find_unique_bigrams(value):
-    grams = set()
-
-    for start_i in range(0, len(value), 2):
-        end_i = (start_i + 2)
-        grams.add(value[start_i:end_i])
-
-    return grams
+# def find_unique_bigrams(value):
+#     grams = set()
+#
+#     for start_i in range(0, len(value), 2):
+#         end_i = (start_i + 2)
+#         grams.add(value[start_i:end_i])
+#
+#     return grams
 
 # We skip the space character because it causes a problem when we parse from a file.
-def enumerate_for_compression(values):
-    ints = []
-    capacity = len(values)
-    length = get_bigram_size(capacity)
+# def enumerate_for_compression(values):
+#     ints = []
+#     capacity = len(values)
+#     length = get_bigram_size(capacity)
+#
+#     i = 0
+#     while len(ints) < capacity:
+#         if b' ' not in i.to_bytes(length = length, byteorder = "big"):
+#             ints.append(i)
+#
+#         i += 1
+#
+#     for i in ints:
+#         yield i, values.pop(0)
 
-    i = 0
-    while len(ints) < capacity:
-        if b' ' not in i.to_bytes(length = length, byteorder = "big"):
-            ints.append(i)
-
-        i += 1
-
-    for i in ints:
-        yield i, values.pop(0)
-
-def build_one_column_index(f4_file_path, index_file_path, index_column, verbose):
+def build_one_column_index(f4_file_path, index_column, tmp_dir_path, verbose):
     print_message(f"Saving index for {index_column}.", verbose)
-    # table_name = f"table_{index_position}"
-    # index_name = f"index_{index_position}"
     index_column_encoded = index_column.encode()
+
+    tmp_index_file_path = f"{tmp_dir_path}tmp.db"
+    print("tmp_index_file_path:")
+    print(tmp_index_file_path)
+    import sys
+    sys.exit(1)
 
     print_message(f"Getting column meta information for {index_column} index for {f4_file_path}.", verbose)
     with initialize(f4_file_path) as file_data:
@@ -798,14 +798,14 @@ def build_one_column_index(f4_file_path, index_file_path, index_column, verbose)
         sql_type = convert_to_sql_type(index_column_type)
         parse_function = get_parse_row_value_function(file_data)
 
-        conn = connect_sql(index_file_path)
+        conn = connect_sql(tmp_index_file_path)
 
         sql = f'''CREATE TABLE {index_column} (
                      value {sql_type} NOT NULL
             )'''
         execute_sql(conn, sql)
 
-        print_message(f"Building index file for {index_column} column in {f4_file_path}.", verbose)
+        print_message(f"Building temporary index file for {index_column} column in {f4_file_path}.", verbose)
         for row_index in range(file_data.stat_dict["num_rows"]):
             value = parse_function(file_data, row_index, index_column_coords, bigram_size_dict=None, column_name=index_column_encoded).decode()
 
@@ -815,51 +815,55 @@ def build_one_column_index(f4_file_path, index_file_path, index_column, verbose)
 
         conn.commit()
 
-        sql = f'CREATE INDEX index_{index_column} ON {index_column} (value ASC)'
-        execute_sql(conn, sql)
+    #     sql = f'CREATE INDEX index_{index_column} ON {index_column} (value ASC)'
+    #     execute_sql(conn, sql)
 
         conn.close()
 
         print_message(f"Done building index file for {index_column} column in {f4_file_path}.", verbose)
 
-    # # TODO: Add logic to verify that index_column is valid. But where?
-    # print_message(f"Saving index for {index_column}.", verbose)
-    # index_column_encoded = index_column.encode()
-    #
-    # print_message(f"Getting column meta information for {index_column} index for {f4_file_path}.", verbose)
-    # with initialize(f4_file_path) as file_data:
-    #     select_columns, column_type_dict, column_coords_dict, bigram_size_dict = get_column_meta(file_data, set([index_column_encoded]), [])
-    #
-    #     index_column_type = column_type_dict[index_column_encoded]
-    #     coords = column_coords_dict[index_column_encoded]
-    #     # values_positions = []
-    #
-    #     parse_function = get_parse_row_value_function(file_data)
-    #
-    #     print_message(f"Parsing values and positions for {index_column} index for {f4_file_path}.", verbose)
-    #     dict_file_path = f"{tmp_dir_path}values_positions"
-    #     with shelve.open(dict_file_path, "n") as tmp_dict:
-    #         for row_index in range(file_data.stat_dict["num_rows"]):
-    #             value = parse_function(file_data, row_index, coords, bigram_size_dict=bigram_size_dict, column_name=index_column_encoded).decode()
-    #             tmp_dict[value] = str(row_index)
-    #             # values_positions.append([value, row_index])
-    #
-    #     print_message(f"Building index file for {index_column} index for {f4_file_path}.", verbose)
-    #     write_index_files(dict_file_path, tmp_dir_path_data, tmp_dir_path_other)
-    #
-    #     # customize_index_values_positions(values_positions, [index_column_type], sort_first_column, custom_index_function)
-    #     # write_index_files(values_positions, tmp_dir_path_data, tmp_dir_path_other)
-    #
-    #     write_str_to_file(f"{tmp_dir_path_other}ver", get_current_version_major().encode())
-    #
-    #     index_file_path = get_index_file_path(f4_file_path, index_column, custom_index_function)
-    #     combine_into_single_file(tmp_dir_path_data, tmp_dir_path_other, index_file_path)
-    #     remove(dict_file_path)
-    #
-    #     print_message(f"Done building index file for {index_column} index for {f4_file_path}.", verbose)
+    print("got here33333")
+    import sys
+    sys.exit()
+
+    # TODO: Add logic to verify that index_column is valid. But where?
+    print_message(f"Saving index for {index_column}.", verbose)
+    index_column_encoded = index_column.encode()
+
+    print_message(f"Getting column meta information for {index_column} index for {f4_file_path}.", verbose)
+    with initialize(f4_file_path) as file_data:
+        select_columns, column_type_dict, column_coords_dict, bigram_size_dict = get_column_meta(file_data, set([index_column_encoded]), [])
+
+        index_column_type = column_type_dict[index_column_encoded]
+        coords = column_coords_dict[index_column_encoded]
+        # values_positions = []
+
+        parse_function = get_parse_row_value_function(file_data)
+
+        print_message(f"Parsing values and positions for {index_column} index for {f4_file_path}.", verbose)
+        dict_file_path = f"{tmp_dir_path}values_positions"
+        with shelve.open(dict_file_path, "n") as tmp_dict:
+            for row_index in range(file_data.stat_dict["num_rows"]):
+                value = parse_function(file_data, row_index, coords, bigram_size_dict=bigram_size_dict, column_name=index_column_encoded).decode()
+                tmp_dict[value] = str(row_index)
+                # values_positions.append([value, row_index])
+
+        print_message(f"Building index file for {index_column} index for {f4_file_path}.", verbose)
+        write_index_files(dict_file_path, tmp_dir_path_data, tmp_dir_path_other)
+
+        # customize_index_values_positions(values_positions, [index_column_type], sort_first_column, custom_index_function)
+        # write_index_files(values_positions, tmp_dir_path_data, tmp_dir_path_other)
+
+        write_str_to_file(f"{tmp_dir_path_other}ver", get_current_version_major().encode())
+
+        index_file_path = get_index_file_path(f4_file_path, index_column)
+        combine_into_single_file(tmp_dir_path_data, tmp_dir_path_other, index_file_path)
+        remove(dict_file_path)
+
+        print_message(f"Done building index file for {index_column} index for {f4_file_path}.", verbose)
 
 # TODO: Combine this function with the above one and make it generic enough to handle indexes with more columns.
-def build_two_column_index(f4_file_path, index_file_path, index_columns, verbose):
+def build_two_column_index(f4_file_path, index_file_path, index_columns, tmp_dir_path_indexes, verbose):
     index_description = '_'.join(index_columns)
     print_message(f"Saving index for {index_description}.", verbose)
     # table_name = f"table_{index_position}"
@@ -1047,14 +1051,16 @@ def prepare_tmp_dirs(tmp_dir_path):
     tmp_dir_path_colinfo = f"{tmp_dir_path}colinfo/"
     tmp_dir_path_rowinfo = f"{tmp_dir_path}rowinfo/"
     tmp_dir_path_chunks = f"{tmp_dir_path}chunks/"
+    tmp_dir_path_indexes = f"{tmp_dir_path}indexes/"
     tmp_dir_path_outputs = f"{tmp_dir_path}outputs/"
 
     makedirs(tmp_dir_path_colinfo, exist_ok=True)
     makedirs(tmp_dir_path_rowinfo, exist_ok=True)
     makedirs(tmp_dir_path_chunks, exist_ok=True)
+    makedirs(tmp_dir_path_indexes, exist_ok=True)
     makedirs(tmp_dir_path_outputs, exist_ok=True)
 
-    return tmp_dir_path_colinfo, tmp_dir_path_rowinfo, tmp_dir_path_chunks, tmp_dir_path_outputs
+    return tmp_dir_path_colinfo, tmp_dir_path_rowinfo, tmp_dir_path_chunks, tmp_dir_path_indexes, tmp_dir_path_outputs
 
 def transpose_lines_to_temp(data_file_path, tmp_dir_path, start_row_index, end_row_index, column_names, column_coords, bigram_size_dict, verbose):
     with initialize(data_file_path) as file_data:

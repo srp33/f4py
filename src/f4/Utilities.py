@@ -14,8 +14,7 @@ from os import makedirs, path, remove
 from re import compile
 import shelve
 from shutil import copy, rmtree
-#TODO:
-import sqlite3
+# import sqlite3
 import sys
 from tempfile import mkdtemp
 from zstandard import ZstdCompressor, ZstdDecompressor
@@ -283,8 +282,8 @@ def add_data_chunks(tmp_dir_path_chunks, out_file, num_parallel):
             while chunk := chunk_file.read(chunk_size):
                 out_file.write(chunk)
 
-def get_index_file_path(f4_file_path):
-    return f"{f4_file_path}.idx.db"
+# def get_index_file_path(f4_file_path):
+#     return f"{f4_file_path}.idx.db"
 
 # def get_index_file_path(f4_file_path):
 #     for i in range(1, 1000000000):
@@ -359,15 +358,15 @@ def convert_to_sql_type(type_abbreviation):
     else:
         return "text"
 
-def convert_operator_to_sql(op):
-    if op == eq:
-        return "="
-    elif op == ge:
-        return ">="
-    elif op == gt:
-        return ">"
-    elif op == le:
-        return "<="
-    elif op == lt:
-        return "<"
-    return "<>"
+# def convert_operator_to_sql(op):
+#     if op == eq:
+#         return "="
+#     elif op == ge:
+#         return ">="
+#     elif op == gt:
+#         return ">"
+#     elif op == le:
+#         return "<="
+#     elif op == lt:
+#         return "<"
+#     return "<>"
