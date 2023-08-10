@@ -2,8 +2,8 @@
 
 set -o errexit
 
-#run_in_background=no
-run_in_background=yes
+run_in_background=no
+#run_in_background=yes
 
 rm -rf f4
 cp -r ../src/f4 .
@@ -12,7 +12,7 @@ cp -r ../src/f4 .
 # Build the Docker image
 #######################################################
 
-#docker build -t srp33/f4_test .
+docker build -t srp33/f4_test .
 
 #######################################################
 # Run preparatory steps
@@ -34,10 +34,12 @@ fi
 #$dockerCommand bash -c "time python3 build_tsv.py 250 250 500 1000000 data/large_tall.tsv.gz"
 #$dockerCommand bash -c "time python3 build_tsv.py 250000 250000 500000 1000 data/large_wide.tsv.gz"
 
+
+####$dockerCommand bash -c "time python3 build_tsv.py 2 0 0 10000000 data/super_tall.tsv.gz"
 #$dockerCommand bash -c "time python3 build_tsv.py 2 0 0 1000000000 data/super_tall.tsv.gz"
 #$dockerCommand bash -c "time python3 build_tsv.py 1000000000 0 0 2 data/super_wide.tsv.gz"
-#$dockerCommand bash -c "time python3 build_tsv.py 2 0 0 10000000000 data/super_talltall.tsv.gz"
-#$dockerCommand bash -c "time python3 build_tsv.py 10000000000 0 0 2 data/super_widewide.tsv.gz"
+#$dockerCommand bash -c "time python3 build_tsv.py 2 0 0 10000000000 data/hyper_tall.tsv.gz"
+#$dockerCommand bash -c "time python3 build_tsv.py 10000000000 0 0 2 data/hyper_wide.tsv.gz"
 
 #######################################################
 # Run tests
