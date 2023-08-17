@@ -20,25 +20,25 @@ class __BaseFilter:
         pass
 
     def _filter_indexed_column_values(self, file_data, end_index, num_parallel):
-        # index_file_path = get_index_file_path(file_data.data_file_path, self.column_name.decode())
+        index_file_path = get_index_file_path(file_data.data_file_path, self.column_name.decode())
+
+        with initialize(index_file_path) as index_file_data:
+            return filter_using_operator(index_file_data, self, end_index, num_parallel)
+
+        # index_file_path = get_index_file_path(file_data.data_file_path)
+
+        # conn = connect_sql(index_file_path)
+        # sql_prefix = f'''SELECT rowid - 1 AS rowid
+        #           FROM {self._get_index_name()}
+        #           WHERE '''
+
+        # for row in self._get_where_cursor(conn, sql_prefix):
+        #     yield row["rowid"]
         #
-        # with initialize(index_file_path) as index_file_data:
-        #     return filter_using_operator(index_file_data, self, end_index, num_parallel)
+        # conn.close()
 
-        index_file_path = get_index_file_path(file_data.data_file_path)
-
-        conn = connect_sql(index_file_path)
-        sql_prefix = f'''SELECT rowid - 1 AS rowid
-                  FROM {self._get_index_name()}
-                  WHERE '''
-
-        for row in self._get_where_cursor(conn, sql_prefix):
-            yield row["rowid"]
-
-        conn.close()
-
-    def _get_where_cursor(self, conn, sql_prefix):
-        pass
+    # def _get_where_cursor(self, conn, sql_prefix):
+    #     pass
 
 class NoFilter(__BaseFilter):
     def _get_column_name_set(self):
@@ -94,9 +94,9 @@ class __OperatorFilter(__SimpleBaseFilter):
 
         self.oper = oper
 
-    def _get_where_cursor(self, conn, sql_prefix):
-        value = self.value.decode() if isinstance(self.value, bytes) else self.value
-        return fetchall_sql(conn, sql_prefix + f"value {convert_operator_to_sql(self.oper)} ?",  (value,))
+    # def _get_where_cursor(self, conn, sql_prefix):
+    #     value = self.value.decode() if isinstance(self.value, bytes) else self.value
+    #     return fetchall_sql(conn, sql_prefix + f"value {convert_operator_to_sql(self.oper)} ?",  (value,))
 
     def _check_column_types(self, column_index_dict, column_type_dict, expected_column_type, expected_column_type_description):
         if column_type_dict[column_index_dict[self.column_name]] != expected_column_type:
@@ -138,6 +138,35 @@ class IntFilter(__OperatorFilter):
     def _get_conversion_function(self):
         return fast_int
 
+class StartsWithFilter(__SimpleBaseFilter):
+    def __init__(self, column_name, value):
+        self._check_argument(value, "value", str)
+        super().__init__(column_name, value.encode())
+
+    def _check_types(self, column_type_dict):
+        if column_type_dict[self.column_name] != "s":
+            raise Exception(f"A StringFilter may only be used with string columns, and {self.column_name.decode()} is not a string ({column_type_dict[self.column_name]}).")
+
+    def _passes(self, value):
+        return value.startswith(self.value)
+
+    def _filter_indexed_column_values(self, file_data, end_index, num_parallel):
+        index_file_path = get_index_file_path(file_data.data_file_path, self.column_name.decode())
+
+        with initialize(index_file_path) as index_file_data:
+            return get_passing_row_indices_with_filter(index_file_data, self, end_index, num_parallel)
+
+class EndsWithFilter(StartsWithFilter):
+    def _passes(self, value):
+        return value.endswith(self.value)
+
+    def _filter_indexed_column_values(self, file_data, end_index, num_parallel):
+        index_file_path = get_index_file_path(file_data.data_file_path, self.column_name.decode(), custom_index_type="endswith")
+        custom_fltr = StartsWithFilter(self.column_name.decode(), reverse_string(self.value).decode())
+
+        with initialize(index_file_path) as index_file_data:
+            return get_passing_row_indices_with_filter(index_file_data, custom_fltr, end_index, num_parallel)
+
 class RegularExpressionFilter(__SimpleBaseFilter):
     def __init__(self, column_name, pattern):
         super().__init__(column_name, pattern)
@@ -148,37 +177,37 @@ class RegularExpressionFilter(__SimpleBaseFilter):
     def _passes(self, value):
         return self.value.search(value.decode())
 
-class LikeFilter(__SimpleBaseFilter):
-    def __init__(self, column_name, pattern):
-        super().__init__(column_name, pattern)
+# class LikeFilter(__SimpleBaseFilter):
+#     def __init__(self, column_name, pattern):
+#         super().__init__(column_name, pattern)
+#
+#         self._check_argument(pattern, "pattern", str)
+#
+#     def _filter_indexed_column_values(self, file_data, end_index, num_parallel):
+#         index_file_path = get_index_file_path(file_data.data_file_path, self.column_name.decode())
+#
+#         with initialize(index_file_path) as index_file_data:
+#             coords = parse_data_coords(index_file_data, [0, 1])
+#
+#             return get_passing_row_indices(index_file_data, self, coords[0], coords[1], 0, end_index)
 
-        self._check_argument(pattern, "pattern", str)
-
-    # def _filter_indexed_column_values(self, file_data, end_index, num_parallel):
-    #     index_file_path = get_index_file_path(file_data.data_file_path, self.column_name.decode())
-    #
-    #     with initialize(index_file_path) as index_file_data:
-    #         coords = parse_data_coords(index_file_data, [0, 1])
-    #
-    #         return get_passing_row_indices(index_file_data, self, coords[0], coords[1], 0, end_index)
-
-    def _get_where_cursor(self, conn, sql_prefix):
-        value = self.value.decode() if isinstance(self.value, bytes) else self.value
-        return fetchall_sql(conn, sql_prefix + f"value LIKE ?",  (value,))
+    # def _get_where_cursor(self, conn, sql_prefix):
+    #     value = self.value.decode() if isinstance(self.value, bytes) else self.value
+    #     return fetchall_sql(conn, sql_prefix + f"value LIKE ?",  (value,))
 
 # class NotLikeFilter(LikeFilter):
 #     def _passes(self, value):
 #         return not self.value.search(value.decode())
 
-class NotLikeFilter(__SimpleBaseFilter):
-    def __init__(self, column_name, pattern):
-        super().__init__(column_name, pattern)
+# class NotLikeFilter(__SimpleBaseFilter):
+#     def __init__(self, column_name, pattern):
+#         super().__init__(column_name, pattern)
+#
+#         self._check_argument(pattern, "pattern", str)
 
-        self._check_argument(pattern, "pattern", str)
-
-    def _get_where_cursor(self, conn, sql_prefix):
-        value = self.value.decode() if isinstance(self.value, bytes) else self.value
-        return fetchall_sql(conn, sql_prefix + f"value NOT LIKE ?",  (value,))
+    # def _get_where_cursor(self, conn, sql_prefix):
+    #     value = self.value.decode() if isinstance(self.value, bytes) else self.value
+    #     return fetchall_sql(conn, sql_prefix + f"value NOT LIKE ?",  (value,))
 
 class HeadFilter(__BaseFilter):
     def __init__(self, n, select_columns):
@@ -318,23 +347,23 @@ class __RangeFilter(__CompositeFilter):
     def _filter_column_values(self, data_file_path, row_indices, column_coords_dict, bigram_size_dict):
         return AndFilter(self.filter1, self.filter2)._filter_column_values(data_file_path, row_indices, column_coords_dict, bigram_size_dict)
 
-    # def _filter_indexed_column_values(self, file_data, end_index, num_parallel):
-    #     index_file_path = get_index_file_path(file_data.data_file_path, self.filter1.column_name.decode())
-    #
-    #     with initialize(index_file_path) as index_file_data:
-    #         coords = parse_data_coords(index_file_data, [0, 1])
-    #
-    #         return find_row_indices_for_range(index_file_data, coords[0], coords[1], self.filter1, self.filter2, end_index, num_parallel)
+    def _filter_indexed_column_values(self, file_data, end_index, num_parallel):
+        index_file_path = get_index_file_path(file_data.data_file_path, self.filter1.column_name.decode())
+
+        with initialize(index_file_path) as index_file_data:
+            coords = parse_data_coords(index_file_data, [0, 1])
+
+            return find_row_indices_for_range(index_file_data, coords[0], coords[1], self.filter1, self.filter2, end_index, num_parallel)
 
     def _get_index_name(self):
         return self.filter1.column_name.decode()
 
-    def _get_where_cursor(self, conn, sql_prefix):
-        value1 = self.filter1.value.decode() if isinstance(self.filter1.value, bytes) else self.filter1.value
-        value2 = self.filter2.value.decode() if isinstance(self.filter2.value, bytes) else self.filter2.value
-        sql = sql_prefix + f"value {convert_operator_to_sql(self.filter1.oper)} ? AND value {convert_operator_to_sql(self.filter2.oper)} ?"
-
-        return fetchall_sql(conn, sql, (value1, value2,))
+    # def _get_where_cursor(self, conn, sql_prefix):
+    #     value1 = self.filter1.value.decode() if isinstance(self.filter1.value, bytes) else self.filter1.value
+    #     value2 = self.filter2.value.decode() if isinstance(self.filter2.value, bytes) else self.filter2.value
+    #     sql = sql_prefix + f"value {convert_operator_to_sql(self.filter1.oper)} ? AND value {convert_operator_to_sql(self.filter2.oper)} ?"
+    #
+    #     return fetchall_sql(conn, sql, (value1, value2,))
 
     def _get_conversion_function(self):
         return do_nothing
@@ -423,9 +452,7 @@ def query(data_file_path, fltr=NoFilter(), select_columns=[], out_file_path=None
 
         fltr._check_types(column_type_dict)
 
-        #has_index = len(glob(data_file_path + ".idx_*")) > 0
-        index_file_path = get_index_file_path(data_file_path)
-        has_index = path.exists(index_file_path)
+        has_index = len(glob(f"{data_file_path}*.idx")) > 0
 
         if isinstance(fltr, NoFilter):
             keep_row_indices = list(range(file_data.stat_dict["num_rows"]))
@@ -436,6 +463,7 @@ def query(data_file_path, fltr=NoFilter(), select_columns=[], out_file_path=None
 
     #            if num_parallel == 1 or len(sub_filters) == 1:
                 keep_row_indices = sorted(fltr._filter_indexed_column_values(file_data, file_data.stat_dict["num_rows"], num_parallel))
+
     #            else:
     #                fltr_results_dict = {}
 
@@ -1109,7 +1137,10 @@ def get_passing_row_indices_with_filter(file_data, fltr, end_index, num_parallel
     if lower_range[0] == end_index:
         return set()
 
-    upper_position = search_with_filter(file_data, coords[0], lower_range[0], lower_range[1], end_index, fltr)
+    if lower_range[1] == end_index:
+        upper_position = end_index
+    else:
+        upper_position = search_with_filter(file_data, coords[0], lower_range[0], lower_range[1], end_index, fltr)
 
     return retrieve_matching_row_indices(file_data, coords[1], (lower_range[0], upper_position), num_parallel)
 

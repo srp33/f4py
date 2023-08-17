@@ -227,17 +227,26 @@ def run_small_tests(in_file_path, f4_file_path, out_file_path, num_parallel = 1,
     check_results("Numeric filters and string filters", read_file_into_lists(out_file_path), [[b"FloatA"],[b"9.9"],[b"2.2"],[b"4.4"]])
     os.unlink(out_file_path)
 
-    if index_columns:
-        f4.query(f4_file_path, f4.LikeFilter("CategoricalB", "%ow"), ["FloatA"], out_file_path, num_parallel=num_parallel)
-        check_results("Like filter on categorical column", read_file_into_lists(out_file_path), [[b"FloatA"],[b"1.1"],[b"2.2"]])
-        os.unlink(out_file_path)
+    f4.query(f4_file_path, f4.StartsWithFilter("CategoricalB", "Ye"), ["ID"], out_file_path, num_parallel=num_parallel)
+    check_results("StartsWithFilter on categorical column B", read_file_into_lists(out_file_path), [[b"ID"],[b"A"],[b"B"]])
+    os.unlink(out_file_path)
 
-        f4.query(f4_file_path, f4.NotLikeFilter("CategoricalB", "%ow"), ["FloatA"], out_file_path, num_parallel=num_parallel)
-        check_results("NotLike filter on categorical column", read_file_into_lists(out_file_path), [[b"FloatA"],[b"9.9"],[b"2.2"],[b"4.4"]])
-        os.unlink(out_file_path)
-    else:
+    f4.query(f4_file_path, f4.EndsWithFilter("CategoricalB", "ow"), ["ID"], out_file_path, num_parallel=num_parallel)
+    check_results("EndsWithFilter on categorical column B", read_file_into_lists(out_file_path), [[b"ID"],[b"A"],[b"B"]])
+    os.unlink(out_file_path)
+
+    #if index_columns:
+        #f4.query(f4_file_path, f4.LikeFilter("CategoricalB", "%ow"), ["FloatA"], out_file_path, num_parallel=num_parallel)
+        #check_results("Like filter on categorical column", read_file_into_lists(out_file_path), [[b"FloatA"],[b"1.1"],[b"2.2"]])
+        #os.unlink(out_file_path)
+
+        #f4.query(f4_file_path, f4.NotLikeFilter("CategoricalB", "%ow"), ["FloatA"], out_file_path, num_parallel=num_parallel)
+        #check_results("NotLike filter on categorical column", read_file_into_lists(out_file_path), [[b"FloatA"],[b"9.9"],[b"2.2"],[b"4.4"]])
+        #os.unlink(out_file_path)
+
+    if not index_columns:
         f4.query(f4_file_path, f4.RegularExpressionFilter("CategoricalB", r"ow$"), ["FloatA"], out_file_path, num_parallel=num_parallel)
-        check_results("Like filter on categorical column", read_file_into_lists(out_file_path), [[b"FloatA"],[b"1.1"],[b"2.2"]])
+        check_results("Regular expression filter on categorical column", read_file_into_lists(out_file_path), [[b"FloatA"],[b"1.1"],[b"2.2"]])
         os.unlink(out_file_path)
 
     f4.query(f4_file_path, f4.FloatRangeFilter("FloatA", -9.9, 4.4), ["FloatA"], out_file_path, num_parallel=num_parallel)
@@ -757,7 +766,7 @@ def run_all_small_tests():
     sys.stdout = old_stdout
     check_results("No filters, select all columns - std out", read_string_into_lists(out), read_file_into_lists("data/small.tsv"))
 
-    index_columns = ["ID", "CategoricalB", "FloatA", "FloatB", "IntA", "IntB", "OrdinalA", ["CategoricalB", "IntB"]]
+    index_columns = ["ID", "CategoricalB", "CategoricalB_endswith", "FloatA", "FloatB", "IntA", "IntB", "OrdinalA", ["CategoricalB", "IntB"]]
 
     # Small tests with indexing
     run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, index_columns = index_columns)
@@ -810,10 +819,10 @@ def run_super_tests(num_parallel, size, extension, compression_type, verbose, tm
     for file_path in glob.glob(f"{f4_file_path}*"):
         os.unlink(file_path)
 
-    f4.convert_delimited_file(in_file_path, f4_file_path, compression_type=compression_type, num_parallel=num_parallel, verbose=verbose, tmp_dir_path=tmp_dir_path)
-    f4.build_indexes(f4_file_path, ["ID", "Categorical1"], verbose=verbose)
+    #f4.convert_delimited_file(in_file_path, f4_file_path, compression_type=compression_type, num_parallel=num_parallel, index_columns=["ID", "Categorical1", "Numeric1"], verbose=verbose, tmp_dir_path=tmp_dir_path)
+    f4.convert_delimited_file(in_file_path, f4_file_path, compression_type=compression_type, num_parallel=num_parallel, index_columns=["Numeric1"], verbose=verbose, tmp_dir_path=tmp_dir_path)
 
-#run_all_small_tests()
+run_all_small_tests()
 
 #for compression_type in [None, "dictionary", "zstd"]:
 #for compression_type in [None, "zstd"]:
@@ -826,8 +835,8 @@ for compression_type in [None]:
 
     # Large tests
     #num_parallel = 1
-    #num_parallel = 4
-    num_parallel = 16
+    num_parallel = 4
+    #num_parallel = 16
     build_outputs = True
     #build_outputs = False
     verbose = True
@@ -847,7 +856,7 @@ for compression_type in [None]:
     #f4.inner_join("data/medium.f4", "data/medium.f4", "ID", "/tmp/medium_joined.f4", num_parallel=num_parallel, verbose=verbose)
     #f4.inner_join("data/large_tall.f4", "data/large_wide.f4", "ID", "/tmp/large_joined.f4", num_parallel=num_parallel, verbose=verbose)
 
-    run_super_tests(num_parallel=num_parallel, size="super_tall", extension=".gz", compression_type=compression_type, verbose=verbose, tmp_dir_path="/tmp/super_tall")
+#    run_super_tests(num_parallel=num_parallel, size="super_tall", extension=".gz", compression_type=compression_type, verbose=verbose, tmp_dir_path="/tmp/super_tall")
 #    run_super_tests(num_parallel=num_parallel, size="super_wide", extension=".gz", compression_type=compression_type, verbose=verbose, tmp_dir_path="/tmp/super_wide")
 #    run_super_tests(num_parallel=num_parallel, size="hyper_tall", extension=".gz", compression_type=compression_type, verbose=verbose, tmp_dir_path="/tmp/hyper_tall")
 #    run_super_tests(num_parallel=num_parallel, size="hyper_wide", extension=".gz", compression_type=compression_type, verbose=verbose, tmp_dir_path="/tmp/hyper_wide")

@@ -7,8 +7,9 @@ import sys
 num_categorical_vars = int(sys.argv[1])
 num_discrete_vars = int(sys.argv[2])
 num_continuous_vars = int(sys.argv[3])
-num_rows = int(sys.argv[4])
-out_file_path = sys.argv[5]
+num_continuous_decimal_places = sys.argv[4]
+num_rows = int(sys.argv[5])
+out_file_path = sys.argv[6]
 
 def save(text, out_file, flush=False):
     if len(text) > 20000 or flush:
@@ -65,7 +66,8 @@ for row_num in range(num_rows):
             output = save(output + b"\t", out_file)
 
     for i in range(num_continuous_vars):
-        output = save(output + ("{:.8f}".format(random.random())).encode(), out_file)
+        format_pattern = "{:." + num_continuous_decimal_places + "f}"
+        output = save(output + (format_pattern.format(random.random())).encode(), out_file)
 
         if i < (num_continuous_vars - 1):
             output = save(output + b"\t", out_file)

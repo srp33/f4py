@@ -14,7 +14,7 @@ from os import makedirs, path, remove
 from re import compile
 import shelve
 from shutil import copy, rmtree
-# import sqlite3
+import sqlite3
 import sys
 from tempfile import mkdtemp
 from zstandard import ZstdCompressor, ZstdDecompressor
@@ -292,13 +292,13 @@ def add_data_chunks(tmp_dir_path_chunks, out_file, num_parallel):
 #         if not path.exists(index_file_path):
 #             return index_file_path
 
-# def get_index_file_path(data_file_path, index_name, custom_index_function=do_nothing):
-    # index_file_path_extension = f".idx_{index_name}"
-    #
-    # if custom_index_function != do_nothing:
-    #     index_file_path_extension = f"{index_file_path_extension}_{custom_index_function.__name__}"
-    #
-    # return f"{data_file_path}{index_file_path_extension}"
+def get_index_file_path(data_file_path, index_name, custom_index_type=None):
+    if custom_index_type == None:
+        index_file_path_extension = f"_{index_name}.idx"
+    else:
+        index_file_path_extension = f"_{index_name}_{custom_index_type}.idx"
+
+    return f"{data_file_path}{index_file_path_extension}"
 
 def split_integer_list_into_chunks(int_list, num_parallel):
     items_per_chunk = ceil(len(int_list) / num_parallel)
@@ -342,13 +342,21 @@ def execute_sql(conn, sql, params=(), commit=True):
 
     return lastrowid
 
-def fetchall_sql(conn, sql, params=()):
+def fetchone_sql(conn, sql, params=()):
     cursor = conn.cursor()
     cursor.execute(sql, params)
-    result = cursor.fetchall()
+    result = cursor.fetchone()
     cursor.close()
 
     return result
+
+# def fetchall_sql(conn, sql, params=()):
+#     cursor = conn.cursor()
+#     cursor.execute(sql, params)
+#     result = cursor.fetchall()
+#     cursor.close()
+#
+#     return result
 
 def convert_to_sql_type(type_abbreviation):
     if type_abbreviation == "i":
