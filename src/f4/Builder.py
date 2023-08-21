@@ -806,13 +806,17 @@ def build_one_column_index(f4_file_path, index_column, index_file_path, tmp_dir_
         index_column_index = get_column_index_from_name(file_data, index_column)
         index_column_type = get_column_type_from_index(file_data, index_column_index)
         index_column_coords = parse_data_coords(file_data, [index_column_index])[0]
-        sql_type = convert_to_sql_type(index_column_type)
+
+        # sql_type = convert_to_sql_type(index_column_type)
         parse_function = get_parse_row_value_function(file_data)
 
         conn = connect_sql(tmp_index_file_path)
 
+        # sql = f'''CREATE TABLE index_data (
+        #              value {sql_type} NOT NULL
+        #     )'''
         sql = f'''CREATE TABLE index_data (
-                     value {sql_type} NOT NULL
+                     value TEXT NOT NULL
             )'''
         execute_sql(conn, sql)
 
@@ -840,8 +844,18 @@ def build_one_column_index(f4_file_path, index_column, index_file_path, tmp_dir_
             makedirs(tmp_dir_path_data)
 
         with open(f"{tmp_dir_path_data}0", "wb") as index_data_file:
+            sql = '''SELECT rowid - 1 AS rowid, value
+                     FROM index_data '''
+
+            if index_column_type == "s":
+                sql += "ORDER BY value"
+            elif index_column_type == "i":
+                sql += "ORDER BY CAST(value AS INTEGER)"
+            else:
+                sql += "ORDER BY CAST(value AS REAL)"
+
             cursor = conn.cursor()
-            cursor.execute('SELECT rowid - 1 AS rowid, value FROM index_data ORDER BY value')
+            cursor.execute(sql)
 
             # Fetch rows in batches to prevent using too much memory
             batch_size = 10000
@@ -865,14 +879,27 @@ def build_one_column_index(f4_file_path, index_column, index_file_path, tmp_dir_
         write_str_to_file(f"{tmp_dir_path_other}ver", get_current_version_major().encode())
         write_str_to_file(f"{tmp_dir_path_other}ll", str(max_value_length + max_row_index_length).encode())
 
-        mccl = max(len(str(max_row_index_length)), len(str(max_value_length)))
+        coord1 = str(max_value_length).encode()
+        coord2 = str(max_value_length + max_row_index_length).encode()
+
+        mccl = max(len(coord1), len(coord2))
         write_str_to_file(f"{tmp_dir_path_other}mccl", str(mccl).encode())
 
         cc = format_string_as_fixed_width(b"0", mccl)
-        cc += format_string_as_fixed_width(str(max_value_length).encode(), mccl)
-        cc += format_string_as_fixed_width(str(max_value_length + max_row_index_length).encode(), mccl)
+        cc += format_string_as_fixed_width(coord1, mccl)
+        cc += format_string_as_fixed_width(coord2, mccl)
 
         write_str_to_file(f"{tmp_dir_path_other}cc", cc)
+
+        # if index_column == "Numeric1":
+        #     print(tmp_index_file_path)
+        #     print(sql)
+        #     print(f"{tmp_dir_path_data}0")
+        #     print(cc)
+        #     print(mccl)
+        #
+        #     import sys
+        #     sys.exit(1)
 
         # copy(tmp_index_file_path, f"/tmp/{index_column}.db")
         remove(tmp_index_file_path)

@@ -462,7 +462,11 @@ def query(data_file_path, fltr=NoFilter(), select_columns=[], out_file_path=None
     #            sub_filters = fltr.get_sub_filters()
 
     #            if num_parallel == 1 or len(sub_filters) == 1:
+    #             x = fltr._filter_indexed_column_values(file_data, file_data.stat_dict["num_rows"], num_parallel)
+    #             print(x)
                 keep_row_indices = sorted(fltr._filter_indexed_column_values(file_data, file_data.stat_dict["num_rows"], num_parallel))
+                # import sys
+                # sys.exit(1)
 
     #            else:
     #                fltr_results_dict = {}
@@ -497,11 +501,6 @@ def query(data_file_path, fltr=NoFilter(), select_columns=[], out_file_path=None
                     # out_lines = []
 
                     for row_index in keep_row_indices:
-                        # print(row_index)
-                        # print(select_column_coords)
-                        # print(file_data.file_map_dict)
-                        # print(file_data.stat_dict)
-                        # print(b"\t".join(parse_function(file_data, row_index, select_column_coords, bigram_size_dict=bigram_size_dict, column_names=select_columns)))
                         out_file.write(b"\t".join(parse_function(file_data, row_index, select_column_coords, bigram_size_dict=bigram_size_dict, column_names=select_columns)) + b"\n")
 
                     #     out_values = parse_function(file_data, row_index, select_column_coords, bigram_size_dict=bigram_size_dict, column_names=select_columns)
@@ -1072,8 +1071,17 @@ def search_with_filter(file_data, value_coords, left_index, right_index, overall
 def find_matching_row_indices(file_data, position_coords, positions):
     matching_row_indices = set()
 
+    # TODO: Why are we getting fewer than 10000 matching indices when positions[1] - positions[0] = 10000?
+    # count = 0
+    # print(position_coords)
     for i in range(positions[0], positions[1]):
+        # count += 1
         matching_row_indices.add(fast_int(parse_row_value(file_data, i, position_coords)))
+        # value = parse_row_value(file_data, i, position_coords)
+        # value = fast_int(value)
+        # matching_row_indices.add(value)
+    # print(count)
+    # print(len(matching_row_indices))
 
     return matching_row_indices
 
