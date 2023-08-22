@@ -12,7 +12,7 @@ cp -r ../src/f4 .
 # Build the Docker image
 #######################################################
 
-#docker build -t srp33/f4_test .
+docker build -t srp33/f4_test .
 
 #######################################################
 # Run preparatory steps
@@ -45,15 +45,15 @@ fi
 #######################################################
 
 #python3 test.py
-time python3 test.py
+#time python3 test.py
 
-#if [[ "${run_in_background}" == "no" ]]
-#then
-#  $dockerCommand bash -c "python3 test.py"
-#else
-#  echo Saving output to /tmp/f4.out
-#  $dockerCommand bash -c "python3 test.py > /tmp/f4.out 2>&1"
-#fi
+if [[ "${run_in_background}" == "no" ]]
+then
+  $dockerCommand bash -c "python3 test.py"
+else
+  echo Saving output to /tmp/f4.out
+  $dockerCommand bash -c "python3 test.py > /tmp/f4.out 2>&1"
+fi
 
 #######################################################
 # Cleanup
