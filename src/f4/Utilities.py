@@ -378,3 +378,30 @@ def convert_to_sql_type(type_abbreviation):
 #     elif op == lt:
 #         return "<"
 #     return "<>"
+
+def get_path_with_possible_suffix(file_path):
+    if path.exists(file_path):
+        return file_path
+
+    paths = glob(f"{file_path}*")
+
+    if len(paths) == 0:
+        raise Exception("Did not find any file that matched this pattern: {file_path}*", verbose)
+
+    elif len(paths) == 1:
+        return paths[0]
+    else:
+        raise Exception("Found multiple files to remove that matched this pattern: {file_path}*. None were removed.", verbose)
+
+# def remove_file_with_possible_suffix(file_path, verbose):
+#     if path.exists(file_path):
+#         remove(file_path)
+#     else:
+#         paths = glob(f"{file_path}*")
+#
+#         if len(paths) == 0:
+#             print_message("Did not find any file to remove that matched this pattern: {file_path}*", verbose)
+#         elif len(paths) == 1:
+#             remove(paths[0])
+#         else:
+#             print_message("Found multiple files to remove that matched this pattern: {file_path}*. None were removed.", verbose)

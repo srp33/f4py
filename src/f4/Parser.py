@@ -278,27 +278,27 @@ class AndFilter(__CompositeFilter):
         return self.filter2._filter_column_values(data_file_path, row_indices_1, column_coords_dict, bigram_size_dict)
 
     def _filter_indexed_column_values(self, file_data, end_index, num_parallel):
-        # Currently, only one combination (StringFilter + IntRangeFilter) of two-column filters is supported.
-        # TODO: Add more combinations and generalize the code.
-        # if isinstance(self.filter1, StringFilter) and self.filter1.oper == eq and isinstance(self.filter2, IntRangeFilter):
-        #     raise Exception("Work on this in AndFilter...")
-            # two_column_index_name = get_two_column_index_name(self.filter1, self.filter2.filter1)
-            # two_column_index_file_path = get_index_file_path(file_data.data_file_path, two_column_index_name)
-            #
-            # if path.exists(two_column_index_file_path):
-            #     with initialize(two_column_index_file_path) as index_file_data:
-            #         coords = parse_data_coords(index_file_data, [0, 1, 2])
-            #
-            #         # Find range for string column
-            #         lower_position, upper_position = find_bounds_for_range(index_file_data, coords[0], self.filter1, self.filter1, end_index, num_parallel)
-            #
-            #         # Find range for int column
-            #         lower_position, upper_position = find_bounds_for_range(index_file_data, coords[1], self.filter2.filter1, self.filter2.filter2, upper_position, num_parallel, lower_position)
-            #
-            #         # Get row indices for the overlapping range
-            #         return retrieve_matching_row_indices(index_file_data, coords[2], (lower_position, upper_position), num_parallel)
+        # TODO: Currently, only one combination (StringFilter + IntRangeFilter) of two-column filters is supported.
+        #       Add more combinations and generalize the code.
 
-        # TODO: We might be able to implement this logic within sql.
+        if isinstance(self.filter1, StringFilter) and self.filter1.oper == eq and isinstance(self.filter2, IntRangeFilter):
+            index_file_path = f"{file_data.data_file_path}_{'_'.join([self.filter1.column_name.decode(), self.filter2.filter1.column_name.decode()])}.idx"
+
+            if path.exists(index_file_path):
+                with initialize(index_file_path) as index_file_data:
+                    coords = parse_data_coords(index_file_data, [0, 1, 2])
+
+                    # Find range for string column
+                    lower_position, upper_position = find_bounds_for_range(index_file_data, coords[0], self.filter1, self.filter1, end_index, num_parallel)
+
+                    # Find range for int column
+                    lower_position, upper_position = find_bounds_for_range(index_file_data, coords[1], self.filter2.filter1, self.filter2.filter2, upper_position, num_parallel, lower_position)
+
+                    # Get row indices for the overlapping range
+                    return retrieve_matching_row_indices(index_file_data, coords[2], (lower_position, upper_position), num_parallel)
+            else:
+                raise Exception(f"An index file was expected at {index_file_path}, but that file was not found.")
+
         row_indices_1 = self.filter1._filter_indexed_column_values(file_data, end_index, num_parallel)
         row_indices_2 = self.filter2._filter_indexed_column_values(file_data, end_index, num_parallel)
 
@@ -327,7 +327,6 @@ class OrFilter(__CompositeFilter):
         return row_indices_1 | row_indices_2
 
     def _filter_indexed_column_values(self, file_data, end_index, num_parallel):
-        # TODO: We might be able to implement this logic within sql.
         row_indices_1 = self.filter1._filter_indexed_column_values(file_data, end_index, num_parallel)
         row_indices_2 = self.filter2._filter_indexed_column_values(file_data, end_index, num_parallel)
 
@@ -1071,17 +1070,8 @@ def search_with_filter(file_data, value_coords, left_index, right_index, overall
 def find_matching_row_indices(file_data, position_coords, positions):
     matching_row_indices = set()
 
-    # TODO: Why are we getting fewer than 10000 matching indices when positions[1] - positions[0] = 10000?
-    # count = 0
-    # print(position_coords)
     for i in range(positions[0], positions[1]):
-        # count += 1
         matching_row_indices.add(fast_int(parse_row_value(file_data, i, position_coords)))
-        # value = parse_row_value(file_data, i, position_coords)
-        # value = fast_int(value)
-        # matching_row_indices.add(value)
-    # print(count)
-    # print(len(matching_row_indices))
 
     return matching_row_indices
 

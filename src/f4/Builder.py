@@ -35,7 +35,7 @@ def convert_delimited_file(delimited_file_path, f4_file_path, index_columns=[], 
     line_lengths_file_path = write_rows(delimited_file_path, tmp_dir_path_rowinfo, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes_dict_file_path, column_compression_dicts_file_path, num_rows, num_parallel, verbose)
 
     print_message(f"Saving meta files for {f4_file_path}", verbose)
-    write_meta_files(tmp_dir_path_colinfo, tmp_dir_path_outputs, line_lengths_file_path, column_names_dict_file_path, column_sizes_dict_file_path, column_types_dict_file_path, compression_type, column_compression_dicts_file_path, num_rows)
+    write_meta_files(tmp_dir_path_colinfo, tmp_dir_path_outputs, line_lengths_file_path, column_names_dict_file_path, column_sizes_dict_file_path, column_types_dict_file_path, compression_type, column_compression_dicts_file_path, num_rows, verbose)
 
     print_message(f"Combining all data into a single file for {delimited_file_path}", verbose)
     combine_into_single_file(tmp_dir_path_chunks, tmp_dir_path_outputs, f4_file_path, num_parallel)
@@ -153,7 +153,7 @@ def inner_join(f4_left_src_file_path, f4_right_src_file_path, join_column, f4_de
                 if value in common_values:
                     right_index_dict.setdefault(value, []).append(i)
 
-            # TODO: It would be faster to save in zstandard format. But the Python package
+            # FYI: It would be faster to save in zstandard format. But the Python package
             #      doesn't support reading line by line.
             #TODO: Parallelize this?
             with gzip.open(tmp_tsv_file_path, "w", compresslevel=1) as tmp_tsv_file:
@@ -230,22 +230,19 @@ def parse_file_metadata(comment_prefix, compression_type, delimited_file_path, d
     column_chunk_indices = list(generate_chunk_ranges(num_cols, num_cols_per_chunk))
 
     column_sizes_dict_file_path = f"{tmp_dir_path}0_column_sizes"
-    column_types_dict_file_path = f"{tmp_dir_path}0_column_types"
+    column_types_dict_file_path = f"{tmp_dir_path}0_column_types_only"
     column_compression_dicts_dict_file_path = f"{tmp_dir_path}0_compression_dicts"
 
     # Parse each column and store the results in temp files
     if num_parallel == 1:
         num_rows = parse_columns_chunk(delimited_file_path, delimiter, comment_prefix, 0, column_chunk_indices[0][0], column_chunk_indices[0][1], compression_type, tmp_dir_path, verbose)
     else:
-        # TODO: CHECK everywhere for logic where number of items to parallelize
+        # TODO: Check everywhere for logic where number of items to parallelize
         #       is smaller than num_parallel.
         all_num_rows = joblib.Parallel(n_jobs=num_parallel)(joblib.delayed(parse_columns_chunk)(delimited_file_path, delimiter, comment_prefix, chunk_number, chunk_indices[0], chunk_indices[1], compression_type, tmp_dir_path, verbose) for chunk_number, chunk_indices in enumerate(column_chunk_indices))
 
         # When each chunk was processed, we went through all rows, so we can get this number from just the first chunk.
         num_rows = all_num_rows[0]
-
-        #TODO
-        # num_rows = 1000000
 
         # Summarize the column sizes and types across the chunks into a single shelve file.
         # We'll add everything to the shelve file for the 0th chunk.
@@ -256,14 +253,14 @@ def parse_file_metadata(comment_prefix, compression_type, delimited_file_path, d
                     # This file might not exist if the number of threads > # of columns.
                     file_path = f"{tmp_dir_path}{i_parallel}_column_sizes"
 
-                    if path.exists(file_path):
+                    if path.exists(get_path_with_possible_suffix(file_path)):
                         with shelve.open(file_path, "r") as chunk_column_sizes_dict:
                             for key, value in chunk_column_sizes_dict.items():
                                 column_sizes_dict[key] = value
 
                     # This file might not exist if the number of threads > # of columns.
-                    file_path = f"{tmp_dir_path}{i_parallel}_column_types"
-                    if path.exists(file_path):
+                    file_path = f"{tmp_dir_path}{i_parallel}_column_types_only"
+                    if path.exists(get_path_with_possible_suffix(file_path)):
                         with shelve.open(file_path, "r") as chunk_column_types_dict:
                             for key, value in chunk_column_types_dict.items():
                                 column_types_dict[key] = value
@@ -275,7 +272,7 @@ def parse_file_metadata(comment_prefix, compression_type, delimited_file_path, d
 
     return num_rows, num_cols, column_names_dict_file_path, column_sizes_dict_file_path, column_types_dict_file_path, column_compression_dicts_dict_file_path
 
-def write_meta_files(tmp_dir_path_colinfo, tmp_dir_path_outputs, ll_in_file_path, column_index_names_dict_file_path, column_sizes_dict_file_path, column_types_dict_file_path, compression_type, column_compression_dicts_file_path, num_rows):
+def write_meta_files(tmp_dir_path_colinfo, tmp_dir_path_outputs, ll_in_file_path, column_index_names_dict_file_path, column_sizes_dict_file_path, column_types_dict_file_path, compression_type, column_compression_dicts_file_path, num_rows, verbose):
     write_str_to_file(f"{tmp_dir_path_outputs}ver", get_current_version_major().encode())
 
     # Calculate and write the column coordinates and max length of these coordinates.
@@ -308,7 +305,7 @@ def write_meta_files(tmp_dir_path_colinfo, tmp_dir_path_outputs, ll_in_file_path
 
             save_string_map(tmp_ll_file_path, ll_out_file_path, f"{tmp_dir_path_outputs}mlll")
 
-            remove(tmp_ll_file_path)
+            remove(get_path_with_possible_suffix(tmp_ll_file_path))
     else:
         # All lines have the same length, so we just use the first one.
         copy(ll_in_file_path, ll_out_file_path)
@@ -338,10 +335,12 @@ def write_meta_files(tmp_dir_path_colinfo, tmp_dir_path_outputs, ll_in_file_path
 def parse_columns_chunk(delimited_file_path, delimiter, comment_prefix, chunk_number, start_column_index, end_column_index, compression_type, tmp_dir_path, verbose):
     tmp_file_prefix = f"{tmp_dir_path}{chunk_number}"
     column_sizes_dict_file_path = f"{tmp_file_prefix}_column_sizes"
+    column_types_dict_file_path = f"{tmp_file_prefix}_column_types_only"
+    column_types_values_dict_file_path = f"{tmp_file_prefix}_column_types_values"
 
     # Initialize the column sizes and types.
     with shelve.open(column_sizes_dict_file_path, "n", writeback=True) as column_sizes_dict:
-        with shelve.open(f"{tmp_file_prefix}_column_types_values", "n", writeback=True) as column_types_values_dict:
+        with shelve.open(column_types_values_dict_file_path, "n", writeback=True) as column_types_values_dict:
             for column_index in range(start_column_index, end_column_index):
                 column_index = str(column_index)
                 column_sizes_dict[column_index] = 0
@@ -353,9 +352,9 @@ def parse_columns_chunk(delimited_file_path, delimiter, comment_prefix, chunk_nu
         skip_line(in_file)
 
         with shelve.open(column_sizes_dict_file_path, "w", writeback=True) as column_sizes_dict:
-            with shelve.open(f"{tmp_file_prefix}_column_types_values", "w", writeback=True) as column_types_values_dict:
-                with shelve.open(f"{tmp_file_prefix}_column_types", "n", writeback=True) as column_types_dict:
-                    # with shelve.open(f"{tmp_file_prefix}_column_compression_dicts", "n", writeback=True) as column_compression_dicts:
+            with shelve.open(column_types_values_dict_file_path, "w", writeback=True) as column_types_values_dict:
+                with shelve.open(column_types_dict_file_path, "n", writeback=True) as column_types_dict:
+                    # with shelve.open(get_path_with_possible_suffix(f"{tmp_file_prefix}_column_compression_dicts"), "n", writeback=True) as column_compression_dicts:
                         num_rows = 0
 
                         # Loop through the file for the specified columns and update the dictionaries.
@@ -379,7 +378,7 @@ def parse_columns_chunk(delimited_file_path, delimiter, comment_prefix, chunk_nu
                             column_index = str(column_index)
                             column_types_dict[column_index] = infer_type_for_column(column_types_values_dict[column_index])
 
-            remove(f"{tmp_file_prefix}_column_types_values")
+            remove(get_path_with_possible_suffix(column_types_values_dict_file_path))
 
                             # if compression_type == "dictionary":
                             #     # Figure out whether we should use categorical compression.
@@ -453,10 +452,12 @@ def write_rows(delimited_file_path, tmp_dir_path_rowinfo, tmp_dir_path_chunks, d
         line_length_results = joblib.Parallel(n_jobs=num_parallel)(joblib.delayed(write_rows_chunk)(delimited_file_path, tmp_dir_path_rowinfo, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes_dict_file_path, compression_dicts_dict_file_path, i, row_chunk[0], row_chunk[1], verbose) for i, row_chunk in enumerate(row_chunk_indices))
 
         if compression_type:
-            with shelve.open(line_lengths_file_path, "w", writeback=True) as main_line_lengths_dict:
+            with shelve.open(f"{line_lengths_file_path}", "w", writeback=True) as main_line_lengths_dict:
                 for chunk_number in range(1, num_parallel):
-                    if path.exists(f"{tmp_dir_path_rowinfo}{chunk_number}"):
-                        with shelve.open(f"{tmp_dir_path_rowinfo}{chunk_number}", "r") as chunk_line_lengths_dict:
+                    row_info_file_path = f"{tmp_dir_path_rowinfo}{chunk_number}"
+
+                    if path.exists(get_path_with_possible_suffix(row_info_file_path)):
+                        with shelve.open(row_info_file_path, "r") as chunk_line_lengths_dict:
                             item_count = 0
 
                             for key, value in chunk_line_lengths_dict.items():
@@ -797,7 +798,7 @@ def build_one_column_index(f4_file_path, index_column, index_file_path, tmp_dir_
 
     index_column_encoded = index_column.encode()
 
-    tmp_index_file_path = f"{tmp_dir_path}tmp.db"
+    tmp_index_file_path = f"{tmp_dir_path}tmp"
     if path.exists(tmp_index_file_path):
         remove(tmp_index_file_path)
 
@@ -822,6 +823,7 @@ def build_one_column_index(f4_file_path, index_column, index_file_path, tmp_dir_
 
         print_message(f"Building temporary index file for {index_column} column in {f4_file_path}.", verbose)
         max_value_length = 0
+        num_non_committed = 0
         for row_index in range(file_data.stat_dict["num_rows"]):
             value = parse_function(file_data, row_index, index_column_coords, bigram_size_dict=None, column_name=index_column_encoded).decode()
 
@@ -830,12 +832,17 @@ def build_one_column_index(f4_file_path, index_column, index_file_path, tmp_dir_
 
             max_value_length = max(max_value_length, len(value))
 
-            # TODO: Insert these in batches?
             sql = f'''INSERT INTO index_data (value)
                       VALUES (?)'''
             execute_sql(conn, sql, (value, ), commit=False)
 
-        conn.commit()
+            num_non_committed += 1
+            if num_non_committed == 10000:
+                conn.commit()
+                num_non_committed = 0
+
+        if num_non_committed > 0:
+            conn.commit()
 
         max_row_index_length = len(str(file_data.stat_dict["num_rows"] - 1))
 
@@ -863,10 +870,12 @@ def build_one_column_index(f4_file_path, index_column, index_file_path, tmp_dir_
                 batch = cursor.fetchmany(batch_size)
                 if not batch:
                     break
+
+                batch_out = b""
                 for row in batch:
-                    # TODO: Build a string for each batch and write that out rather than one value at a time.
-                    out_row = format_string_as_fixed_width(str(row['value']).encode(), max_value_length) + format_string_as_fixed_width(str(row['rowid']).encode(), max_row_index_length)
-                    index_data_file.write(out_row)
+                    batch_out += format_string_as_fixed_width(str(row['value']).encode(), max_value_length) + format_string_as_fixed_width(str(row['rowid']).encode(), max_row_index_length)
+
+                index_data_file.write(batch_out)
 
             cursor.close()
 
@@ -891,17 +900,7 @@ def build_one_column_index(f4_file_path, index_column, index_file_path, tmp_dir_
 
         write_str_to_file(f"{tmp_dir_path_other}cc", cc)
 
-        # if index_column == "Numeric1":
-        #     print(tmp_index_file_path)
-        #     print(sql)
-        #     print(f"{tmp_dir_path_data}0")
-        #     print(cc)
-        #     print(mccl)
-        #
-        #     import sys
-        #     sys.exit(1)
-
-        # copy(tmp_index_file_path, f"/tmp/{index_column}.db")
+        # copy(tmp_index_file_path, f"/tmp/{index_column}")
         remove(tmp_index_file_path)
 
         combine_into_single_file(tmp_dir_path_data, tmp_dir_path_other, index_file_path)
@@ -953,7 +952,7 @@ def build_two_column_index(f4_file_path, index_columns, index_file_path, tmp_dir
     # table_name = f"table_{index_position}"
     # index_name = f"index_{index_position}"
 
-    tmp_index_file_path = f"{tmp_dir_path}tmp.db"
+    tmp_index_file_path = f"{tmp_dir_path}tmp"
     if path.exists(tmp_index_file_path):
         remove(tmp_index_file_path)
 
@@ -966,20 +965,25 @@ def build_two_column_index(f4_file_path, index_columns, index_file_path, tmp_dir
         index_column_coords = parse_data_coords(file_data, [index_column_index_1, index_column_index_2])
         index_column_coords_1 = index_column_coords[0]
         index_column_coords_2 = index_column_coords[1]
-        sql_type_1 = convert_to_sql_type(index_column_type_1)
-        sql_type_2 = convert_to_sql_type(index_column_type_2)
+        # sql_type_1 = convert_to_sql_type(index_column_type_1)
+        # sql_type_2 = convert_to_sql_type(index_column_type_2)
         parse_function = get_parse_row_value_function(file_data)
 
         conn = connect_sql(tmp_index_file_path)
 
+        # sql = f'''CREATE TABLE index_data (
+        #              value1 {sql_type_1} NOT NULL,
+        #              value2 {sql_type_2} NOT NULL
+        #     )'''
         sql = f'''CREATE TABLE index_data (
-                     value1 {sql_type_1} NOT NULL,
-                     value2 {sql_type_2} NOT NULL
+                     value1 TEXT NOT NULL,
+                     value2 TEXT NOT NULL
             )'''
         execute_sql(conn, sql)
 
         max_value1_length = 0
         max_value2_length = 0
+        num_non_committed = 0
 
         print_message(f"Populating index file for {index_file_path}.", verbose)
         for row_index in range(file_data.stat_dict["num_rows"]):
@@ -993,7 +997,13 @@ def build_two_column_index(f4_file_path, index_columns, index_file_path, tmp_dir
                       VALUES (?, ?)'''
             execute_sql(conn, sql, (value1, value2), commit=False)
 
-        conn.commit()
+            num_non_committed += 1
+            if num_non_committed == 10000:
+                conn.commit()
+                num_non_committed = 0
+
+        if num_non_committed > 0:
+            conn.commit()
 
         max_row_index_length = len(str(file_data.stat_dict["num_rows"] - 1))
 
@@ -1001,9 +1011,25 @@ def build_two_column_index(f4_file_path, index_columns, index_file_path, tmp_dir
         if not path.exists(tmp_dir_path_data):
             makedirs(tmp_dir_path_data)
 
-        with open(f"{tmp_dir_path_data}/0", "wb") as index_data_file:
+        with open(f"{tmp_dir_path_data}0", "wb") as index_data_file:
+            sql = 'SELECT rowid - 1 AS rowid, value1, value2 FROM index_data ORDER BY '
+
+            if index_column_type_1 == "s":
+                sql += "value1, "
+            elif index_column_type_1 == "i":
+                sql += "CAST(value1 AS INTEGER), "
+            else:
+                sql += "CAST(value1 AS REAL), "
+
+            if index_column_type_2 == "s":
+                sql += "value2"
+            elif index_column_type_2 == "i":
+                sql += "CAST(value2 AS INTEGER)"
+            else:
+                sql += "CAST(value2 AS REAL)"
+
             cursor = conn.cursor()
-            cursor.execute('SELECT rowid - 1 AS rowid, value1, value2 FROM index_data ORDER BY value1, value2')
+            cursor.execute(sql)
 
             # Fetch rows in batches to prevent using too much memory
             batch_size = 10000
@@ -1011,10 +1037,12 @@ def build_two_column_index(f4_file_path, index_columns, index_file_path, tmp_dir
                 batch = cursor.fetchmany(batch_size)
                 if not batch:
                     break
+
+                batch_out = b""
                 for row in batch:
-                    # TODO: Build a string for each batch and write that out rather than one value at a time.
-                    out_row = format_string_as_fixed_width(str(row['value1']).encode(), max_value1_length) + format_string_as_fixed_width(str(row['value2']).encode(), max_value2_length) + format_string_as_fixed_width(str(row['rowid']).encode(), max_row_index_length)
-                    index_data_file.write(out_row)
+                    batch_out += format_string_as_fixed_width(str(row['value1']).encode(), max_value1_length) + format_string_as_fixed_width(str(row['value2']).encode(), max_value2_length) + format_string_as_fixed_width(str(row['rowid']).encode(), max_row_index_length)
+
+                index_data_file.write(batch_out)
 
             cursor.close()
 
@@ -1027,13 +1055,17 @@ def build_two_column_index(f4_file_path, index_columns, index_file_path, tmp_dir
         write_str_to_file(f"{tmp_dir_path_other}ver", get_current_version_major().encode())
         write_str_to_file(f"{tmp_dir_path_other}ll", str(max_value1_length + max_value2_length + max_row_index_length).encode())
 
-        mccl = max(len(str(max_row_index_length)), len(str(max_value1_length)), len(str(max_value1_length)))
+        coord1 = str(max_value1_length).encode()
+        coord2 = str(max_value1_length + max_value2_length).encode()
+        coord3 = str(max_value1_length + max_value2_length + max_row_index_length).encode()
+
+        mccl = max(len(coord1), len(coord2), len(coord3))
         write_str_to_file(f"{tmp_dir_path_other}mccl", str(mccl).encode())
 
         cc = format_string_as_fixed_width(b"0", mccl)
-        cc += format_string_as_fixed_width(str(max_row_index_length).encode(), mccl)
-        cc += format_string_as_fixed_width(str(max_row_index_length + max_value1_length).encode(), mccl)
-        cc += format_string_as_fixed_width(str(max_row_index_length + max_value1_length + max_value2_length).encode(), mccl)
+        cc += format_string_as_fixed_width(coord1, mccl)
+        cc += format_string_as_fixed_width(coord2, mccl)
+        cc += format_string_as_fixed_width(coord3, mccl)
 
         write_str_to_file(f"{tmp_dir_path_other}cc", cc)
 
@@ -1091,19 +1123,18 @@ def build_two_column_index(f4_file_path, index_columns, index_file_path, tmp_dir
     #
     #     print_message(f"Done building two-column index file for {index_name}.", verbose)
 
-#TODO: Remove this function?
-def customize_index_values_positions(values_positions, column_types, sort_function, custom_index_function):
-    # Iterate through each "column" except the last one (which has row_indices) and convert the data.
-    for i in range(len(column_types)):
-        conversion_function = get_conversion_function(column_types[i])
-
-        # Iterate through each "row" in the data.
-        for j in range(len(values_positions)):
-            values_positions[j][i] = conversion_function(values_positions[j][i])
-            values_positions[j][i] = custom_index_function(values_positions[j][i])
-
-    # Sort the rows.
-    sort_function(values_positions)
+# def customize_index_values_positions(values_positions, column_types, sort_function, custom_index_function):
+#     # Iterate through each "column" except the last one (which has row_indices) and convert the data.
+#     for i in range(len(column_types)):
+#         conversion_function = get_conversion_function(column_types[i])
+#
+#         # Iterate through each "row" in the data.
+#         for j in range(len(values_positions)):
+#             values_positions[j][i] = conversion_function(values_positions[j][i])
+#             values_positions[j][i] = custom_index_function(values_positions[j][i])
+#
+#     # Sort the rows.
+#     sort_function(values_positions)
 
 def write_index_files(dict_file_path, tmp_dir_path_data, tmp_dir_path_prefix_other):
     out_file_path = f"{tmp_dir_path_prefix_other}data"

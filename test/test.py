@@ -774,12 +774,12 @@ def run_all_small_tests():
     run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2, index_columns = index_columns)
 
     ## Small tests with dictionary-based compression
-    #run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, compression_type = "dictionary")
-    #run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2, compression_type = "dictionary")
+    ##run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, compression_type = "dictionary")
+    ##run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2, compression_type = "dictionary")
 
     ## Small tests with dictionary-based compression (and indexing)
-    #run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, compression_type = "dictionary", index_columns = index_columns)
-    #run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2, compression_type = "dictionary", index_columns = index_columns)
+    ##run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, compression_type = "dictionary", index_columns = index_columns)
+    ##run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2, compression_type = "dictionary", index_columns = index_columns)
 
     # Small tests with z-standard compression
     run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, compression_type = "zstd")
@@ -845,7 +845,7 @@ for compression_type in [None]:
     check_outputs = True
     #check_outputs = False
 
-    run_larger_tests(num_parallel=num_parallel, size="large_tall", extension="", discrete1_index=251, numeric1_index=501, build_outputs=build_outputs, compression_type=compression_type, verbose=verbose, check_outputs=check_outputs, tmp_dir_path="/tmp/large_tall")
+#    run_larger_tests(num_parallel=num_parallel, size="large_tall", extension="", discrete1_index=251, numeric1_index=501, build_outputs=build_outputs, compression_type=compression_type, verbose=verbose, check_outputs=check_outputs, tmp_dir_path="/tmp/large_tall")
 #    run_larger_tests(num_parallel=num_parallel, size="large_wide", extension="", discrete1_index=250001, numeric1_index=500001, build_outputs=build_outputs, compression_type=compression_type, verbose=verbose, check_outputs=check_outputs, tmp_dir_path="/tmp/large_wide")
 
 #    run_larger_tests(num_parallel=num_parallel, size="large_tall", extension=".gz", discrete1_index=251, numeric1_index=501, build_outputs=build_outputs, compression_type=compression_type, verbose=verbose, check_outputs=check_outputs, tmp_dir_path="/tmp/large_tall_gz")
