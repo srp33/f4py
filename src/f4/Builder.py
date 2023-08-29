@@ -361,7 +361,7 @@ def parse_columns_chunk(delimited_file_path, delimiter, comment_prefix, chunk_nu
                         for column_index, value in iterate_delimited_file_column_indices(in_file, delimiter, start_column_index, end_column_index):
                             if column_index == start_column_index:
                                 num_rows += 1
-                                print_message(f"Inferring column types in {delimited_file_path} for columns {start_column_index} - {end_column_index - 1}", verbose, num_rows)
+                                print_message(f"Inferring column types and sizes in {delimited_file_path} for columns {start_column_index} - {end_column_index - 1}", verbose, num_rows)
 
                             this_length = len(value)
                             column_index = str(column_index)
@@ -821,7 +821,7 @@ def build_one_column_index(f4_file_path, index_column, index_file_path, tmp_dir_
             )'''
         execute_sql(conn, sql)
 
-        print_message(f"Building temporary index file for {index_column} column in {f4_file_path}.", verbose)
+        print_message(f"Building temporary database for indexing the {index_column} column in {f4_file_path}.", verbose)
         max_value_length = 0
         num_non_committed = 0
         for row_index in range(file_data.stat_dict["num_rows"]):
@@ -837,12 +837,14 @@ def build_one_column_index(f4_file_path, index_column, index_file_path, tmp_dir_
             execute_sql(conn, sql, (value, ), commit=False)
 
             num_non_committed += 1
-            if num_non_committed == 10000:
+            if num_non_committed == 100000:
                 conn.commit()
                 num_non_committed = 0
 
         if num_non_committed > 0:
             conn.commit()
+
+        print_message(f"Querying temporary database for indexing the {index_column} column in {f4_file_path}.", verbose)
 
         max_row_index_length = len(str(file_data.stat_dict["num_rows"] - 1))
 
@@ -865,7 +867,7 @@ def build_one_column_index(f4_file_path, index_column, index_file_path, tmp_dir_
             cursor.execute(sql)
 
             # Fetch rows in batches to prevent using too much memory
-            batch_size = 10000
+            batch_size = 100000
             while True:
                 batch = cursor.fetchmany(batch_size)
                 if not batch:
