@@ -823,7 +823,13 @@ def build_one_column_index(f4_file_path, index_column, index_file_path, tmp_dir_
 
         print_message(f"Building temporary database for indexing the {index_column} column in {f4_file_path}.", verbose)
         max_value_length = 0
-        num_non_committed = 0
+        non_committed_values = []
+        cursor = conn.cursor()
+        cursor.execute('BEGIN TRANSACTION')
+
+        sql = f'''INSERT INTO index_data (value)
+                  VALUES (?)'''
+
         for row_index in range(file_data.stat_dict["num_rows"]):
             value = parse_function(file_data, row_index, index_column_coords, bigram_size_dict=None, column_name=index_column_encoded).decode()
 
@@ -832,17 +838,20 @@ def build_one_column_index(f4_file_path, index_column, index_file_path, tmp_dir_
 
             max_value_length = max(max_value_length, len(value))
 
-            sql = f'''INSERT INTO index_data (value)
-                      VALUES (?)'''
-            execute_sql(conn, sql, (value, ), commit=False)
+            non_committed_values.append(value)
+            if len(non_committed_values) == 100000:
+                cursor.executemany(sql, [(value,) for value in non_committed_values])
+                # execute_sql(conn, sql, (value,), commit=False)
+                #conn.commit()
+                non_committed_values = []
 
-            num_non_committed += 1
-            if num_non_committed == 100000:
-                conn.commit()
-                num_non_committed = 0
+        #TODO: Implement this batch-commit logic for two-column indices
+        #TODO: Add an index? It will be huge, so not sure.
+        if len(non_committed_values) > 0:
+            cursor.executemany(sql, [(value,) for value in non_committed_values])
+            #conn.commit()
 
-        if num_non_committed > 0:
-            conn.commit()
+        cursor.execute('COMMIT')
 
         print_message(f"Querying temporary database for indexing the {index_column} column in {f4_file_path}.", verbose)
 
@@ -872,7 +881,7 @@ def build_one_column_index(f4_file_path, index_column, index_file_path, tmp_dir_
                 batch = cursor.fetchmany(batch_size)
                 if not batch:
                     break
-
+                print_message(f"Batch done", verbose)
                 batch_out = b""
                 for row in batch:
                     batch_out += format_string_as_fixed_width(str(row['value']).encode(), max_value_length) + format_string_as_fixed_width(str(row['rowid']).encode(), max_row_index_length)
@@ -882,6 +891,8 @@ def build_one_column_index(f4_file_path, index_column, index_file_path, tmp_dir_
             cursor.close()
 
         conn.close()
+
+        print_message(f"Done querying temporary database for indexing the {index_column} column in {f4_file_path}.", verbose)
 
         tmp_dir_path_other = f"{tmp_dir_path}other/"
         if not path.exists(tmp_dir_path_other):

@@ -328,6 +328,7 @@ def connect_sql(file_path):
     execute_sql(conn, "PRAGMA cache_size=1000000")
     execute_sql(conn, "PRAGMA temp_store=MEMORY")
     execute_sql(conn, "PRAGMA journal_mode=MEMORY")
+    execute_sql(conn, 'PRAGMA journal_mode=WAL')
 
     return conn
 
