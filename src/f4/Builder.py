@@ -882,15 +882,9 @@ def build_one_column_index(f4_file_path, index_column, index_file_path, tmp_dir_
 
                 if not batch:
                     break
-                print_message(f"TEMP: Saving data for batch", verbose)
-                # batch_out = b""
+
                 for row in batch:
                     index_data_file.write(format_string_as_fixed_width(str(row['value']).encode(), max_value_length) + format_string_as_fixed_width(str(row['rowid']).encode(), max_row_index_length))
-
-                    # batch_out += format_string_as_fixed_width(str(row['value']).encode(), max_value_length) + format_string_as_fixed_width(str(row['rowid']).encode(), max_row_index_length)
-
-                # index_data_file.write(batch_out)
-                print_message(f"TEMP: Done saving data for batch", verbose)
 
             cursor.close()
 
