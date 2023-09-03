@@ -208,7 +208,12 @@ def build_indexes(f4_file_path, index_columns, tmp_dir_path_indexes, verbose=Fal
 #####################################################
 
 def parse_file_metadata(comment_prefix, compression_type, delimited_file_path, delimiter, num_parallel, tmp_dir_path, verbose):
+    print(verbose)
+    print_message("got here", verbose)
+    import sys
+    sys.exit(1)
     # Get column names. Remove any leading or trailing white space around the column names.
+    print_message(f"Parsing column names from {delimited_file_path}", verbose)
     with get_delimited_file_handle(delimited_file_path) as in_file:
         skip_comments(in_file, comment_prefix=comment_prefix)
 
