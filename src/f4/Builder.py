@@ -208,10 +208,6 @@ def build_indexes(f4_file_path, index_columns, tmp_dir_path_indexes, verbose=Fal
 #####################################################
 
 def parse_file_metadata(comment_prefix, compression_type, delimited_file_path, delimiter, num_parallel, tmp_dir_path, verbose):
-    print(verbose)
-    print_message("got here", verbose)
-    import sys
-    sys.exit(1)
     # Get column names. Remove any leading or trailing white space around the column names.
     print_message(f"Parsing column names from {delimited_file_path}", verbose)
     with get_delimited_file_handle(delimited_file_path) as in_file:
@@ -603,6 +599,7 @@ def skip_lines(in_file, num_lines_to_skip):
                 next_text = next_text[newline_index + 1:]
 
 def save_column_names(in_file, column_names_dict, delimiter):
+    print("got to save_column_names")
     chunk_size = 100000
     current_index = in_file.tell()
     previous_text = b""
@@ -611,6 +608,7 @@ def save_column_names(in_file, column_names_dict, delimiter):
     while (newline_index := (next_text := previous_text + in_file.read(chunk_size)).find(b"\n")) == -1:
         if len(next_text) == 0:
             break
+        print(f"got here - {newline_index}")
 
         last_delimiter_index = next_text.rfind(delimiter)
 
