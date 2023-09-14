@@ -608,7 +608,10 @@ def save_column_names(in_file, column_names_dict, delimiter):
     while (newline_index := (next_text := previous_text + in_file.read(chunk_size)).find(b"\n")) == -1:
         if len(next_text) == 0:
             break
-        print(f"got here - {newline_index}")
+        if newline_index > -1:
+            print(f"got here - {newline_index}")
+            import sys
+            sys.exit(1)
 
         last_delimiter_index = next_text.rfind(delimiter)
 
