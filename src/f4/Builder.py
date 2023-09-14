@@ -629,6 +629,7 @@ def save_column_names(in_file, column_names_dict, delimiter):
         column_names_dict[str(current_column_index)] = item
 
     in_file.seek(current_index + newline_index + 1)
+    print("done with save_column_names")
 
 def iterate_delimited_file_column_indices(in_file, delimiter, start_column_index, end_column_index):
     chunk_size = 100000
