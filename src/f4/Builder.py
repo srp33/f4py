@@ -599,7 +599,7 @@ def skip_lines(in_file, num_lines_to_skip):
                 next_text = next_text[newline_index + 1:]
 
 def save_column_names(in_file, column_names_dict, delimiter):
-    print("got to save_column_names")
+    print("got to save_column_names", flush=True)
     chunk_size = 100000
     current_index = in_file.tell()
     previous_text = b""
@@ -609,7 +609,7 @@ def save_column_names(in_file, column_names_dict, delimiter):
         if len(next_text) == 0:
             break
         if newline_index > -1:
-            print(f"got here - {newline_index}")
+            print(f"got here - {newline_index}", flush=True)
             import sys
             sys.exit(1)
 
@@ -629,7 +629,7 @@ def save_column_names(in_file, column_names_dict, delimiter):
         column_names_dict[str(current_column_index)] = item
 
     in_file.seek(current_index + newline_index + 1)
-    print("done with save_column_names")
+    print("done with save_column_names", flush=True)
 
 def iterate_delimited_file_column_indices(in_file, delimiter, start_column_index, end_column_index):
     chunk_size = 100000
