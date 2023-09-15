@@ -627,12 +627,13 @@ def save_column_names(in_file, column_names_dict_file_path, delimiter):
                     current_column_index += 1
                     column_names_dict[str(current_column_index)] = item
 
-                    print(item)
-                    print(len(column_names_dict), tmp_chunk_num)
+                    if tmp_chunk_num % 100 == 0:
+                        print(item)
+                        print(len(column_names_dict), tmp_chunk_num)
 
-                    if len(column_names_dict) >= 10000:
-                        import sys
-                        sys.exit(0)
+                    # if len(column_names_dict) >= 10000:
+                    #     import sys
+                    #     sys.exit(0)
 
         for item in next_text[:newline_index].split(delimiter):
             current_column_index += 1
