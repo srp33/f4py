@@ -605,9 +605,13 @@ def save_column_names(in_file, column_names_dict, delimiter):
     previous_text = b""
     current_column_index = -1
 
+    tmp_chunk_num = 0
     while (newline_index := (next_text := previous_text + in_file.read(chunk_size)).find(b"\n")) == -1:
         if len(next_text) == 0:
             break
+        tmp_chunk_num += 1
+        if tmp_chunk_num % 100 == 0:
+            print(f"Chunk num = {tmp_chunk_num}, {in_file.tell()}, {datetime.now().strftime('%d/%m/%Y %H:%M:%S.%f')}", flush=True)
         if newline_index > -1:
             print(f"got here - {newline_index}", flush=True)
             import sys
