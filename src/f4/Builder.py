@@ -611,7 +611,7 @@ def save_column_names(in_file, column_names_dict, delimiter):
             break
         tmp_chunk_num += 1
         if tmp_chunk_num % 100 == 0:
-            print(f"Chunk num = {tmp_chunk_num}, {in_file.tell()}, {datetime.now().strftime('%d/%m/%Y %H:%M:%S.%f')}", flush=True)
+            print(f"Chunk num = {tmp_chunk_num}, {in_file.tell()}, {datetime.now().strftime('%d/%m/%Y %H:%M:%S.%f')}, next_text: {len(next_text)}, , prev_text: {len(prev_text)}", flush=True)
         if newline_index > -1:
             print(f"got here - {newline_index}", flush=True)
             import sys
