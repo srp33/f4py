@@ -214,12 +214,10 @@ def parse_file_metadata(comment_prefix, compression_type, delimited_file_path, d
         skip_comments(in_file, comment_prefix=comment_prefix)
 
         column_names_dict_file_path = f"{tmp_dir_path}column_names"
-        with shelve.open(column_names_dict_file_path, "n", writeback=True) as column_names_dict:
-            save_column_names(in_file, column_names_dict, delimiter)
-            num_cols = len(column_names_dict)
+        num_cols = save_column_names(in_file, column_names_dict_file_path, delimiter)
 
-    if num_cols == 0:
-        raise Exception(f"No data was detected in {delimited_file_path}.")
+        if num_cols == 0:
+            raise Exception(f"No data was detected in {delimited_file_path}.")
 
     # Iterate through the lines to summarize each column.
     print_message(f"Summarizing each column in {delimited_file_path}", verbose)
@@ -598,44 +596,51 @@ def skip_lines(in_file, num_lines_to_skip):
             else:
                 next_text = next_text[newline_index + 1:]
 
-def save_column_names(in_file, column_names_dict, delimiter):
+def save_column_names(in_file, column_names_dict_file_path, delimiter):
     print("got to save_column_names", flush=True)
     chunk_size = 100000
     current_index = in_file.tell()
     previous_text = b""
     current_column_index = -1
 
-    tmp_chunk_num = 0
-    while (newline_index := (next_text := previous_text + in_file.read(chunk_size)).find(b"\n")) == -1:
-        if len(next_text) == 0:
-            break
-        tmp_chunk_num += 1
-        if tmp_chunk_num % 100 == 0:
-            print(f"Chunk num = {tmp_chunk_num}, {in_file.tell()}, {datetime.now().strftime('%d/%m/%Y %H:%M:%S.%f')}, next_text: {len(next_text)}, , previous_text: {len(previous_text)}", flush=True)
-        # if newline_index > -1:
-        #     print(f"got here - {newline_index}", flush=True)
-        #     import sys
-        #     sys.exit(1)
+    with shelve.open(column_names_dict_file_path, "n", writeback=True) as column_names_dict:
+        tmp_chunk_num = 0
+        while (newline_index := (next_text := previous_text + in_file.read(chunk_size)).find(b"\n")) == -1:
+            if len(next_text) == 0:
+                break
+            tmp_chunk_num += 1
+            if tmp_chunk_num % 100 == 0:
+                print(f"Chunk num = {tmp_chunk_num}, {in_file.tell()}, {datetime.now().strftime('%d/%m/%Y %H:%M:%S.%f')}, next_text: {len(next_text)}, , previous_text: {len(previous_text)}", flush=True)
+            # if newline_index > -1:
+            #     print(f"got here - {newline_index}", flush=True)
+            #     import sys
+            #     sys.exit(1)
 
-        last_delimiter_index = next_text.rfind(delimiter)
+            last_delimiter_index = next_text.rfind(delimiter)
 
-        if last_delimiter_index == -1:
-            previous_text = next_text
-        else:
-            previous_text = next_text[(last_delimiter_index + 1):]
+            if last_delimiter_index == -1:
+                previous_text = next_text
+            else:
+                previous_text = next_text[(last_delimiter_index + 1):]
 
-            for item in next_text[:last_delimiter_index].split(delimiter):
-                current_column_index += 1
-                # column_names_dict[str(current_column_index)] = item
+                for item in next_text[:last_delimiter_index].split(delimiter):
+                    current_column_index += 1
+                    print(item)
+                    print(len(column_names_dict))
+                    import sys
+                    sys.exit(0)
+                    column_names_dict[str(current_column_index)] = item
 
-    for item in next_text[:newline_index].split(delimiter):
-        current_column_index += 1
-        # column_names_dict[str(current_column_index)] = item
+        for item in next_text[:newline_index].split(delimiter):
+            current_column_index += 1
+            column_names_dict[str(current_column_index)] = item
 
-    in_file.seek(current_index + newline_index + 1)
-    print("done with save_column_names", flush=True)
-    import sys
-    sys.exit(1)
+        in_file.seek(current_index + newline_index + 1)
+        print("done with save_column_names", flush=True)
+        import sys
+        sys.exit(1)
+
+        return len(column_names_dict)
 
 def iterate_delimited_file_column_indices(in_file, delimiter, start_column_index, end_column_index):
     chunk_size = 100000
