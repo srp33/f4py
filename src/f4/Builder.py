@@ -628,7 +628,7 @@ def save_column_names(in_file, column_names_dict_file_path, delimiter):
                     column_names_dict[str(current_column_index)] = item
 
                     print(item)
-                    print(len(column_names_dict))
+                    print(len(column_names_dict), tmp_chunk_num)
 
                     if len(column_names_dict) >= 10000:
                         import sys
