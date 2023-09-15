@@ -612,10 +612,10 @@ def save_column_names(in_file, column_names_dict, delimiter):
         tmp_chunk_num += 1
         if tmp_chunk_num % 100 == 0:
             print(f"Chunk num = {tmp_chunk_num}, {in_file.tell()}, {datetime.now().strftime('%d/%m/%Y %H:%M:%S.%f')}, next_text: {len(next_text)}, , previous_text: {len(previous_text)}", flush=True)
-        if newline_index > -1:
-            print(f"got here - {newline_index}", flush=True)
-            import sys
-            sys.exit(1)
+        # if newline_index > -1:
+        #     print(f"got here - {newline_index}", flush=True)
+        #     import sys
+        #     sys.exit(1)
 
         last_delimiter_index = next_text.rfind(delimiter)
 
@@ -626,14 +626,16 @@ def save_column_names(in_file, column_names_dict, delimiter):
 
             for item in next_text[:last_delimiter_index].split(delimiter):
                 current_column_index += 1
-                column_names_dict[str(current_column_index)] = item
+                # column_names_dict[str(current_column_index)] = item
 
     for item in next_text[:newline_index].split(delimiter):
         current_column_index += 1
-        column_names_dict[str(current_column_index)] = item
+        # column_names_dict[str(current_column_index)] = item
 
     in_file.seek(current_index + newline_index + 1)
     print("done with save_column_names", flush=True)
+    import sys
+    sys.exit(1)
 
 def iterate_delimited_file_column_indices(in_file, delimiter, start_column_index, end_column_index):
     chunk_size = 100000
