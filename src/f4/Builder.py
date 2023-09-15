@@ -625,11 +625,14 @@ def save_column_names(in_file, column_names_dict_file_path, delimiter):
 
                 for item in next_text[:last_delimiter_index].split(delimiter):
                     current_column_index += 1
+                    column_names_dict[str(current_column_index)] = item
+
                     print(item)
                     print(len(column_names_dict))
-                    import sys
-                    sys.exit(0)
-                    column_names_dict[str(current_column_index)] = item
+
+                    if len(column_names_dict) >= 100:
+                        import sys
+                        sys.exit(0)
 
         for item in next_text[:newline_index].split(delimiter):
             current_column_index += 1
