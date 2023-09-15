@@ -630,7 +630,7 @@ def save_column_names(in_file, column_names_dict_file_path, delimiter):
                     print(item)
                     print(len(column_names_dict))
 
-                    if len(column_names_dict) >= 100:
+                    if len(column_names_dict) >= 10000:
                         import sys
                         sys.exit(0)
 
