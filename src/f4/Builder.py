@@ -640,10 +640,11 @@ def save_column_names(in_file, column_names_temp_file_path, delimiter):
     cursor.execute('COMMIT')
     conn.close()
 
-    print(current_column_index)
+    print(column_names_temp_file_path)
+    print(current_column_index + 1)
     import sys
     sys.exit()
-    return current_column_index
+    return current_column_index + 1
 
     # with shelve.open(column_names_temp_file_path, "n", writeback=True) as column_names_dict:
     #     while (newline_index := (next_text := previous_text + in_file.read(chunk_size)).find(b"\n")) == -1:
