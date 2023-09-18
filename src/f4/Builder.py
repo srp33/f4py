@@ -214,9 +214,6 @@ def parse_file_metadata(comment_prefix, compression_type, delimited_file_path, d
         skip_comments(in_file, comment_prefix=comment_prefix)
 
         column_names_temp_file_path = f"{tmp_dir_path}column_names"
-        print(column_names_temp_file_path)
-        import sys
-        sys.exit()
         num_cols = save_column_names(in_file, column_names_temp_file_path, delimiter)
 
         if num_cols == 0:
