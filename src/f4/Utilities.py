@@ -316,6 +316,7 @@ def split_integer_list_into_chunks(int_list, num_parallel):
         yield return_indices
 
 def connect_sql(file_path):
+    print(file_path)
     conn = sqlite3.connect(
         file_path,
         isolation_level = None,
