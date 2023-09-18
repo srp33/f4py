@@ -213,8 +213,8 @@ def parse_file_metadata(comment_prefix, compression_type, delimited_file_path, d
     with get_delimited_file_handle(delimited_file_path) as in_file:
         skip_comments(in_file, comment_prefix=comment_prefix)
 
-        column_names_dict_file_path = f"{tmp_dir_path}column_names"
-        num_cols = save_column_names(in_file, column_names_dict_file_path, delimiter)
+        column_names_temp_file_path = f"{tmp_dir_path}column_names"
+        num_cols = save_column_names(in_file, column_names_temp_file_path, delimiter)
 
         if num_cols == 0:
             raise Exception(f"No data was detected in {delimited_file_path}.")
@@ -269,7 +269,7 @@ def parse_file_metadata(comment_prefix, compression_type, delimited_file_path, d
     if num_rows == 0:
         raise Exception(f"A header row but no data rows were detected in {delimited_file_path}")
 
-    return num_rows, num_cols, column_names_dict_file_path, column_sizes_dict_file_path, column_types_dict_file_path, column_compression_dicts_dict_file_path
+    return num_rows, num_cols, column_names_temp_file_path, column_sizes_dict_file_path, column_types_dict_file_path, column_compression_dicts_dict_file_path
 
 def write_meta_files(tmp_dir_path_colinfo, tmp_dir_path_outputs, ll_in_file_path, column_index_names_dict_file_path, column_sizes_dict_file_path, column_types_dict_file_path, compression_type, column_compression_dicts_file_path, num_rows, verbose):
     write_str_to_file(f"{tmp_dir_path_outputs}ver", get_current_version_major().encode())
@@ -596,56 +596,108 @@ def skip_lines(in_file, num_lines_to_skip):
             else:
                 next_text = next_text[newline_index + 1:]
 
-def save_column_names(in_file, column_names_dict_file_path, delimiter):
-    print("got to save_column_names", flush=True)
+def save_column_names(in_file, column_names_temp_file_path, delimiter):
     chunk_size = 100000
     current_index = in_file.tell()
     previous_text = b""
     current_column_index = -1
 
-    # with shelve.open(column_names_dict_file_path, "n", writeback=True) as column_names_dict:
-    with shelve.open(column_names_dict_file_path, "n") as column_names_dict:
-        tmp_chunk_num = 0
-        while (newline_index := (next_text := previous_text + in_file.read(chunk_size)).find(b"\n")) == -1:
-            if len(next_text) == 0:
-                break
-            tmp_chunk_num += 1
-            if tmp_chunk_num % 100 == 0:
-                print(f"Chunk num = {tmp_chunk_num}, {in_file.tell()}, {datetime.now().strftime('%d/%m/%Y %H:%M:%S.%f')}, next_text: {len(next_text)}, previous_text: {len(previous_text)}", flush=True)
-            # if newline_index > -1:
-            #     print(f"got here - {newline_index}", flush=True)
-            #     import sys
-            #     sys.exit(1)
+    conn = connect_sql(column_names_temp_file_path)
+    sql = f'''CREATE TABLE data (
+                 column_name TEXT NOT NULL,
+                 column_index INTEGER NOT NULL,
+        )'''
+    execute_sql(conn, sql)
 
-            #TODO: Do a batch insert with shelve. If that doesn't work, try SQLite.
-            last_delimiter_index = next_text.rfind(delimiter)
+    sql = f'''INSERT INTO data (column_name, column_index)
+              VALUES (?, ?)'''
 
-            if last_delimiter_index == -1:
-                previous_text = next_text
-            else:
-                previous_text = next_text[(last_delimiter_index + 1):]
+    # non_committed_values = []
+    cursor = conn.cursor()
+    cursor.execute('BEGIN TRANSACTION')
 
-                for item in next_text[:last_delimiter_index].split(delimiter):
-                    current_column_index += 1
-                    column_names_dict[str(current_column_index)] = item
+    while (newline_index := (next_text := previous_text + in_file.read(chunk_size)).find(b"\n")) == -1:
+        if len(next_text) == 0:
+            break
 
-                    if tmp_chunk_num % 100 == 0 and len(column_names_dict) % 1000 == 0:
-                        print(item, len(column_names_dict), flush=True)
+        last_delimiter_index = next_text.rfind(delimiter)
 
-                    # if len(column_names_dict) >= 10000:
-                    #     import sys
-                    #     sys.exit(0)
+        if last_delimiter_index == -1:
+            previous_text = next_text
+        else:
+            previous_text = next_text[(last_delimiter_index + 1):]
 
-        for item in next_text[:newline_index].split(delimiter):
-            current_column_index += 1
-            column_names_dict[str(current_column_index)] = item
+            for column_name in next_text[:last_delimiter_index].split(delimiter):
+                current_column_index += 1
+                execute_sql(conn, sql, (column_name, current_column_index,), commit=False)
 
-        in_file.seek(current_index + newline_index + 1)
-        print("done with save_column_names", flush=True)
-        import sys
-        sys.exit(1)
+    for column_name in next_text[:newline_index].split(delimiter):
+        current_column_index += 1
+        execute_sql(conn, sql, (column_name, current_column_index,), commit=False)
 
-        return len(column_names_dict)
+    in_file.seek(current_index + newline_index + 1)
+
+    cursor.execute('COMMIT')
+    conn.close()
+
+    print(current_column_index)
+    import sys
+    sys.exit()
+    return current_column_index
+
+    # with shelve.open(column_names_temp_file_path, "n", writeback=True) as column_names_dict:
+    #     while (newline_index := (next_text := previous_text + in_file.read(chunk_size)).find(b"\n")) == -1:
+    #         if len(next_text) == 0:
+    #             break
+    #
+    #         last_delimiter_index = next_text.rfind(delimiter)
+    #
+    #         if last_delimiter_index == -1:
+    #             previous_text = next_text
+    #         else:
+    #             previous_text = next_text[(last_delimiter_index + 1):]
+    #
+    #             for column_name in next_text[:last_delimiter_index].split(delimiter):
+    #                 current_column_index += 1
+    #                 column_names_dict[str(current_column_index)] = column_name
+    #
+    #     for column_name in next_text[:newline_index].split(delimiter):
+    #         current_column_index += 1
+    #         column_names_dict[str(current_column_index)] = column_name
+    #
+    #     in_file.seek(current_index + newline_index + 1)
+    #
+    #     return len(column_names_dict)
+
+# def save_column_names(in_file, column_names_dict_file_path, delimiter):
+#     chunk_size = 100000
+#     current_index = in_file.tell()
+#     previous_text = b""
+#     current_column_index = -1
+#
+#     with shelve.open(column_names_dict_file_path, "n", writeback=True) as column_names_dict:
+#         while (newline_index := (next_text := previous_text + in_file.read(chunk_size)).find(b"\n")) == -1:
+#             if len(next_text) == 0:
+#                 break
+#
+#             last_delimiter_index = next_text.rfind(delimiter)
+#
+#             if last_delimiter_index == -1:
+#                 previous_text = next_text
+#             else:
+#                 previous_text = next_text[(last_delimiter_index + 1):]
+#
+#                 for item in next_text[:last_delimiter_index].split(delimiter):
+#                     current_column_index += 1
+#                     column_names_dict[str(current_column_index)] = item
+#
+#         for item in next_text[:newline_index].split(delimiter):
+#             current_column_index += 1
+#             column_names_dict[str(current_column_index)] = item
+#
+#         in_file.seek(current_index + newline_index + 1)
+#
+#         return len(column_names_dict)
 
 def iterate_delimited_file_column_indices(in_file, delimiter, start_column_index, end_column_index):
     chunk_size = 100000
