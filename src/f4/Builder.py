@@ -605,7 +605,7 @@ def save_column_names(in_file, column_names_temp_file_path, delimiter):
     conn = connect_sql(column_names_temp_file_path)
     sql = f'''CREATE TABLE data (
                  column_name TEXT NOT NULL,
-                 column_index INTEGER NOT NULL,
+                 column_index INTEGER NOT NULL
         )'''
     execute_sql(conn, sql)
 
