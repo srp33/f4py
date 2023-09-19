@@ -309,15 +309,6 @@ def write_meta_files(tmp_dir_path_colinfo, tmp_dir_path_outputs, ll_in_file_path
         # All lines have the same length, so we just use the first one.
         copy(ll_in_file_path, ll_out_file_path)
 
-    # column_names_index_dict_file_path = f"{tmp_dir_path_colinfo}column_names_index"
-    #
-    # with shelve.open(column_names_temp_file_path, "r") as column_index_names_dict:
-    #     with shelve.open(column_names_index_dict_file_path, "n", writeback=True) as column_names_index_dict:
-    #         for index, column_name in column_index_names_dict.items():
-    #             column_names_index_dict[column_name.decode()] = index
-
-#    write_index_files(column_names_temp_file_path, None, f"{tmp_dir_path_outputs}cn")
-
     out_file_path = f"{tmp_dir_path_outputs}cndata"
 
     max_column_index_length = len(str(num_cols - 1))
@@ -620,6 +611,9 @@ def skip_lines(in_file, num_lines_to_skip):
                 next_text = next_text[newline_index + 1:]
 
 def save_column_names_temp(in_file, column_names_temp_file_path, delimiter):
+    if path.exists(column_names_temp_file_path):
+        remove(column_names_temp_file_path)
+
     chunk_size = 100000
     current_index = in_file.tell()
     previous_text = b""
