@@ -321,15 +321,16 @@ def write_meta_files(tmp_dir_path_colinfo, tmp_dir_path_outputs, ll_in_file_path
     out_file_path = f"{tmp_dir_path_outputs}cndata"
 
     max_column_index_length = len(str(num_cols - 1))
-    sql = 'SELECT column_name, column_index FROM data ORDER BY column_name'
+    sql = '''SELECT column_name, CAST(column_index as TEXT) as column_index
+             FROM data ORDER BY column_name'''
 
     conn = connect_sql(column_names_temp_file_path)
     cursor = conn.cursor()
     cursor.execute(sql)
 
-    for row in cursor.fetchall():
-        with open(out_file_path, "wb") as out_file:
-            out_line = format_string_as_fixed_width(row["column_name"].encode(), max_column_name_length) + format_string_as_fixed_width(row["column_index"].encode(), max_column_index_length)
+    with open(out_file_path, "wb") as out_file:
+        for row in cursor.fetchall():
+            out_line = format_string_as_fixed_width(row["column_name"], max_column_name_length) + format_string_as_fixed_width(row["column_index"].encode(), max_column_index_length)
             out_file.write(out_line)
 
     cursor.close()
