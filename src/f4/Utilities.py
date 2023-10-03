@@ -10,7 +10,7 @@ from math import ceil, log
 from mmap import mmap, PROT_READ, PROT_WRITE
 from msgspec import msgpack
 from operator import eq, ge, gt, le, lt, ne, itemgetter
-from os import makedirs, path, remove
+from os import makedirs, path, remove, rename
 from re import compile
 import shelve
 from shutil import copy, rmtree
@@ -18,11 +18,6 @@ import sqlite3
 import sys
 from tempfile import mkdtemp
 from zstandard import ZstdCompressor, ZstdDecompressor
-
-# We use these dictionaries so that when we store the file map, it takes less space on disk.
-FILE_KEY_ABBREVIATIONS_STATS = {"mccl": 3, "mctl": 6, "cnmccl": 10, "cnll": 11, "mlll": 13}
-FILE_KEY_ABBREVIATIONS_OTHER = {"cmpr": 7, "ver": 12}
-FILE_KEY_ABBREVIATIONS_NOCACHE = {"data": 1, "cc": 2, "ll": 4, "ct": 5, "cndata": 8, "cncc": 9}
 
 def get_current_version():
     return "0.5.3"
@@ -81,15 +76,23 @@ def save_string_map(dict_file_path, out_values_file_path, out_lengths_file_path)
     # column_items = format_column_items(the_list, max_value_length)
     # return b"".join(column_items), max_value_length
 
-def get_max_string_length(the_dict):
+def get_max_string_length(values):
     max_length = 0
 
-    for key, value in the_dict.items():
-        length = len(str(value))
-        if length > max_length:
-            max_length = length
+    for value in values:
+        max_length = max(max_length, len(str(value)))
 
     return max_length
+
+# def get_max_string_length(the_dict):
+#     max_length = 0
+#
+#     for key, value in the_dict.items():
+#         length = len(str(value))
+#         if length > max_length:
+#             max_length = length
+#
+#     return max_length
     # return max([len(x) for x in set(the_list)])
 
 # def format_column_items(the_list, max_value_length):
@@ -213,75 +216,6 @@ def remove_tmp_dir(tmp_dir_path):
             print(e)
             pass
 
-def combine_into_single_file(tmp_dir_path_chunks, tmp_dir_path_outputs, f4_file_path, num_parallel=1):
-    def _create_file_map(start_end_positions):
-        start_end_dict = {}
-
-        for x in start_end_positions:
-            file_name = x[0]
-
-            if file_name in FILE_KEY_ABBREVIATIONS_STATS:
-                start_end_dict[FILE_KEY_ABBREVIATIONS_STATS[file_name]] = x[1:]
-            elif file_name in FILE_KEY_ABBREVIATIONS_OTHER:
-                start_end_dict[FILE_KEY_ABBREVIATIONS_OTHER[file_name]] = x[1:]
-            else:
-                start_end_dict[FILE_KEY_ABBREVIATIONS_NOCACHE[file_name]] = x[1:]
-
-        serialized = serialize(start_end_dict)
-
-        return str(len(serialized)).encode() + b"\n" + serialized
-
-    # Find out which files we have
-    data_files = [x for x in glob(f"{tmp_dir_path_chunks}*")]
-    other_files = [x for x in glob(f"{tmp_dir_path_outputs}*")]
-
-    # Find out how much data we have
-    data_size = sum([path.getsize(f) for f in data_files])
-
-    # Determine start and end position of each file within the combined file
-    start_end_positions = [["data", 0, data_size]]
-    for f in other_files:
-        start = start_end_positions[-1][-1]
-        end = start + path.getsize(f)
-        start_end_positions.append([path.basename(f), start, end])
-
-    # Adjust the start and end positions based on the size of the values in this list.
-    # The size of the file map can change as we advance the positions of the other file contents.
-    original_start_end_positions = deepcopy(start_end_positions)
-    file_map_serialized = _create_file_map(start_end_positions)
-    previous_file_map_length = 0
-
-    while previous_file_map_length != (len(file_map_serialized)):
-        previous_file_map_length = len(file_map_serialized)
-
-        start_end_positions = deepcopy(original_start_end_positions)
-        for i in range(len(start_end_positions)):
-            start_end_positions[i][1] += previous_file_map_length
-            start_end_positions[i][2] += previous_file_map_length
-
-        file_map_serialized = _create_file_map(start_end_positions)
-
-    # Write the output file
-    with open(f4_file_path, "wb") as f4_file:
-        f4_file.write(file_map_serialized)
-
-        add_data_chunks(tmp_dir_path_chunks, f4_file, num_parallel)
-
-        for other_file_path in other_files:
-            f4_file.write(read_str_from_file(other_file_path))
-
-def add_data_chunks(tmp_dir_path_chunks, out_file, num_parallel):
-    for i in range(num_parallel):
-        chunk_file_path = f"{tmp_dir_path_chunks}{i}"
-
-        if not path.exists(chunk_file_path):
-            continue
-
-        with open(chunk_file_path, "rb") as chunk_file:
-            chunk_size = 100000
-            while chunk := chunk_file.read(chunk_size):
-                out_file.write(chunk)
-
 # def get_index_file_path(f4_file_path):
 #     return f"{f4_file_path}.idx.db"
 
@@ -327,7 +261,7 @@ def connect_sql(file_path):
     execute_sql(conn, "PRAGMA synchronous = OFF")
     execute_sql(conn, "PRAGMA cache_size=1000000")
     execute_sql(conn, "PRAGMA temp_store=MEMORY")
-    execute_sql(conn, "PRAGMA journal_mode=MEMORY")
+    # execute_sql(conn, "PRAGMA journal_mode=MEMORY")
     execute_sql(conn, 'PRAGMA journal_mode=WAL')
 
     return conn
