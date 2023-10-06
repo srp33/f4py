@@ -630,7 +630,7 @@ def initialize(data_file_path):
                 stat_dict["num_rows"] = fast_int(data_size / stat_dict["ll"])
 
             cc_size = file_map_dict2["cc"][1] - file_map_dict2["cc"][0]
-            stat_dict["num_cols"] = fast_int(cc_size / stat_dict["mccl"]) - 1
+            stat_dict["num_cols"] = fast_int(cc_size / stat_dict["ccml"]) - 1
 
             yield FileData(data_file_path, mmap_handle, file_map_dict2, stat_dict, other_dict["ver"], decompression_type, decompressor)
 
@@ -723,12 +723,12 @@ def parse_data_coords(file_data, indices, data_prefix=""):
     file_key = "cc"
     data_coords = []
     out_dict = {}
-    mccl = file_data.stat_dict[data_prefix + "mccl"]
+    ccml = file_data.stat_dict[data_prefix + "ccml"]
 
     for index in indices:
-        start_pos = index * mccl
-        next_start_pos = start_pos + mccl
-        further_next_start_pos = next_start_pos + mccl
+        start_pos = index * ccml
+        next_start_pos = start_pos + ccml
+        further_next_start_pos = next_start_pos + ccml
 
         # See if we already have cached the start position.
         if index in out_dict:
@@ -871,14 +871,14 @@ def save_output_line_to_temp(data_file_path, chunk_number, row_indices, parse_fu
 #     #     compression_dict[column_index_name_dict[column_index]] = {}
 #     #     compression_dict[column_index_name_dict[column_index]]["map"] = {}
 
-#     # with Parser(file_path, fixed_file_extensions=[".data", ".cc"], stats_file_extensions=[".ll", ".mccl"]) as parser:
+#     # with Parser(file_path, fixed_file_extensions=[".data", ".cc"], stats_file_extensions=[".ll", ".ccml"]) as parser:
 #     #     coords = parser._parse_data_coords([0, 1, 2])
 #     #     num_rows = fast_int((len(parser.get_file_handle(".data")) + 1) / parser.get_stat(".ll"))
 
 #     #     # Use a set for performance reasons
 #     #     column_indices_set = set(column_index_name_dict.keys())
 
-#     #     with Parser(f"{self.data_file_path}.cmpr", fixed_file_extensions=[".data", ".cc"], stats_file_extensions=[".ll", ".mccl"]) as parser:
+#     #     with Parser(f"{self.data_file_path}.cmpr", fixed_file_extensions=[".data", ".cc"], stats_file_extensions=[".ll", ".ccml"]) as parser:
 #     #         for row_index in range(num_rows):
 #     #             values = parser.__parse_row_values(row_index, coords)
 #     #             column_index = fast_int(values[0])
