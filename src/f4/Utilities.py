@@ -30,8 +30,8 @@ def get_current_version():
 # FILE_KEY_ABBREVIATIONS_STATS = {"mccl": 3, "mctl": 6, "cnmccl": 10, "cnll": 11, "mlll": 13}
 # FILE_KEY_ABBREVIATIONS_OTHER = {"cmpr": 7, "ver": 12}
 # FILE_KEY_ABBREVIATIONS_NOCACHE = {"data": 1, "cc": 2, "ll": 4, "ct": 5, "cndata": 8, "cncc": 9}
-FILE_KEY_ABBREVIATIONS_NOCACHE = {"data": 2, "cc": 3, "cn": 4, "cncc": 5, "ct": 6}
-FILE_KEY_ABBREVIATIONS_STATS = {"ccml": 7, "cnml": 8}
+FILE_KEY_ABBREVIATIONS_NOCACHE = {"data": 2, "cc": 3, "cndata": 4, "cncc": 5, "ct": 6}
+FILE_KEY_ABBREVIATIONS_STATS = {"ccml": 7, "cnccml": 8}
 FILE_KEY_ABBREVIATIONS_OTHER = {"cmpr": 9, "ver": 1}
 
 def get_current_version_major():

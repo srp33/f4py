@@ -624,13 +624,17 @@ def initialize(data_file_path):
                 #     decompression_type = "dictionary"
                 #     decompressor = deserialize(decompression_text)
             else:
-                stat_dict["ll"] = fast_int(mmap_handle[file_map_dict2["ll"][0]:file_map_dict2["ll"][1]])
+                # Calculate line length based on last "cc" value.
+                stat_dict["ll"] = int(mmap_handle[(file_map_dict2["cc"][1] - stat_dict["ccml"]):file_map_dict2["cc"][1]])
 
                 data_size = file_map_dict2["data"][1] - file_map_dict2["data"][0]
                 stat_dict["num_rows"] = fast_int(data_size / stat_dict["ll"])
 
             cc_size = file_map_dict2["cc"][1] - file_map_dict2["cc"][0]
             stat_dict["num_cols"] = fast_int(cc_size / stat_dict["ccml"]) - 1
+
+            # Calculate line length based on last "cncc" value.
+            stat_dict["cnll"] = int(mmap_handle[(file_map_dict2["cncc"][1] - stat_dict["cnccml"]):file_map_dict2["cncc"][1]])
 
             yield FileData(data_file_path, mmap_handle, file_map_dict2, stat_dict, other_dict["ver"], decompression_type, decompressor)
 

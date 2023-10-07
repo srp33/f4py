@@ -70,14 +70,17 @@ def convert_delimited_file(delimited_file_path, f4_file_path, index_columns=[], 
     remove(get_columns_database_path(tmp_dir_path))
     for chunk_number in range(len(column_chunk_indices)):
         remove(get_data_path(tmp_dir_path, "ll", chunk_number))
-        remove(get_data_path(tmp_dir_path, "data", chunk_number))
+
+        if path.exists(get_data_path(tmp_dir_path, "data", chunk_number)):
+            remove(get_data_path(tmp_dir_path, "data", chunk_number))
 
     combine_into_single_file(delimited_file_path, f4_file_path, tmp_dir_path, file_read_chunk_size, verbose)
 
     # if index_columns:
     #     build_indexes(f4_file_path, index_columns, tmp_dir_path_indexes, verbose)
+
     # remove_tmp_dirs(tmp_dir_path)
-    #
+
     # print_message(f"Done converting {delimited_file_path} to {f4_file_path}.", verbose)
 
 def transpose(f4_src_file_path, f4_dest_file_path, num_parallel=1, tmp_dir_path=None, verbose=False):
@@ -392,8 +395,10 @@ def parse_column_info(delimited_file_path, f4_file_path, comment_prefix, delimit
                         WHERE column_index = ?'''
 
     cursor.executemany(sql_infer_type, ((column_index,) for column_index in range(start_column_index, end_column_index)))
-
     cursor.execute('COMMIT')
+
+    cursor.close()
+    conn.close()
 
 # This function is executed in parallel.
 def save_formatted_data(delimited_file_path, f4_file_path, comment_prefix, delimiter, file_read_chunk_size, chunk_number, start_column_index, end_column_index, tmp_dir_path, out_items_chunk_size, verbose):
@@ -460,6 +465,7 @@ def combine_column_databases(delimited_file_path, f4_file_path, column_chunk_ind
         cursor_0.execute(f"DETACH DATABASE db_chunk")
         remove(chunk_file_path)
 
+    cursor_0.close()
     conn_0.close()
 
     rename(get_columns_database_path(tmp_dir_path, 0), get_columns_database_path(tmp_dir_path))
@@ -480,15 +486,15 @@ def save_column_name_info(delimited_file_path, f4_file_path, out_items_chunk_siz
     max_column1_length = get_max_column_length(cursor, "name")
     max_column2_length = get_max_column_length(cursor, "column_index")
 
-    cnml = max(len(str(max_column1_length)), len(str(max_column1_length + max_column2_length)))
-    write_str_to_file(get_data_path(tmp_dir_path, f"cnml"), str(cnml).encode())
+    cnccml = max(len(str(max_column1_length)), len(str(max_column1_length + max_column2_length)))
+    write_str_to_file(get_data_path(tmp_dir_path, f"cnccml"), str(cnccml).encode())
 
-    cncc = format_string_as_fixed_width(b"0", cnml)
-    cncc += format_string_as_fixed_width(str(max_column1_length).encode(), cnml)
-    cncc += format_string_as_fixed_width(str(max_column1_length + max_column2_length).encode(), cnml)
+    cncc = format_string_as_fixed_width(b"0", cnccml)
+    cncc += format_string_as_fixed_width(str(max_column1_length).encode(), cnccml)
+    cncc += format_string_as_fixed_width(str(max_column1_length + max_column2_length).encode(), cnccml)
     write_str_to_file(get_data_path(tmp_dir_path, f"cncc"), cncc)
 
-    with open(get_data_path(tmp_dir_path, f"cn"), "wb") as data_file:
+    with open(get_data_path(tmp_dir_path, f"cndata"), "wb") as data_file:
         sql = f'''SELECT CAST(name AS TEXT) AS name, CAST(column_index AS TEXT) AS column_index
                   FROM columns
                   ORDER BY name'''
@@ -552,21 +558,24 @@ def save_column_coordinates(delimited_file_path, f4_file_path, out_items_chunk_s
               ORDER BY column_index'''
     cursor.execute(sql)
 
-    end_coord = 0
+    coord = 0
     for row in cursor.fetchall():
-        end_coord += row["size"]
+        coord += row["size"]
 
-    max_coord_length = len(str(end_coord))
+    max_coord_length = len(str(coord))
 
     with open(get_data_path(tmp_dir_path, f"cc"), "wb") as data_file:
-        sql = f'''SELECT CAST(size AS TEXT) AS size
+        sql = f'''SELECT size AS size
                   FROM columns
                   ORDER BY column_index'''
         cursor.execute(sql)
 
-        out_list = []
+        coord = 0
+        out_list = [format_string_as_fixed_width(str(coord).encode(), max_coord_length)]
+
         for row in cursor.fetchall():
-            out_list.append(format_string_as_fixed_width(row["size"].encode(), max_coord_length))
+            coord += row["size"]
+            out_list.append(format_string_as_fixed_width(str(coord).encode(), max_coord_length))
 
             if len(out_list) == out_items_chunk_size:
                 data_file.write(b"".join(out_list))
@@ -582,7 +591,7 @@ def save_column_coordinates(delimited_file_path, f4_file_path, out_items_chunk_s
 
 def combine_data_for_column_chunks(delimited_file_path, f4_file_path, column_chunk_indices, tmp_dir_path, verbose):
     if len(column_chunk_indices) == 1:
-        rename(get_data_path(tmp_dir_path, "data", 1), get_data_path(tmp_dir_path, "data", 1))
+        rename(get_data_path(tmp_dir_path, "data", 0), get_data_path(tmp_dir_path, "data"))
         return
 
     print_message(f"Combining data for column chunks when converting {delimited_file_path} to {f4_file_path}.", verbose)
