@@ -3,8 +3,18 @@ import os.path
 from .Utilities import *
 
 #####################################################
-# Filter classes
+# Classes
 #####################################################
+
+class FileData:
+    def __init__(self, data_file_path, file_handle, file_map_dict, stat_dict, version, decompression_type, decompressor):
+        self.data_file_path = data_file_path
+        self.file_handle = file_handle
+        self.file_map_dict = file_map_dict
+        self.stat_dict = stat_dict
+        self.version = version
+        self.decompression_type = decompression_type
+        self.decompressor = decompressor
 
 """
 This class is used to indicate that no filtering should be performed.
@@ -393,16 +403,6 @@ class StringRangeFilter(__RangeFilter):
         filter2 = StringFilter(column_name, le, upper_bound_value)
 
         super().__init__(filter1, filter2)
-
-class FileData:
-    def __init__(self, data_file_path, file_handle, file_map_dict, stat_dict, version, decompression_type, decompressor):
-        self.data_file_path = data_file_path
-        self.file_handle = file_handle
-        self.file_map_dict = file_map_dict
-        self.stat_dict = stat_dict
-        self.version = version
-        self.decompression_type = decompression_type
-        self.decompressor = decompressor
 
 #####################################################
 # Public function(s)
