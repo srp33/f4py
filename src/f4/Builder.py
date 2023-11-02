@@ -70,13 +70,12 @@ def convert_delimited_file(delimited_file_path, f4_file_path, index_columns=[], 
     write_compression_info(tmp_dir_path2, compression_type)
 
     #TODO: Build each index in parallel
-    index_file_path_prefixes = build_indexes(f4_file_path, tmp_dir_path2, index_columns, num_rows, line_length, verbose)
+    if index_columns:
+        build_indexes(f4_file_path, tmp_dir_path2, index_columns, num_rows, line_length, verbose)
 
     remove(get_columns_database_path(tmp_dir_path2))
 
-    #TODO: Somehow save the indexes using the index column names (and reverse status) so we can query based on them.
-    #      Before combining, save a file called "i" that has a map between index number (as the key) and column name(s) and reverse status.
-    combine_into_single_file(delimited_file_path, f4_file_path, tmp_dir_path2, index_file_path_prefixes, file_read_chunk_size, verbose)
+    combine_into_single_file(delimited_file_path, f4_file_path, tmp_dir_path2, file_read_chunk_size, verbose)
 
     print_message(f"Done converting {delimited_file_path} to {f4_file_path}.", verbose)
 
@@ -447,7 +446,7 @@ def combine_column_databases(delimited_file_path, f4_file_path, column_chunk_ind
     for chunk_number in range(1, len(column_chunk_indices)):
         chunk_file_path = get_columns_database_path(tmp_dir_path, chunk_number)
         cursor_0.execute(f"ATTACH DATABASE '{chunk_file_path}' AS db_chunk")
-        cursor_0.execute(f"INSERT INTO columns (column_index, name, size, inferred_type) SELECT column_index, name, size, inferred_type FROM db_chunk.columns")
+        cursor_0.execute(f"INSERT INTO columns (column_index, column_name, size, inferred_type) SELECT column_index, column_name, size, inferred_type FROM db_chunk.columns")
         cursor_0.execute(f"DETACH DATABASE db_chunk")
         remove(chunk_file_path)
 
@@ -480,7 +479,7 @@ def save_column_name_info(delimited_file_path, f4_file_path, out_items_chunk_siz
     cncc += format_string_as_fixed_width(str(max_column1_length + max_column2_length).encode(), cnccml)
     write_str_to_file(get_data_path(tmp_dir_path, f"cncc"), cncc)
 
-    with open(get_data_path(tmp_dir_path, f"cndata"), "wb") as data_file:
+    with open(get_data_path(tmp_dir_path, f"cn"), "wb") as data_file:
         sql = f'''SELECT CAST(column_name AS TEXT) AS column_name, CAST(column_index AS TEXT) AS column_index
                   FROM columns
                   ORDER BY column_name'''
@@ -633,46 +632,54 @@ def write_compression_info(tmp_dir_path, compression_type):
             cmpr_file.write(b"z")
 
 def build_indexes(f4_file_path, tmp_dir_path, index_columns, num_rows, line_length, verbose=False):
-    index_file_path_prefixes = []
+    index_info_dict = {}
 
-    if index_columns:
-        if isinstance(index_columns, str):
-            index_file_path_prefixes = [f"{tmp_dir_path}i"]
-            build_index(f4_file_path, tmp_dir_path, index_file_path_prefixes[0], [index_columns], num_rows, line_length, verbose)
-        elif isinstance(index_columns, list):
-            for i, index_column in enumerate(index_columns):
-                if not isinstance(index_column, str) and not isinstance(index_column, list):
-                    raise Exception("When specifying index columns, they must either be a string or a list.")
+    if isinstance(index_columns, str):
+        reverse_statuses = build_index(f4_file_path, tmp_dir_path, 0, [index_columns], num_rows, line_length, verbose)
+        index_info_dict[(index_columns, reverse_statuses[0])] = 0
+    elif isinstance(index_columns, list):
+        for i, index_column in enumerate(index_columns):
+            if not isinstance(index_column, str) and not isinstance(index_column, list):
+                raise Exception("When specifying index columns, they must either be a string or a list.")
 
-                index_file_path_prefix = f"{tmp_dir_path}i{i}"
-                index_file_path_prefixes.append(index_file_path_prefix)
-                index_column = [index_column] if isinstance(index_column, str) else index_column
+            index_column_list = [index_column] if isinstance(index_column, str) else index_column
+            reverse_statuses = build_index(f4_file_path, tmp_dir_path, i, index_column_list, num_rows, line_length, verbose)
 
-                build_index(f4_file_path, tmp_dir_path, index_file_path_prefix, index_column, num_rows, line_length, verbose)
-        else:
-            raise Exception("When specifying index columns, they must either be a string or a list.")
+            key = []
+            for j, index_column in enumerate(index_column_list):
+                key.append((index_column, reverse_statuses[j]))
+            # key = tuple(sorted(key))
+            key = tuple(key)
 
-    return index_file_path_prefixes
+            index_info_dict[key] = i
+    else:
+        raise Exception("When specifying index columns, they must either be a string or a list.")
 
-def build_index(f4_file_path, tmp_dir_path, out_index_file_path_prefix, index_columns, num_rows, line_length, verbose):
+    write_str_to_file(f"{tmp_dir_path}i", serialize(index_info_dict))
+
+def build_index(f4_file_path, tmp_dir_path, index_number, index_columns, num_rows, line_length, verbose):
     # TODO: Add logic to verify that index_column is valid. Make sure to check for names ending with $ (reverse).
 
     print_message(f"Saving index for {', '.join(index_columns)} column(s) in {f4_file_path}.", verbose)
 
+    out_index_file_path_prefix = f"{tmp_dir_path}i{index_number}"
     ccml = fast_int(read_str_from_file(get_data_path(tmp_dir_path, "ccml")))
 
-    reverse_values = []
+    reverse_statuses = []
     column_indices = []
     column_types = []
     start_coords = []
     end_coords = []
 
     for i, index_column in enumerate(index_columns):
+        if "|" in index_column:
+            raise Exception("You may not index a column with a vertical bar (|) in its name.")
+
         if index_column.endswith("_endswith"):
-            reverse_values.append(True)
+            reverse_statuses.append(True)
             index_columns[i] = index_columns[i].rstrip("_endswith")
         else:
-            reverse_values.append(False)
+            reverse_statuses.append(False)
 
     for i, index_column in enumerate(index_columns):
         column_index, column_type = get_column_index_and_type(tmp_dir_path, index_column)
@@ -709,7 +716,7 @@ def build_index(f4_file_path, tmp_dir_path, out_index_file_path_prefix, index_co
                 for i, index_column in enumerate(index_columns):
                     value = mmap_handle[(start_pos + start_coords[i]):(start_pos + end_coords[i])]
 
-                    if reverse_values[i]:
+                    if reverse_statuses[i]:
                         value = reverse_string(value)
 
                     values.append(value)
@@ -730,10 +737,7 @@ def build_index(f4_file_path, tmp_dir_path, out_index_file_path_prefix, index_co
     max_row_index_length = len(str(num_rows - 1))
 
     with open(f"{out_index_file_path_prefix}", "wb") as index_data_file:
-        # sql_query = f'''SELECT rowid - 1 AS rowid, {', '.join(index_columns)}
-        #                 FROM index_data
-        #                 ORDER BY {index_columns[0]}'''
-        sql_query = f'''SELECT {', '.join(index_columns)}
+        sql_query = f'''SELECT rowid - 1 AS rowid, {', '.join(index_columns)}
                         FROM index_data
                         ORDER BY {index_columns[0]}'''
 
@@ -765,7 +769,7 @@ def build_index(f4_file_path, tmp_dir_path, out_index_file_path_prefix, index_co
                 for i, index_column in enumerate(index_columns):
                     out_row += format_string_as_fixed_width(row[index_column], max_value_lengths[i])
 
-                batch_out.append(out_row + format_string_as_fixed_width(str(row_index).encode(), max_row_index_length))
+                batch_out.append(out_row + format_string_as_fixed_width(str(row["rowid"]).encode(), max_row_index_length))
                 row_index += 1
 
                 if len(batch_out) == batch_size:
@@ -783,19 +787,22 @@ def build_index(f4_file_path, tmp_dir_path, out_index_file_path_prefix, index_co
     coords = []
     for mvl in max_value_lengths:
         coords.append(sum(coords) + mvl)
+    coords.append(coords[-1] + max_row_index_length)
     coords = [str(x).encode() for x in coords]
 
     ccml = max([len(x) for x in coords])
-    write_str_to_file(f"{out_index_file_path_prefix}.ccml", str(ccml).encode())
+    write_str_to_file(f"{out_index_file_path_prefix}ccml", str(ccml).encode())
 
     cc = format_string_as_fixed_width(b"0", ccml)
     for x in coords:
         cc += format_string_as_fixed_width(x, ccml)
-    write_str_to_file(f"{out_index_file_path_prefix}.cc", cc)
+    write_str_to_file(f"{out_index_file_path_prefix}cc", cc)
 
     remove(index_database_file_path)
 
     print_message(f"Done building index file for {index_column} column in {f4_file_path}.", verbose)
+
+    return reverse_statuses
 
 def get_column_index_and_type(tmp_dir_path, index_column_name):
     columns_file_path = get_columns_database_path(tmp_dir_path)
@@ -934,12 +941,12 @@ def get_column_index_coords(tmp_dir_path, index_column_index, ccml):
 #     coord2 = str(max_value_length + max_row_index_length).encode()
 #
 #     ccml = max(len(coord1), len(coord2))
-#     write_str_to_file(f"{out_index_file_path_prefix}.ccml", str(ccml).encode())
+#     write_str_to_file(f"{out_index_file_path_prefix}ccml", str(ccml).encode())
 #
 #     cc = format_string_as_fixed_width(b"0", ccml)
 #     cc += format_string_as_fixed_width(coord1, ccml)
 #     cc += format_string_as_fixed_width(coord2, ccml)
-#     write_str_to_file(f"{out_index_file_path_prefix}.cc", cc)
+#     write_str_to_file(f"{out_index_file_path_prefix}cc", cc)
 #
 #     remove(index_database_file_path)
 #
@@ -1159,7 +1166,10 @@ def get_column_index_coords(tmp_dir_path, index_column_index, ccml):
 #
 #     write_str_to_file(f"{tmp_dir_path_prefix_other}cc", cc)
 
-def combine_into_single_file(delimited_file_path, f4_file_path, tmp_dir_path, index_file_path_prefixes, read_chunk_size, verbose):
+def combine_into_single_file(delimited_file_path, f4_file_path, tmp_dir_path, read_chunk_size, verbose):
+    # print(tmp_dir_path)
+    # import sys
+    # sys.exit(1)
     def _create_file_map(start_end_positions):
         start_end_dict = {}
 
@@ -1173,9 +1183,12 @@ def combine_into_single_file(delimited_file_path, f4_file_path, tmp_dir_path, in
 
     print_message(f"Combining data into a single file for {delimited_file_path} to {f4_file_path}.", verbose)
 
+    write_str_to_file(f"{tmp_dir_path}ver", get_current_version_major().encode())
+
     start_end_positions = []
     for file_path in sorted(glob(f"{tmp_dir_path}*")):
         extension = path.basename(file_path)
+        extension = "" if extension == "data" else extension
         file_size = path.getsize(file_path)
 
         if len(start_end_positions) == 0:
@@ -1209,6 +1222,9 @@ def combine_into_single_file(delimited_file_path, f4_file_path, tmp_dir_path, in
 
         for file_start_end in start_end_positions:
             file_path = f"{tmp_dir_path}{file_start_end[0]}"
+            if file_start_end[0] == "":
+                file_path += "data"
+
             with open(file_path, "rb") as component_file:
                 while chunk := component_file.read(read_chunk_size):
                     f4_file.write(chunk)

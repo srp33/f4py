@@ -237,13 +237,13 @@ def remove_tmp_dir(tmp_dir_path, verbose):
 #         if not path.exists(index_file_path):
 #             return index_file_path
 
-def get_index_file_path(data_file_path, index_name, custom_index_type=None):
-    if custom_index_type == None:
-        index_file_path_extension = f"_{index_name}.idx"
-    else:
-        index_file_path_extension = f"_{index_name}_{custom_index_type}.idx"
-
-    return f"{data_file_path}{index_file_path_extension}"
+# def get_index_file_path(data_file_path, index_name, custom_index_type=None):
+#     if custom_index_type == None:
+#         index_file_path_extension = f"_{index_name}.idx"
+#     else:
+#         index_file_path_extension = f"_{index_name}_{custom_index_type}.idx"
+#
+#     return f"{data_file_path}{index_file_path_extension}"
 
 def split_integer_list_into_chunks(int_list, num_parallel):
     items_per_chunk = ceil(len(int_list) / num_parallel)
