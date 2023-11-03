@@ -815,6 +815,12 @@ def get_column_index_and_type(tmp_dir_path, index_column_name):
                       WHERE TRIM(column_name) = ?''', (index_column_name, ))
 
     row = cursor.fetchone()
+
+    if not row:
+        raise Exception(f"No column exists with the name '{index_column_name}.'")
+        cursor.close()
+        conn.close()
+
     index_column_index = row["column_index"]
     index_column_type = row["inferred_type"]
 
