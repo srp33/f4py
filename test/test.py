@@ -822,7 +822,6 @@ def run_super_tests(num_parallel, size, extension, compression_type, verbose, tm
     for file_path in glob.glob(f"{f4_file_path}*"):
         os.unlink(file_path)
 
-    #f4.convert_delimited_file(in_file_path, f4_file_path, compression_type=compression_type, num_parallel=num_parallel, index_columns=["ID", "Categorical1", "Categorical2"], verbose=verbose, tmp_dir_path=tmp_dir_path)
     f4.convert_delimited_file(in_file_path, f4_file_path, compression_type=compression_type, num_parallel=num_parallel, index_columns=["Categorical1"], verbose=verbose, tmp_dir_path=tmp_dir_path)
 
 #run_all_small_tests()
