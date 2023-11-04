@@ -380,6 +380,8 @@ def parse_column_info(delimited_file_path, f4_file_path, comment_prefix, delimit
     cursor.close()
     conn.close()
 
+    print_message(f"Done parsing column names, sizes, and types when converting {delimited_file_path} to {f4_file_path} for columns {start_column_index} - {end_column_index - 1}.", verbose)
+
 # def calculate_column_coordinates(delimited_file_path, f4_file_path, chunk_number, start_column_index, end_column_index, tmp_dir_path, verbose):
 #     print_message(f"Calculating column coordinates when converting {delimited_file_path} to {f4_file_path} for columns {start_column_index} - {end_column_index - 1}.", verbose)
 #
@@ -434,6 +436,8 @@ def save_formatted_data(delimited_file_path, f4_file_path, comment_prefix, delim
                     data_file.write(b"".join(out_list))
 
     remove_file_with_possible_suffix(sizes_dict_file_path, verbose)
+
+    print_message(f"Done saving formatted data when converting {delimited_file_path} to {f4_file_path} for columns {start_column_index} - {end_column_index - 1}.", verbose)
 
 def combine_column_databases(delimited_file_path, f4_file_path, column_chunk_indices, tmp_dir_path, verbose):
     # Combine the column sizes and types across the chunks.
@@ -1386,6 +1390,8 @@ def save_sizes_lookup_dict(delimited_file_path, f4_file_path, chunk_number, star
 
     cursor.close()
     conn.close()
+
+    print_message(f"Done saving lookup dictionary for sizes when converting {delimited_file_path} to {f4_file_path} for columns {start_column_index} - {end_column_index - 1}.", verbose)
 
 # def write_rows(delimited_file_path, tmp_dir_path_rowinfo, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes_types_temp_file_path, compression_dicts_dict_file_path, num_rows, num_parallel, verbose):
 #     line_lengths_file_path = f"{tmp_dir_path_rowinfo}0"
