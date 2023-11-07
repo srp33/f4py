@@ -32,52 +32,54 @@ def convert_delimited_file(delimited_file_path, f4_file_path, index_columns=[], 
     max_columns_per_chunk = 10000000
     out_items_chunk_size = 10000
 
-    num_cols, max_column_name_length = preview_column_names(delimited_file_path, f4_file_path, comment_prefix, delimiter, file_read_chunk_size, verbose)
-
-    # Determine the number of columns per chunk.
-    num_cols_per_chunk = min(ceil(num_cols / num_parallel), max_columns_per_chunk)
-
-    # Separate the column indices into chunks.
-    column_chunk_indices = generate_column_chunk_ranges(num_cols, num_cols_per_chunk, num_parallel)
+    # num_cols, max_column_name_length = preview_column_names(delimited_file_path, f4_file_path, comment_prefix, delimiter, file_read_chunk_size, verbose)
+    #
+    # # Determine the number of columns per chunk.
+    # num_cols_per_chunk = min(ceil(num_cols / num_parallel), max_columns_per_chunk)
+    #
+    # # Separate the column indices into chunks.
+    # column_chunk_indices = generate_column_chunk_ranges(num_cols, num_cols_per_chunk, num_parallel)
 
     # Create temp directory.
     tmp_dir_path2 = prepare_tmp_dir(tmp_dir_path)
 
-    # Parse column info into a database for each chunk.
-    joblib.Parallel(n_jobs=num_parallel)(joblib.delayed(parse_column_info)(delimited_file_path, f4_file_path, comment_prefix, delimiter, file_read_chunk_size, chunk_number, chunk_indices[0], chunk_indices[1], tmp_dir_path2, out_items_chunk_size, verbose) for chunk_number, chunk_indices in enumerate(column_chunk_indices))
-
-    # Create a lookup dictionary with the sizes (to speed the next steps).
-    # joblib.Parallel(n_jobs=num_parallel)(joblib.delayed(save_sizes_lookup_dict)(delimited_file_path, f4_file_path, chunk_number, chunk_indices[0], chunk_indices[1], tmp_dir_path2, verbose) for chunk_number, chunk_indices in enumerate(column_chunk_indices))
-
-    # Save and format data to a temp file for each column chunk.
-    joblib.Parallel(n_jobs=num_parallel)(joblib.delayed(save_formatted_data)(delimited_file_path, f4_file_path, comment_prefix, delimiter, file_read_chunk_size, chunk_number, chunk_indices[0], chunk_indices[1], tmp_dir_path2, out_items_chunk_size, verbose) for chunk_number, chunk_indices in enumerate(column_chunk_indices))
-
-    # Combine column databases across the chunks.
-    combine_column_databases(delimited_file_path, f4_file_path, column_chunk_indices, tmp_dir_path2, verbose)
-
-    # Create meta files for all columns.
-    save_column_name_info(delimited_file_path, f4_file_path, out_items_chunk_size, tmp_dir_path2, verbose)
-    save_column_types(delimited_file_path, f4_file_path, out_items_chunk_size, tmp_dir_path2, verbose)
-    save_column_coordinates(delimited_file_path, f4_file_path, out_items_chunk_size, tmp_dir_path2, verbose)
-
-    # Merge the saved/formatted data across the column chunks.
-    # Compress as needed. Get number of rows.
-    num_rows, line_length = combine_data_for_column_chunks(delimited_file_path, f4_file_path, column_chunk_indices, tmp_dir_path2, verbose)
-
-    if num_rows == 0:
-        raise Exception(f"A header row but no data rows were detected in {delimited_file_path}.")
-
-    write_compression_info(tmp_dir_path2, compression_type)
+    # # Parse column info into a database for each chunk.
+    # joblib.Parallel(n_jobs=num_parallel)(joblib.delayed(parse_column_info)(delimited_file_path, f4_file_path, comment_prefix, delimiter, file_read_chunk_size, chunk_number, chunk_indices[0], chunk_indices[1], tmp_dir_path2, out_items_chunk_size, verbose) for chunk_number, chunk_indices in enumerate(column_chunk_indices))
+    #
+    # # Create a lookup dictionary with the sizes (to speed the next steps).
+    # # joblib.Parallel(n_jobs=num_parallel)(joblib.delayed(save_sizes_lookup_dict)(delimited_file_path, f4_file_path, chunk_number, chunk_indices[0], chunk_indices[1], tmp_dir_path2, verbose) for chunk_number, chunk_indices in enumerate(column_chunk_indices))
+    #
+    # # Save and format data to a temp file for each column chunk.
+    # joblib.Parallel(n_jobs=num_parallel)(joblib.delayed(save_formatted_data)(delimited_file_path, f4_file_path, comment_prefix, delimiter, file_read_chunk_size, chunk_number, chunk_indices[0], chunk_indices[1], tmp_dir_path2, out_items_chunk_size, verbose) for chunk_number, chunk_indices in enumerate(column_chunk_indices))
+    #
+    # # Combine column databases across the chunks.
+    # combine_column_databases(delimited_file_path, f4_file_path, column_chunk_indices, tmp_dir_path2, verbose)
+    #
+    # # Create meta files for all columns.
+    # save_column_name_info(delimited_file_path, f4_file_path, out_items_chunk_size, tmp_dir_path2, verbose)
+    # save_column_types(delimited_file_path, f4_file_path, out_items_chunk_size, tmp_dir_path2, verbose)
+    # save_column_coordinates(delimited_file_path, f4_file_path, out_items_chunk_size, tmp_dir_path2, verbose)
+    #
+    # # Merge the saved/formatted data across the column chunks.
+    # # Compress as needed. Get number of rows.
+    # num_rows, line_length = combine_data_for_column_chunks(delimited_file_path, f4_file_path, column_chunk_indices, tmp_dir_path2, verbose)
+    #
+    # if num_rows == 0:
+    #     raise Exception(f"A header row but no data rows were detected in {delimited_file_path}.")
+    #
+    # write_compression_info(tmp_dir_path2, compression_type)
 
     #TODO: Build each index in parallel
     if index_columns:
+        num_rows = -1
+        line_length = -1
         build_indexes(f4_file_path, tmp_dir_path2, index_columns, num_rows, line_length, verbose)
 
-    remove(get_columns_database_path(tmp_dir_path2))
-
-    combine_into_single_file(delimited_file_path, f4_file_path, tmp_dir_path2, file_read_chunk_size, verbose)
-
-    print_message(f"Done converting {delimited_file_path} to {f4_file_path}.", verbose)
+    # remove(get_columns_database_path(tmp_dir_path2))
+    #
+    # combine_into_single_file(delimited_file_path, f4_file_path, tmp_dir_path2, file_read_chunk_size, verbose)
+    #
+    # print_message(f"Done converting {delimited_file_path} to {f4_file_path}.", verbose)
 
 #TODO: Move to a different file so we don't need to import Parser?
 def transpose(f4_src_file_path, f4_dest_file_path, num_parallel=1, tmp_dir_path=None, verbose=False):
@@ -664,127 +666,130 @@ def build_indexes(f4_file_path, tmp_dir_path, index_columns, num_rows, line_leng
 def build_index(f4_file_path, tmp_dir_path, index_number, index_columns, num_rows, line_length, verbose):
     # TODO: Add logic to verify that index_column is valid. Make sure to check for names ending with $ (reverse).
 
-    print_message(f"Saving index for {', '.join(index_columns)} column(s) in {f4_file_path}.", verbose)
+    # print_message(f"Saving index for {', '.join(index_columns)} column(s) in {f4_file_path}.", verbose)
 
     out_index_file_path_prefix = f"{tmp_dir_path}i{index_number}"
-    ccml = fast_int(read_str_from_file(get_data_path(tmp_dir_path, "ccml")))
-
-    reverse_statuses = []
-    column_indices = []
+    # ccml = fast_int(read_str_from_file(get_data_path(tmp_dir_path, "ccml")))
+    #
+    # reverse_statuses = []
+    # column_indices = []
     column_types = []
-    start_coords = []
-    end_coords = []
-
-    for i, index_column in enumerate(index_columns):
-        if "|" in index_column:
-            raise Exception("You may not index a column with a vertical bar (|) in its name.")
-
-        if index_column.endswith("_endswith"):
-            reverse_statuses.append(True)
-            index_columns[i] = index_columns[i].rstrip("_endswith")
-        else:
-            reverse_statuses.append(False)
+    # start_coords = []
+    # end_coords = []
+    #
+    # for i, index_column in enumerate(index_columns):
+    #     if "|" in index_column:
+    #         raise Exception("You may not index a column with a vertical bar (|) in its name.")
+    #
+    #     if index_column.endswith("_endswith"):
+    #         reverse_statuses.append(True)
+    #         index_columns[i] = index_columns[i].rstrip("_endswith")
+    #     else:
+    #         reverse_statuses.append(False)
 
     for i, index_column in enumerate(index_columns):
         column_index, column_type = get_column_index_and_type(tmp_dir_path, index_column)
-        column_indices.append(column_index)
+    #     column_indices.append(column_index)
         column_types.append(column_type)
 
-        start_coord, end_coord = get_column_index_coords(tmp_dir_path, column_index, ccml)
-        start_coords.append(start_coord)
-        end_coords.append(end_coord)
-
-    sql_create_table = f'CREATE TABLE index_data ({index_columns[0]} TEXT NOT NULL'
-    for i in range(1, len(index_columns)):
-        sql_create_table += f", {index_columns[i]} TEXT NOT NULL"
-    sql_create_table += ")"
+    #     start_coord, end_coord = get_column_index_coords(tmp_dir_path, column_index, ccml)
+    #     start_coords.append(start_coord)
+    #     end_coords.append(end_coord)
+    #
+    # sql_create_table = f'CREATE TABLE index_data ({index_columns[0]} TEXT NOT NULL'
+    # for i in range(1, len(index_columns)):
+    #     sql_create_table += f", {index_columns[i]} TEXT NOT NULL"
+    # sql_create_table += ")"
 
     index_database_file_path = f"{out_index_file_path_prefix}.db"
     conn = connect_sql(index_database_file_path)
-    execute_sql(conn, sql_create_table)
-
-    max_value_lengths = [0 for x in index_columns]
-    non_committed_values = []
-    cursor = conn.cursor()
-    cursor.execute('BEGIN TRANSACTION')
-
-    sql_insert = f'''INSERT INTO index_data ({', '.join(index_columns)})
-                     VALUES ({', '.join(['?' for x in index_columns])})'''
-
-    with open(get_data_path(tmp_dir_path, "data"), 'rb') as file_handle:
-        with mmap(file_handle.fileno(), 0, prot=PROT_READ) as mmap_handle:
-            for row_index in range(num_rows):
-                start_pos = row_index * line_length
-
-                values = []
-                for i, index_column in enumerate(index_columns):
-                    value = mmap_handle[(start_pos + start_coords[i]):(start_pos + end_coords[i])]
-
-                    if reverse_statuses[i]:
-                        value = reverse_string(value)
-
-                    values.append(value)
-                    max_value_lengths[i] = max(max_value_lengths[i], len(value))
-
-                non_committed_values.append(values)
-                if len(non_committed_values) == 10000:
-                    cursor.executemany(sql_insert, non_committed_values)
-                    non_committed_values = []
-
-            if len(non_committed_values) > 0:
-                cursor.executemany(sql_insert, non_committed_values)
-
-            cursor.execute('COMMIT')
+    # execute_sql(conn, sql_create_table)
+    #
+    # max_value_lengths = [0 for x in index_columns]
+    # non_committed_values = []
+    # cursor = conn.cursor()
+    # cursor.execute('BEGIN TRANSACTION')
+    #
+    # sql_insert = f'''INSERT INTO index_data ({', '.join(index_columns)})
+    #                  VALUES ({', '.join(['?' for x in index_columns])})'''
+    #
+    # with open(get_data_path(tmp_dir_path, "data"), 'rb') as file_handle:
+    #     with mmap(file_handle.fileno(), 0, prot=PROT_READ) as mmap_handle:
+    #         for row_index in range(num_rows):
+    #             start_pos = row_index * line_length
+    #
+    #             values = []
+    #             for i, index_column in enumerate(index_columns):
+    #                 value = mmap_handle[(start_pos + start_coords[i]):(start_pos + end_coords[i])]
+    #
+    #                 if reverse_statuses[i]:
+    #                     value = reverse_string(value)
+    #
+    #                 values.append(value)
+    #                 max_value_lengths[i] = max(max_value_lengths[i], len(value))
+    #
+    #             non_committed_values.append(values)
+    #             if len(non_committed_values) == 10000:
+    #                 cursor.executemany(sql_insert, non_committed_values)
+    #                 non_committed_values = []
+    #
+    #         if len(non_committed_values) > 0:
+    #             cursor.executemany(sql_insert, non_committed_values)
+    #
+    # cursor.execute('COMMIT')
 
     print_message(f"Querying temporary database when indexing the {', '.join(index_columns)} column(s) in {f4_file_path}.", verbose)
 
     max_row_index_length = len(str(num_rows - 1))
 
-    with open(f"{out_index_file_path_prefix}", "wb") as index_data_file:
-        sql_query = f'''SELECT rowid - 1 AS rowid, {', '.join(index_columns)}
-                        FROM index_data
-                        ORDER BY {index_columns[0]}'''
-
-        for i in range(1, len(column_types)):
-            if column_types[i] == "s":
-                sql_query += f", {index_columns[i]}"
-            elif column_types[i] == "i":
-                sql_query += f", CAST({index_columns[i]} AS INTEGER)"
-            else:
-                sql_query += f", CAST({index_columns[i]} AS REAL)"
-
-        cursor = conn.cursor()
-        cursor.execute(sql_query)
-
-        # Fetch rows in batches to prevent using too much memory
-        batch_size = 10000
-        batch_out = []
-        row_index = 0
-
-        while True:
-            batch = cursor.fetchmany(batch_size)
-
-            if not batch:
-                break
-
-            for row in batch:
-                out_row = b""
-
-                for i, index_column in enumerate(index_columns):
-                    out_row += format_string_as_fixed_width(row[index_column], max_value_lengths[i])
-
-                batch_out.append(out_row + format_string_as_fixed_width(str(row["rowid"]).encode(), max_row_index_length))
-                row_index += 1
-
-                if len(batch_out) == batch_size:
-                    index_data_file.write(b"".join(batch_out))
-                    batch_out = []
-
-        if len(batch_out) > 0:
-            index_data_file.write(b"".join(batch_out))
-
-        cursor.close()
+    # with open(f"{out_index_file_path_prefix}", "wb") as index_data_file:
+    #     sql_query = f'''SELECT rowid - 1 AS rowid, {', '.join(index_columns)}
+    #                     FROM index_data
+    #                     ORDER BY {index_columns[0]}'''
+    #
+    #     for i in range(1, len(column_types)):
+    #         if column_types[i] == "s":
+    #             sql_query += f", {index_columns[i]}"
+    #         elif column_types[i] == "i":
+    #             sql_query += f", CAST({index_columns[i]} AS INTEGER)"
+    #         else:
+    #             sql_query += f", CAST({index_columns[i]} AS REAL)"
+    #
+    #     cursor = conn.cursor()
+    #     cursor.execute(sql_query)
+    #
+    #     # Fetch rows in batches to prevent using too much memory
+    #     batch_size = 10000
+    #     batch_out = []
+    #     row_index = 0
+    #
+    #     while True:
+    #         batch = cursor.fetchmany(batch_size)
+    #
+    #         if not batch:
+    #             break
+    #
+    #         for row in batch:
+    #             out_row = b""
+    #
+    #             for i, index_column in enumerate(index_columns):
+    #                 out_row += format_string_as_fixed_width(row[index_column], max_value_lengths[i])
+    #
+    #             batch_out.append(out_row + format_string_as_fixed_width(str(row["rowid"]).encode(), max_row_index_length))
+    #             row_index += 1
+    #
+    #             if len(batch_out) == batch_size:
+    #                 index_data_file.write(b"".join(batch_out))
+    #                 batch_out = []
+    #
+    #     if len(batch_out) > 0:
+    #         index_data_file.write(b"".join(batch_out))
+    #
+    #     cursor.close()
     conn.close()
+    print_message("Got to Builder.py - line 788")
+    import sys
+    sys.exit(1)
 
     print_message(f"Done querying temporary database when indexing the {', '.join(index_columns)} column(s) in {f4_file_path}.", verbose)
 
