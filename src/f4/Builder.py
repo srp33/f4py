@@ -76,7 +76,10 @@ def convert_delimited_file(delimited_file_path, f4_file_path, index_columns=[], 
 
     #TODO: Build each index in parallel
     if index_columns:
-        num_rows = -1
+        ############################################
+        #TODO: #####################################
+        ############################################
+        num_rows = 10000000000
         line_length = -1
         build_indexes(f4_file_path, tmp_dir_path2, index_columns, num_rows, line_length, verbose)
 
@@ -692,6 +695,7 @@ def build_index(f4_file_path, tmp_dir_path, index_number, index_columns, num_row
         else:
             reverse_statuses.append(False)
 
+    print_message("sdfalkjdsfaksdj 1", verbose)
     for i, index_column in enumerate(index_columns):
         column_index, column_type = get_column_index_and_type(tmp_dir_path, index_column)
         column_indices.append(column_index)
@@ -700,6 +704,7 @@ def build_index(f4_file_path, tmp_dir_path, index_number, index_columns, num_row
         start_coord, end_coord = get_column_index_coords(tmp_dir_path, column_index, ccml)
         start_coords.append(start_coord)
         end_coords.append(end_coord)
+    print_message("sdfalkjdsfaksdj 2", verbose)
 
     # sql_create_table = f'CREATE TABLE index_data ({index_columns[0]} TEXT NOT NULL'
     # for i in range(1, len(index_columns)):
@@ -707,7 +712,9 @@ def build_index(f4_file_path, tmp_dir_path, index_number, index_columns, num_row
     # sql_create_table += ")"
 
     index_database_file_path = f"{out_index_file_path_prefix}.db"
+    print_message("sdfalkjdsfaksdj 3", verbose)
     conn = connect_sql(index_database_file_path)
+    print_message("sdfalkjdsfaksdj 4", verbose)
     # execute_sql(conn, sql_create_table)
     #
     # max_value_lengths = [0 for x in index_columns]
@@ -791,6 +798,7 @@ def build_index(f4_file_path, tmp_dir_path, index_number, index_columns, num_row
     #         index_data_file.write(b"".join(batch_out))
     #
     #     cursor.close()
+    print_message("sdfalkjdsfaksdj 5", verbose)
     conn.close()
     print_message("Got to Builder.py - line 788")
     import sys
