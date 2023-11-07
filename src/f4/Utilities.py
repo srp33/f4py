@@ -269,12 +269,13 @@ def connect_sql(file_path):
 
     conn.row_factory = sqlite3.Row
 
-    # execute_sql(conn, "PRAGMA synchronous = OFF")
-    execute_sql(conn, "PRAGMA synchronous = NORMAL")
-    execute_sql(conn, "PRAGMA cache_size=10000")
+    # execute_sql(conn, "PRAGMA synchronous=OFF")
+    execute_sql(conn, "PRAGMA synchronous=NORMAL")
+    execute_sql(conn, "PRAGMA cache_size=100000")
     # execute_sql(conn, "PRAGMA temp_store=MEMORY")
     # execute_sql(conn, "PRAGMA journal_mode=MEMORY")
-    execute_sql(conn, 'PRAGMA journal_mode=WAL')
+    # execute_sql(conn, 'PRAGMA journal_mode=WAL')
+    execute_sql(conn, 'PRAGMA journal_mode=OFF')
 
     return conn
 

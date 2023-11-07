@@ -387,6 +387,7 @@ def parse_column_info(delimited_file_path, f4_file_path, comment_prefix, delimit
     cursor.executemany(sql_infer_type, ((column_index,) for column_index in range(start_column_index, end_column_index)))
 
     cursor.execute('COMMIT')
+    //TODO: Use conn.commit() instead?
     cursor.close()
     conn.close()
 
@@ -706,49 +707,52 @@ def build_index(f4_file_path, tmp_dir_path, index_number, index_columns, num_row
         end_coords.append(end_coord)
     print_message("sdfalkjdsfaksdj 2", verbose)
 
-    # sql_create_table = f'CREATE TABLE index_data ({index_columns[0]} TEXT NOT NULL'
-    # for i in range(1, len(index_columns)):
-    #     sql_create_table += f", {index_columns[i]} TEXT NOT NULL"
-    # sql_create_table += ")"
+    sql_create_table = f'CREATE TABLE index_data ({index_columns[0]} TEXT NOT NULL'
+    for i in range(1, len(index_columns)):
+        sql_create_table += f", {index_columns[i]} TEXT NOT NULL"
+    sql_create_table += ")"
 
     index_database_file_path = f"{out_index_file_path_prefix}.db"
     print_message("sdfalkjdsfaksdj 3", verbose)
     conn = connect_sql(index_database_file_path)
     print_message("sdfalkjdsfaksdj 4", verbose)
-    # execute_sql(conn, sql_create_table)
-    #
-    # max_value_lengths = [0 for x in index_columns]
-    # non_committed_values = []
-    # cursor = conn.cursor()
-    # cursor.execute('BEGIN TRANSACTION')
-    #
-    # sql_insert = f'''INSERT INTO index_data ({', '.join(index_columns)})
-    #                  VALUES ({', '.join(['?' for x in index_columns])})'''
-    #
-    # with open(get_data_path(tmp_dir_path, "data"), 'rb') as file_handle:
-    #     with mmap(file_handle.fileno(), 0, prot=PROT_READ) as mmap_handle:
-    #         for row_index in range(num_rows):
-    #             start_pos = row_index * line_length
-    #
-    #             values = []
-    #             for i, index_column in enumerate(index_columns):
-    #                 value = mmap_handle[(start_pos + start_coords[i]):(start_pos + end_coords[i])]
-    #
-    #                 if reverse_statuses[i]:
-    #                     value = reverse_string(value)
-    #
-    #                 values.append(value)
-    #                 max_value_lengths[i] = max(max_value_lengths[i], len(value))
-    #
-    #             non_committed_values.append(values)
-    #             if len(non_committed_values) == 10000:
-    #                 cursor.executemany(sql_insert, non_committed_values)
-    #                 non_committed_values = []
-    #
-    #         if len(non_committed_values) > 0:
-    #             cursor.executemany(sql_insert, non_committed_values)
-    #
+    execute_sql(conn, sql_create_table)
+
+    max_value_lengths = [0 for x in index_columns]
+    non_committed_values = []
+    cursor = conn.cursor()
+    cursor.execute('BEGIN TRANSACTION')
+
+    sql_insert = f'''INSERT INTO index_data ({', '.join(index_columns)})
+                     VALUES ({', '.join(['?' for x in index_columns])})'''
+
+    with open(get_data_path(tmp_dir_path, "data"), 'rb') as file_handle:
+        with mmap(file_handle.fileno(), 0, prot=PROT_READ) as mmap_handle:
+            for row_index in range(num_rows):
+                start_pos = row_index * line_length
+
+                values = []
+                for i, index_column in enumerate(index_columns):
+                    value = mmap_handle[(start_pos + start_coords[i]):(start_pos + end_coords[i])]
+
+                    if reverse_statuses[i]:
+                        value = reverse_string(value)
+
+                    values.append(value)
+                    max_value_lengths[i] = max(max_value_lengths[i], len(value))
+
+                non_committed_values.append(values)
+                if len(non_committed_values) == 10000:
+                    cursor.executemany(sql_insert, non_committed_values)
+                    non_committed_values = []
+
+            if len(non_committed_values) > 0:
+                cursor.executemany(sql_insert, non_committed_values)
+
     # cursor.execute('COMMIT')
+    conn.commit()
+    conn.close()
+    #TODO: Reopen the connection?
 
     print_message(f"Querying temporary database when indexing the {', '.join(index_columns)} column(s) in {f4_file_path}.", verbose)
 
@@ -798,8 +802,8 @@ def build_index(f4_file_path, tmp_dir_path, index_number, index_columns, num_row
     #         index_data_file.write(b"".join(batch_out))
     #
     #     cursor.close()
-    print_message("sdfalkjdsfaksdj 5", verbose)
-    conn.close()
+    # print_message("sdfalkjdsfaksdj 5", verbose)
+    # conn.close()
     print_message("Got to Builder.py - line 788")
     import sys
     sys.exit(1)
