@@ -387,7 +387,7 @@ def parse_column_info(delimited_file_path, f4_file_path, comment_prefix, delimit
     cursor.executemany(sql_infer_type, ((column_index,) for column_index in range(start_column_index, end_column_index)))
 
     cursor.execute('COMMIT')
-    //TODO: Use conn.commit() instead?
+    #TODO: Use conn.commit() instead?
     cursor.close()
     conn.close()
 
