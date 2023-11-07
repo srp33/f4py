@@ -701,9 +701,6 @@ def build_index(f4_file_path, tmp_dir_path, index_number, index_columns, num_row
         start_coords.append(start_coord)
         end_coords.append(end_coord)
 
-    print_message("Got to here2", verbose)
-    import sys
-    sys.exit(1)
     # sql_create_table = f'CREATE TABLE index_data ({index_columns[0]} TEXT NOT NULL'
     # for i in range(1, len(index_columns)):
     #     sql_create_table += f", {index_columns[i]} TEXT NOT NULL"
