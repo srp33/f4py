@@ -46,7 +46,7 @@ def convert_delimited_file(delimited_file_path, f4_file_path, index_columns=[], 
     ##########################################################
     # TODO
     ##########################################################
-    tmp_dir_path2 = "/tmp/hyper_tall/f4_1e117563-8ff4-43b1-be51-c32925099019"
+    tmp_dir_path2 = "/tmp/hyper_tall/f4_1e117563-8ff4-43b1-be51-c32925099019/"
 
     # # Parse column info into a database for each chunk.
     # joblib.Parallel(n_jobs=num_parallel)(joblib.delayed(parse_column_info)(delimited_file_path, f4_file_path, comment_prefix, delimiter, file_read_chunk_size, chunk_number, chunk_indices[0], chunk_indices[1], tmp_dir_path2, out_items_chunk_size, verbose) for chunk_number, chunk_indices in enumerate(column_chunk_indices))
