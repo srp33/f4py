@@ -41,7 +41,12 @@ def convert_delimited_file(delimited_file_path, f4_file_path, index_columns=[], 
     # column_chunk_indices = generate_column_chunk_ranges(num_cols, num_cols_per_chunk, num_parallel)
 
     # Create temp directory.
-    tmp_dir_path2 = prepare_tmp_dir(tmp_dir_path)
+    #tmp_dir_path2 = prepare_tmp_dir(tmp_dir_path)
+    ##########################################################
+    ##########################################################
+    # TODO
+    ##########################################################
+    tmp_dir_path2 = "/tmp/hyper_tall/f4_1e117563-8ff4-43b1-be51-c32925099019"
 
     # # Parse column info into a database for each chunk.
     # joblib.Parallel(n_jobs=num_parallel)(joblib.delayed(parse_column_info)(delimited_file_path, f4_file_path, comment_prefix, delimiter, file_read_chunk_size, chunk_number, chunk_indices[0], chunk_indices[1], tmp_dir_path2, out_items_chunk_size, verbose) for chunk_number, chunk_indices in enumerate(column_chunk_indices))
@@ -666,31 +671,34 @@ def build_indexes(f4_file_path, tmp_dir_path, index_columns, num_rows, line_leng
 def build_index(f4_file_path, tmp_dir_path, index_number, index_columns, num_rows, line_length, verbose):
     # TODO: Add logic to verify that index_column is valid. Make sure to check for names ending with $ (reverse).
 
-    # print_message(f"Saving index for {', '.join(index_columns)} column(s) in {f4_file_path}.", verbose)
+    print_message(f"Saving index for {', '.join(index_columns)} column(s) in {f4_file_path}.", verbose)
 
     out_index_file_path_prefix = f"{tmp_dir_path}i{index_number}"
-    # ccml = fast_int(read_str_from_file(get_data_path(tmp_dir_path, "ccml")))
-    #
-    # reverse_statuses = []
-    # column_indices = []
+    ccml = fast_int(read_str_from_file(get_data_path(tmp_dir_path, "ccml")))
+
+    reverse_statuses = []
+    column_indices = []
     column_types = []
-    # start_coords = []
-    # end_coords = []
-    #
-    # for i, index_column in enumerate(index_columns):
-    #     if "|" in index_column:
-    #         raise Exception("You may not index a column with a vertical bar (|) in its name.")
-    #
-    #     if index_column.endswith("_endswith"):
-    #         reverse_statuses.append(True)
-    #         index_columns[i] = index_columns[i].rstrip("_endswith")
-    #     else:
-    #         reverse_statuses.append(False)
+    start_coords = []
+    end_coords = []
+
+    for i, index_column in enumerate(index_columns):
+        if "|" in index_column:
+            raise Exception("You may not index a column with a vertical bar (|) in its name.")
+
+        if index_column.endswith("_endswith"):
+            reverse_statuses.append(True)
+            index_columns[i] = index_columns[i].rstrip("_endswith")
+        else:
+            reverse_statuses.append(False)
 
     for i, index_column in enumerate(index_columns):
         column_index, column_type = get_column_index_and_type(tmp_dir_path, index_column)
-    #     column_indices.append(column_index)
+        column_indices.append(column_index)
         column_types.append(column_type)
+    print_message("Got to here", verbose)
+    import sys
+    sys.exit(1)
 
     #     start_coord, end_coord = get_column_index_coords(tmp_dir_path, column_index, ccml)
     #     start_coords.append(start_coord)
