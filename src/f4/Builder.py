@@ -696,14 +696,14 @@ def build_index(f4_file_path, tmp_dir_path, index_number, index_columns, num_row
         column_index, column_type = get_column_index_and_type(tmp_dir_path, index_column)
         column_indices.append(column_index)
         column_types.append(column_type)
-    print_message("Got to here", verbose)
+
+        start_coord, end_coord = get_column_index_coords(tmp_dir_path, column_index, ccml)
+        start_coords.append(start_coord)
+        end_coords.append(end_coord)
+
+    print_message("Got to here2", verbose)
     import sys
     sys.exit(1)
-
-    #     start_coord, end_coord = get_column_index_coords(tmp_dir_path, column_index, ccml)
-    #     start_coords.append(start_coord)
-    #     end_coords.append(end_coord)
-    #
     # sql_create_table = f'CREATE TABLE index_data ({index_columns[0]} TEXT NOT NULL'
     # for i in range(1, len(index_columns)):
     #     sql_create_table += f", {index_columns[i]} TEXT NOT NULL"
