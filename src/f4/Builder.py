@@ -696,7 +696,6 @@ def build_index(f4_file_path, tmp_dir_path, index_number, index_columns, num_row
         else:
             reverse_statuses.append(False)
 
-    print_message("sdfalkjdsfaksdj 1", verbose)
     for i, index_column in enumerate(index_columns):
         column_index, column_type = get_column_index_and_type(tmp_dir_path, index_column)
         column_indices.append(column_index)
@@ -705,26 +704,23 @@ def build_index(f4_file_path, tmp_dir_path, index_number, index_columns, num_row
         start_coord, end_coord = get_column_index_coords(tmp_dir_path, column_index, ccml)
         start_coords.append(start_coord)
         end_coords.append(end_coord)
-    print_message("sdfalkjdsfaksdj 2", verbose)
 
-    sql_create_table = f'CREATE TABLE index_data ({index_columns[0]} TEXT NOT NULL'
-    for i in range(1, len(index_columns)):
-        sql_create_table += f", {index_columns[i]} TEXT NOT NULL"
-    sql_create_table += ")"
-
+    # sql_create_table = f'CREATE TABLE index_data ({index_columns[0]} TEXT NOT NULL'
+    # for i in range(1, len(index_columns)):
+    #     sql_create_table += f", {index_columns[i]} TEXT NOT NULL"
+    # sql_create_table += ")"
+    #
     index_database_file_path = f"{out_index_file_path_prefix}.db"
-    print_message("sdfalkjdsfaksdj 3", verbose)
-    conn = connect_sql(index_database_file_path)
-    print_message("sdfalkjdsfaksdj 4", verbose)
-    execute_sql(conn, sql_create_table)
+    # conn = connect_sql(index_database_file_path)
+    # execute_sql(conn, sql_create_table)
 
     max_value_lengths = [0 for x in index_columns]
-    non_committed_values = []
-    cursor = conn.cursor()
-    cursor.execute('BEGIN TRANSACTION')
-
-    sql_insert = f'''INSERT INTO index_data ({', '.join(index_columns)})
-                     VALUES ({', '.join(['?' for x in index_columns])})'''
+    # non_committed_values = []
+    # cursor = conn.cursor()
+    # cursor.execute('BEGIN TRANSACTION')
+    #
+    # sql_insert = f'''INSERT INTO index_data ({', '.join(index_columns)})
+    #                  VALUES ({', '.join(['?' for x in index_columns])})'''
 
     with open(get_data_path(tmp_dir_path, "data"), 'rb') as file_handle:
         with mmap(file_handle.fileno(), 0, prot=PROT_READ) as mmap_handle:
@@ -741,70 +737,73 @@ def build_index(f4_file_path, tmp_dir_path, index_number, index_columns, num_row
                     values.append(value)
                     max_value_lengths[i] = max(max_value_lengths[i], len(value))
 
-                non_committed_values.append(values)
-                if len(non_committed_values) == 10000:
-                    cursor.executemany(sql_insert, non_committed_values)
-                    non_committed_values = []
-
-            if len(non_committed_values) > 0:
-                cursor.executemany(sql_insert, non_committed_values)
-
-    # cursor.execute('COMMIT')
-    conn.commit()
-    conn.close()
-    #TODO: Reopen the connection?
+    #             non_committed_values.append(values)
+    #             if len(non_committed_values) == 10000:
+    #                 cursor.executemany(sql_insert, non_committed_values)
+    #                 non_committed_values = []
+    #
+    #         if len(non_committed_values) > 0:
+    #             cursor.executemany(sql_insert, non_committed_values)
+    #
+    # conn.commit()
+    # conn.close()
 
     print_message(f"Querying temporary database when indexing the {', '.join(index_columns)} column(s) in {f4_file_path}.", verbose)
 
+    conn = connect_sql(index_database_file_path)
+    print_message("got here 1")
     max_row_index_length = len(str(num_rows - 1))
 
-    # with open(f"{out_index_file_path_prefix}", "wb") as index_data_file:
-    #     sql_query = f'''SELECT rowid - 1 AS rowid, {', '.join(index_columns)}
-    #                     FROM index_data
-    #                     ORDER BY {index_columns[0]}'''
-    #
-    #     for i in range(1, len(column_types)):
-    #         if column_types[i] == "s":
-    #             sql_query += f", {index_columns[i]}"
-    #         elif column_types[i] == "i":
-    #             sql_query += f", CAST({index_columns[i]} AS INTEGER)"
-    #         else:
-    #             sql_query += f", CAST({index_columns[i]} AS REAL)"
-    #
-    #     cursor = conn.cursor()
-    #     cursor.execute(sql_query)
-    #
-    #     # Fetch rows in batches to prevent using too much memory
-    #     batch_size = 10000
-    #     batch_out = []
-    #     row_index = 0
-    #
-    #     while True:
-    #         batch = cursor.fetchmany(batch_size)
-    #
-    #         if not batch:
-    #             break
-    #
-    #         for row in batch:
-    #             out_row = b""
-    #
-    #             for i, index_column in enumerate(index_columns):
-    #                 out_row += format_string_as_fixed_width(row[index_column], max_value_lengths[i])
-    #
-    #             batch_out.append(out_row + format_string_as_fixed_width(str(row["rowid"]).encode(), max_row_index_length))
-    #             row_index += 1
-    #
-    #             if len(batch_out) == batch_size:
-    #                 index_data_file.write(b"".join(batch_out))
-    #                 batch_out = []
-    #
-    #     if len(batch_out) > 0:
-    #         index_data_file.write(b"".join(batch_out))
-    #
-    #     cursor.close()
-    # print_message("sdfalkjdsfaksdj 5", verbose)
-    # conn.close()
-    print_message("Got to Builder.py - line 788")
+    with open(f"{out_index_file_path_prefix}", "wb") as index_data_file:
+        sql_query = f'''SELECT rowid - 1 AS rowid, {', '.join(index_columns)}
+                        FROM index_data
+                        ORDER BY {index_columns[0]}'''
+
+        for i in range(1, len(column_types)):
+            if column_types[i] == "s":
+                sql_query += f", {index_columns[i]}"
+            elif column_types[i] == "i":
+                sql_query += f", CAST({index_columns[i]} AS INTEGER)"
+            else:
+                sql_query += f", CAST({index_columns[i]} AS REAL)"
+
+        print_message("got here 2")
+        cursor = conn.cursor()
+        print_message("got here 3")
+        cursor.execute(sql_query)
+        print_message("got here 4")
+
+        # Fetch rows in batches to prevent using too much memory
+        batch_size = 10000
+        batch_out = []
+        row_index = 0
+
+        while True:
+            batch = cursor.fetchmany(batch_size)
+
+            if not batch:
+                break
+
+            for row in batch:
+                print_message("got here 5")
+                out_row = b""
+
+                for i, index_column in enumerate(index_columns):
+                    out_row += format_string_as_fixed_width(row[index_column], max_value_lengths[i])
+
+        #         batch_out.append(out_row + format_string_as_fixed_width(str(row["rowid"]).encode(), max_row_index_length))
+        #         row_index += 1
+        #
+        #         if len(batch_out) == batch_size:
+        #             index_data_file.write(b"".join(batch_out))
+        #             batch_out = []
+        #
+        # if len(batch_out) > 0:
+        #     index_data_file.write(b"".join(batch_out))
+
+        cursor.close()
+    conn.close()
+    print_message("Got to Builder.py - line 801", verbose)
     import sys
     sys.exit(1)
 
