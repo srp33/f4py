@@ -751,7 +751,7 @@ def build_index(f4_file_path, tmp_dir_path, index_number, index_columns, num_row
     print_message(f"Querying temporary database when indexing the {', '.join(index_columns)} column(s) in {f4_file_path}.", verbose)
 
     conn = connect_sql(index_database_file_path)
-    print_message("got here 1")
+    print_message("got here 1", verbose)
     max_row_index_length = len(str(num_rows - 1))
 
     with open(f"{out_index_file_path_prefix}", "wb") as index_data_file:
@@ -767,11 +767,11 @@ def build_index(f4_file_path, tmp_dir_path, index_number, index_columns, num_row
             else:
                 sql_query += f", CAST({index_columns[i]} AS REAL)"
 
-        print_message("got here 2")
+        print_message("got here 2", verbose)
         cursor = conn.cursor()
-        print_message("got here 3")
+        print_message("got here 3", verbose)
         cursor.execute(sql_query)
-        print_message("got here 4")
+        print_message("got here 4", verbose)
 
         # Fetch rows in batches to prevent using too much memory
         batch_size = 10000
@@ -785,7 +785,7 @@ def build_index(f4_file_path, tmp_dir_path, index_number, index_columns, num_row
                 break
 
             for row in batch:
-                print_message("got here 5")
+                print_message("got here 5", verbose)
                 out_row = b""
 
                 for i, index_column in enumerate(index_columns):
