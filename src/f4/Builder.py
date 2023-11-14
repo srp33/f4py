@@ -396,20 +396,29 @@ def parse_column_info(delimited_file_path, f4_file_path, comment_prefix, delimit
 
 # This function is executed in parallel.
 def save_formatted_data(delimited_file_path, f4_file_path, comment_prefix, delimiter, file_read_chunk_size, chunk_number, start_column_index, end_column_index, tmp_dir_path, out_items_chunk_size, verbose):
-    print_message(f"Saving formatted data when converting {delimited_file_path} to {f4_file_path} for columns {start_column_index} - {end_column_index - 1}.", verbose)
-
     # columns_file_path = get_columns_database_path(tmp_dir_path, chunk_number)
     sizes_dict_file_path = get_sizes_dict_path(tmp_dir_path, chunk_number)
     data_file_path = get_data_path(tmp_dir_path, "data", chunk_number)
     ll_file_path = get_data_path(tmp_dir_path, "ll", chunk_number)
 
     # Create a lookup dictionary with the sizes (to speed the next steps).
-    save_sizes_lookup_dict(delimited_file_path, f4_file_path, chunk_number, start_column_index, end_column_index, tmp_dir_path, verbose)
+    # save_sizes_lookup_dict(delimited_file_path, f4_file_path, chunk_number, start_column_index, end_column_index, tmp_dir_path, verbose)
 
-    line_length = 0
-    with shelve.open(sizes_dict_file_path, "r") as column_sizes_dict:
-        for column_index_str, column_size in column_sizes_dict.items():
-            line_length += column_size
+    print_message(f"Saving formatted data when converting {delimited_file_path} to {f4_file_path} for columns {start_column_index} - {end_column_index - 1}.", verbose)
+
+    columns_file_path = get_columns_database_path(tmp_dir_path, chunk_number)
+    conn = connect_sql(columns_file_path)
+    cursor = conn.cursor()
+
+    cursor.execute('''SELECT SUM(size) AS size
+                      FROM columns
+                      WHERE column_index BETWEEN ? AND ?''', (start_column_index, end_column_index,))
+    line_length = cursor.fetchone()["size"]
+
+    # line_length = 0
+    # with shelve.open(sizes_dict_file_path, "r") as column_sizes_dict:
+    #     for column_index_str, column_size in column_sizes_dict.items():
+    #         line_length += column_size
 
     write_str_to_file(ll_file_path, str(line_length).encode())
 
@@ -417,21 +426,42 @@ def save_formatted_data(delimited_file_path, f4_file_path, comment_prefix, delim
         skip_comments(in_file, comment_prefix)
         skip_line(in_file)  # Header line
 
-        with shelve.open(sizes_dict_file_path, "r") as column_sizes_dict:
-            # Save data.
-            with open(data_file_path, 'wb') as data_file:
-                out_list = []
+        # Save data.
+        with open(data_file_path, 'wb') as data_file:
+            out_list = []
 
-                for column_index, value in iterate_delimited_file_column_indices(in_file, delimiter, file_read_chunk_size, start_column_index, end_column_index):
-                    out_list.append(format_string_as_fixed_width(value, column_sizes_dict[str(column_index)]))
+            for column_index, value in iterate_delimited_file_column_indices(in_file, delimiter, file_read_chunk_size, start_column_index, end_column_index):
+                cursor.execute('''SELECT size
+                                  FROM columns
+                                  WHERE column_index = ?''', (column_index,))
+                column_size = cursor.fetchone()["size"]
 
-                    if len(out_list) == out_items_chunk_size:
-                        data_file.write(b"".join(out_list))
-                        out_list = []
+                out_list.append(format_string_as_fixed_width(value, column_size))
 
-                if len(out_list) > 0:
+                if len(out_list) == out_items_chunk_size:
                     data_file.write(b"".join(out_list))
+                    out_list = []
 
+            if len(out_list) > 0:
+                data_file.write(b"".join(out_list))
+
+        # with shelve.open(sizes_dict_file_path, "r") as column_sizes_dict:
+        #     # Save data.
+        #     with open(data_file_path, 'wb') as data_file:
+        #         out_list = []
+        #
+        #         for column_index, value in iterate_delimited_file_column_indices(in_file, delimiter, file_read_chunk_size, start_column_index, end_column_index):
+        #             out_list.append(format_string_as_fixed_width(value, column_sizes_dict[str(column_index)]))
+        #
+        #             if len(out_list) == out_items_chunk_size:
+        #                 data_file.write(b"".join(out_list))
+        #                 out_list = []
+        #
+        #         if len(out_list) > 0:
+        #             data_file.write(b"".join(out_list))
+
+    cursor.close()
+    conn.close()
     remove_file_with_possible_suffix(sizes_dict_file_path, verbose)
 
     print_message(f"Done saving formatted data when converting {delimited_file_path} to {f4_file_path} for columns {start_column_index} - {end_column_index - 1}.", verbose)
@@ -1368,29 +1398,29 @@ def combine_into_single_file(delimited_file_path, f4_file_path, tmp_dir_path, re
 #                 while chunk := component_file.read(read_chunk_size):
 #                     f4_file.write(chunk)
 
-def save_sizes_lookup_dict(delimited_file_path, f4_file_path, chunk_number, start_column_index, end_column_index, tmp_dir_path, verbose):
-    print_message(f"Saving lookup dictionary for sizes when converting {delimited_file_path} to {f4_file_path} for columns {start_column_index} - {end_column_index - 1}.", verbose)
-
-    columns_file_path = get_columns_database_path(tmp_dir_path, chunk_number)
-    sizes_dict_file_path = get_sizes_dict_path(tmp_dir_path, chunk_number)
-
-    conn = connect_sql(columns_file_path)
-    cursor = conn.cursor()
-
-    # Put the sizes in a shelve dictionary so it is faster to read them.
-    cursor.execute('''SELECT column_index, size
-                      FROM columns
-                      WHERE column_index BETWEEN ? AND ?
-                      ORDER BY column_index''', (start_column_index, end_column_index, ))
-
-    with shelve.open(sizes_dict_file_path, "n", writeback=True) as column_sizes_dict:
-        for row in cursor:
-            column_sizes_dict[str(row["column_index"])] = row["size"]
-
-    cursor.close()
-    conn.close()
-
-    print_message(f"Done saving lookup dictionary for sizes when converting {delimited_file_path} to {f4_file_path} for columns {start_column_index} - {end_column_index - 1}.", verbose)
+# def save_sizes_lookup_dict(delimited_file_path, f4_file_path, chunk_number, start_column_index, end_column_index, tmp_dir_path, verbose):
+#     print_message(f"Saving lookup dictionary for sizes when converting {delimited_file_path} to {f4_file_path} for columns {start_column_index} - {end_column_index - 1}.", verbose)
+#
+#     columns_file_path = get_columns_database_path(tmp_dir_path, chunk_number)
+#     sizes_dict_file_path = get_sizes_dict_path(tmp_dir_path, chunk_number)
+#
+#     conn = connect_sql(columns_file_path)
+#     cursor = conn.cursor()
+#
+#     # Put the sizes in a shelve dictionary so it is faster to read them.
+#     cursor.execute('''SELECT column_index, size
+#                       FROM columns
+#                       WHERE column_index BETWEEN ? AND ?
+#                       ORDER BY column_index''', (start_column_index, end_column_index, ))
+#
+#     with shelve.open(sizes_dict_file_path, "n", writeback=True) as column_sizes_dict:
+#         for row in cursor:
+#             column_sizes_dict[str(row["column_index"])] = row["size"]
+#
+#     cursor.close()
+#     conn.close()
+#
+#     print_message(f"Done saving lookup dictionary for sizes when converting {delimited_file_path} to {f4_file_path} for columns {start_column_index} - {end_column_index - 1}.", verbose)
 
 # def write_rows(delimited_file_path, tmp_dir_path_rowinfo, tmp_dir_path_chunks, delimiter, comment_prefix, compression_type, column_sizes_types_temp_file_path, compression_dicts_dict_file_path, num_rows, num_parallel, verbose):
 #     line_lengths_file_path = f"{tmp_dir_path_rowinfo}0"

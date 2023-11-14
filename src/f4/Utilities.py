@@ -12,7 +12,7 @@ from msgspec import msgpack
 from operator import eq, ge, gt, le, lt, ne, itemgetter
 from os import makedirs, path, remove, rename
 from re import compile
-import shelve
+# import shelve
 from shutil import copy, rmtree
 import sqlite3
 import sys
@@ -46,18 +46,18 @@ def write_str_to_file(file_path, the_string):
     with open(file_path, 'wb') as the_file:
         the_file.write(the_string)
 
-def save_column_coords(column_sizes_dict_file_path, column_coords_dict_file_path):
-    # Calculate the position where each column starts.
-    with shelve.open(column_sizes_dict_file_path, "r") as column_sizes_dict:
-        with shelve.open(column_coords_dict_file_path, "n") as column_coords_dict:
-            cumulative_position = 0
-
-            for column_index in range(len(column_sizes_dict)):
-                column_index = str(column_index)
-                column_coords_dict[column_index] = cumulative_position
-                cumulative_position += column_sizes_dict[column_index]
-
-            column_coords_dict[str(len(column_sizes_dict))] = cumulative_position
+# def save_column_coords(column_sizes_dict_file_path, column_coords_dict_file_path):
+#     # Calculate the position where each column starts.
+#     with shelve.open(column_sizes_dict_file_path, "r") as column_sizes_dict:
+#         with shelve.open(column_coords_dict_file_path, "n") as column_coords_dict:
+#             cumulative_position = 0
+#
+#             for column_index in range(len(column_sizes_dict)):
+#                 column_index = str(column_index)
+#                 column_coords_dict[column_index] = cumulative_position
+#                 cumulative_position += column_sizes_dict[column_index]
+#
+#             column_coords_dict[str(len(column_sizes_dict))] = cumulative_position
 
     # column_start_coords = []
     # cumulative_position = 0
@@ -70,18 +70,18 @@ def save_column_coords(column_sizes_dict_file_path, column_coords_dict_file_path
     #
     # return column_start_coords
 
-def save_string_map(dict_file_path, out_values_file_path, out_lengths_file_path):
-    with shelve.open(dict_file_path, "r") as the_dict:
-        # Find maximum length of value.
-        max_value_length = get_max_string_length(the_dict)
-        write_str_to_file(out_lengths_file_path, str(max_value_length).encode())
-
-        with open(out_values_file_path, "wb") as out_file:
-            formatter = "{:<" + str(max_value_length) + "}"
-
-            for index in range(len(the_dict)):
-                value = the_dict[str(index)]
-                out_file.write(formatter.format(value).encode())
+# def save_string_map(dict_file_path, out_values_file_path, out_lengths_file_path):
+#     with shelve.open(dict_file_path, "r") as the_dict:
+#         # Find maximum length of value.
+#         max_value_length = get_max_string_length(the_dict)
+#         write_str_to_file(out_lengths_file_path, str(max_value_length).encode())
+#
+#         with open(out_values_file_path, "wb") as out_file:
+#             formatter = "{:<" + str(max_value_length) + "}"
+#
+#             for index in range(len(the_dict)):
+#                 value = the_dict[str(index)]
+#                 out_file.write(formatter.format(value).encode())
 
     # # Find maximum length of value.
     # max_value_length = get_max_string_length(the_list)
@@ -89,13 +89,13 @@ def save_string_map(dict_file_path, out_values_file_path, out_lengths_file_path)
     # column_items = format_column_items(the_list, max_value_length)
     # return b"".join(column_items), max_value_length
 
-def get_max_string_length(values):
-    max_length = 0
-
-    for value in values:
-        max_length = max(max_length, len(str(value)))
-
-    return max_length
+# def get_max_string_length(values):
+#     max_length = 0
+#
+#     for value in values:
+#         max_length = max(max_length, len(str(value)))
+#
+#     return max_length
 
 # def get_max_string_length(the_dict):
 #     max_length = 0
@@ -124,27 +124,27 @@ def print_message(message, verbose=False, count=None):
             sys.stderr.write(f"{message} - {datetime.now().strftime('%d/%m/%Y %H:%M:%S.%f')}\n")
             sys.stderr.flush()
 
-def decode_string(x):
-    return x.decode()
+# def decode_string(x):
+#     return x.decode()
 
 def do_nothing(x):
      return(x)
 
-def get_conversion_function(column_type):
-    if column_type == "n": # column name
-        return do_nothing
-    elif column_type == "s":
-        return decode_string
-    elif column_type == "f":
-        return fast_float
-    else:
-        return fast_int
+# def get_conversion_function(column_type):
+#     if column_type == "n": # column name
+#         return do_nothing
+#     elif column_type == "s":
+#         return decode_string
+#     elif column_type == "f":
+#         return fast_float
+#     else:
+#         return fast_int
 
-def sort_first_column(list_of_lists):
-    list_of_lists.sort(key=itemgetter(0))
-
-def sort_first_two_columns(list_of_lists):
-    list_of_lists.sort(key=itemgetter(0, 1))
+# def sort_first_column(list_of_lists):
+#     list_of_lists.sort(key=itemgetter(0))
+#
+# def sort_first_two_columns(list_of_lists):
+#     list_of_lists.sort(key=itemgetter(0, 1))
 
 def reverse_string(s):
     return s[::-1]
@@ -290,13 +290,13 @@ def execute_sql(conn, sql, params=(), commit=True):
 
     return lastrowid
 
-def fetchone_sql(conn, sql, params=()):
-    cursor = conn.cursor()
-    cursor.execute(sql, params)
-    result = cursor.fetchone()
-    cursor.close()
-
-    return result
+# def fetchone_sql(conn, sql, params=()):
+#     cursor = conn.cursor()
+#     cursor.execute(sql, params)
+#     result = cursor.fetchone()
+#     cursor.close()
+#
+#     return result
 
 # def fetchall_sql(conn, sql, params=()):
 #     cursor = conn.cursor()
@@ -306,13 +306,13 @@ def fetchone_sql(conn, sql, params=()):
 #
 #     return result
 
-def convert_to_sql_type(type_abbreviation):
-    if type_abbreviation == "i":
-        return "integer"
-    elif type_abbreviation == "f":
-        return "real"
-    else:
-        return "text"
+# def convert_to_sql_type(type_abbreviation):
+#     if type_abbreviation == "i":
+#         return "integer"
+#     elif type_abbreviation == "f":
+#         return "real"
+#     else:
+#         return "text"
 
 # def convert_operator_to_sql(op):
 #     if op == eq:
