@@ -29,13 +29,14 @@ def convert_delimited_file(delimited_file_path, f4_file_path, index_columns=[], 
 
     # Set constants
     file_read_chunk_size = 100000
-    max_columns_per_chunk = 10000000
+    # max_columns_per_chunk = 10000000
     out_items_chunk_size = 10000
 
     num_cols, max_column_name_length = preview_column_names(delimited_file_path, f4_file_path, comment_prefix, delimiter, file_read_chunk_size, verbose)
 
     # Determine the number of columns per chunk.
-    num_cols_per_chunk = min(ceil(num_cols / num_parallel), max_columns_per_chunk)
+    # num_cols_per_chunk = min(ceil(num_cols / num_parallel), max_columns_per_chunk)
+    num_cols_per_chunk = ceil(num_cols / num_parallel)
 
     # Separate the column indices into chunks.
     column_chunk_indices = generate_column_chunk_ranges(num_cols, num_cols_per_chunk, num_parallel)
