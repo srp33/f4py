@@ -436,9 +436,11 @@ def save_formatted_data(delimited_file_path, f4_file_path, comment_prefix, delim
                     cursor.close()
                     cursor = conn.cursor()
                     cursor.execute('''SELECT size
-                                      FROM columns
-                                      WHERE column_index BETWEEN ? AND ?
-                                      ORDER BY column_index''', (start_column_index, end_column_index,))
+                                      FROM columns''')
+                    # cursor.execute('''SELECT size
+                    #                   FROM columns
+                    #                   WHERE column_index BETWEEN ? AND ?
+                    #                   ORDER BY column_index''', (start_column_index, end_column_index,))
 
                 out_list.append(format_string_as_fixed_width(value, cursor.fetchone()["size"]))
 
