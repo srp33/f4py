@@ -432,12 +432,15 @@ def save_formatted_data(delimited_file_path, f4_file_path, comment_prefix, delim
             out_list = []
 
             for column_index, value in iterate_delimited_file_column_indices(in_file, delimiter, file_read_chunk_size, start_column_index, end_column_index):
-                cursor.execute('''SELECT size
-                                  FROM columns
-                                  WHERE column_index = ?''', (column_index,))
-                column_size = cursor.fetchone()["size"]
+                if column_index == start_column_index:
+                    cursor.close()
+                    cursor = conn.cursor()
+                    cursor.execute('''SELECT size
+                                      FROM columns
+                                      WHERE column_index BETWEEN ? AND ?
+                                      ORDER BY column_index''', (start_column_index, end_column_index,))
 
-                out_list.append(format_string_as_fixed_width(value, column_size))
+                out_list.append(format_string_as_fixed_width(value, cursor.fetchone()["size"]))
 
                 if len(out_list) == out_items_chunk_size:
                     data_file.write(b"".join(out_list))
