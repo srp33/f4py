@@ -341,15 +341,15 @@ def execute_sql(conn, sql, params=(), commit=True):
 #     else:
 #         raise Exception("Found multiple files to remove that matched this pattern: {file_path}*. None were removed.", verbose)
 
-def remove_file_with_possible_suffix(file_path, verbose):
-    if path.exists(file_path):
-        remove(file_path)
-    else:
-        paths = glob(f"{file_path}*")
-
-        if len(paths) == 0:
-            print_message("Did not find any file to remove that matched this pattern: {file_path}*", verbose)
-        elif len(paths) == 1:
-            remove(paths[0])
-        else:
-            print_message("Found multiple files to remove that matched this pattern: {file_path}*. None were removed.", verbose)
+# def remove_file_with_possible_suffix(file_path, verbose):
+#     if path.exists(file_path):
+#         remove(file_path)
+#     else:
+#         paths = glob(f"{file_path}*")
+#
+#         if len(paths) == 0:
+#             print_message(f"Did not find any file to remove that matched this pattern: {file_path}*", verbose)
+#         elif len(paths) == 1:
+#             remove(paths[0])
+#         else:
+#             print_message(f"Found multiple files to remove that matched this pattern: {file_path}*. None were removed.", verbose)

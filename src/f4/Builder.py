@@ -468,7 +468,7 @@ def save_formatted_data(delimited_file_path, f4_file_path, comment_prefix, delim
 
     cursor.close()
     conn.close()
-    remove_file_with_possible_suffix(sizes_dict_file_path, verbose)
+    # remove_file_with_possible_suffix(sizes_dict_file_path, verbose)
 
     print_message(f"Done saving formatted data when converting {delimited_file_path} to {f4_file_path} for columns {start_column_index} - {end_column_index - 1}.", verbose)
 
