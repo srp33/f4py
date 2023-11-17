@@ -522,16 +522,37 @@ def save_column_name_info(delimited_file_path, f4_file_path, out_items_chunk_siz
                   ORDER BY column_name'''
         cursor.execute(sql)
 
-        out_list = []
-        for row in cursor.fetchall():
-            out_list.append(format_string_as_fixed_width(row["column_name"].encode(), max_column1_length) + format_string_as_fixed_width(row["column_index"].encode(), max_column2_length))
+        while True:
+            batch = cursor.fetchmany(out_items_chunk_size)
 
-            if len(out_list) == out_items_chunk_size:
-                data_file.write(b"".join(out_list))
-                out_list = []
+            if not batch:
+                break
 
-        if len(out_list) > 0:
+            out_list = []
+            for row in batch:
+                out_list.append(format_string_as_fixed_width(row["column_name"].encode(), max_column1_length) + format_string_as_fixed_width(row["column_index"].encode(), max_column2_length))
+
             data_file.write(b"".join(out_list))
+
+                # if len(out_list) == out_items_chunk_size:
+                #     data_file.write(b"".join(out_list))
+                #     out_list = []
+
+        # if len(out_list) > 0:
+        #     data_file.write(b"".join(out_list))
+
+
+
+
+        # for row in cursor.fetchall():
+        #     out_list.append(format_string_as_fixed_width(row["column_name"].encode(), max_column1_length) + format_string_as_fixed_width(row["column_index"].encode(), max_column2_length))
+        #
+        #     if len(out_list) == out_items_chunk_size:
+        #         data_file.write(b"".join(out_list))
+        #         out_list = []
+        #
+        # if len(out_list) > 0:
+        #     data_file.write(b"".join(out_list))
 
     cursor.close()
     conn.close()
@@ -555,16 +576,20 @@ def save_column_types(delimited_file_path, f4_file_path, out_items_chunk_size, t
                   ORDER BY column_index'''
         cursor.execute(sql)
 
-        out_list = []
-        for row in cursor.fetchall():
-            out_list.append(format_string_as_fixed_width(row["inferred_type"].encode(), max_type_length))
+        while True:
+            batch = cursor.fetchmany(out_items_chunk_size)
 
-            if len(out_list) == out_items_chunk_size:
-                data_file.write(b"".join(out_list))
-                out_list = []
+            if not batch:
+                break
 
-        if len(out_list) > 0:
+            out_list = []
+            for row in batch:
+                out_list.append(format_string_as_fixed_width(row["inferred_type"].encode(), max_type_length))
+
             data_file.write(b"".join(out_list))
+
+            # if len(out_list) > 0:
+            #     data_file.write(b"".join(out_list))
 
     cursor.close()
     conn.close()
@@ -575,16 +600,21 @@ def save_column_coordinates(delimited_file_path, f4_file_path, out_items_chunk_s
     conn = connect_sql(get_columns_database_path(tmp_dir_path))
     cursor = conn.cursor()
 
-    sql = f'''SELECT size
-              FROM columns
-              ORDER BY column_index'''
+    sql = f'''SELECT SUM(size) AS size
+              FROM columns'''
     cursor.execute(sql)
+    max_coord_length = len(str(cursor.fetchone()["size"]))
 
-    coord = 0
-    for row in cursor.fetchall():
-        coord += row["size"]
-
-    max_coord_length = len(str(coord))
+    # sql = f'''SELECT size
+    #           FROM columns
+    #           ORDER BY column_index'''
+    # cursor.execute(sql)
+    #
+    # coord = 0
+    # for row in cursor.fetchall():
+    #     coord += row["size"]
+    #
+    # max_coord_length = len(str(coord))
 
     with open(get_data_path(tmp_dir_path, f"cc"), "wb") as data_file:
         sql = f'''SELECT size AS size
@@ -593,18 +623,23 @@ def save_column_coordinates(delimited_file_path, f4_file_path, out_items_chunk_s
         cursor.execute(sql)
 
         coord = 0
-        out_list = [format_string_as_fixed_width(str(coord).encode(), max_coord_length)]
+        data_file.write(format_string_as_fixed_width(str(coord).encode(), max_coord_length))
 
-        for row in cursor.fetchall():
-            coord += row["size"]
-            out_list.append(format_string_as_fixed_width(str(coord).encode(), max_coord_length))
+        while True:
+            batch = cursor.fetchmany(out_items_chunk_size)
 
-            if len(out_list) == out_items_chunk_size:
-                data_file.write(b"".join(out_list))
-                out_list = []
+            if not batch:
+                break
 
-        if len(out_list) > 0:
+            out_list = []
+            for row in batch:
+                coord += row["size"]
+                out_list.append(format_string_as_fixed_width(str(coord).encode(), max_coord_length))
+
             data_file.write(b"".join(out_list))
+
+        # if len(out_list) > 0:
+        #     data_file.write(b"".join(out_list))
 
     cursor.close()
     conn.close()
@@ -793,7 +828,6 @@ def build_index(f4_file_path, tmp_dir_path, index_number, index_columns, num_row
 
         # Fetch rows in batches to prevent using too much memory
         batch_size = 10000
-        batch_out = []
         row_index = 0
 
         while True:
@@ -802,6 +836,7 @@ def build_index(f4_file_path, tmp_dir_path, index_number, index_columns, num_row
             if not batch:
                 break
 
+            batch_out = []
             for row in batch:
                 out_row = b""
 
@@ -811,12 +846,15 @@ def build_index(f4_file_path, tmp_dir_path, index_number, index_columns, num_row
                 batch_out.append(out_row + format_string_as_fixed_width(str(row["rowid"]).encode(), max_row_index_length))
                 row_index += 1
 
-                if len(batch_out) == batch_size:
-                    index_data_file.write(b"".join(batch_out))
-                    batch_out = []
-
-        if len(batch_out) > 0:
+                # if len(batch_out) == batch_size:
             index_data_file.write(b"".join(batch_out))
+
+                # if len(batch_out) == batch_size:
+                #     index_data_file.write(b"".join(batch_out))
+                #     batch_out = []
+
+        # if len(batch_out) > 0:
+        #     index_data_file.write(b"".join(batch_out))
 
         cursor.close()
     conn.close()
