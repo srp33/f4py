@@ -430,19 +430,31 @@ def save_formatted_data(delimited_file_path, f4_file_path, comment_prefix, delim
         # Save data.
         with open(data_file_path, 'wb') as data_file:
             out_list = []
+            num_columns_to_parse = end_column_index - start_column_index
+
+            column_size_cache = {}
+            if num_columns_to_parse <= 1000:
+                cursor.close()
+                cursor = conn.cursor()
+                cursor.execute('''SELECT size
+                                  FROM columns''')
+
+                for column_index in range(start_column_index, end_column_index):
+                    column_size_cache[column_index] = cursor.fetchone()["size"]
 
             for column_index, value in iterate_delimited_file_column_indices(in_file, delimiter, file_read_chunk_size, start_column_index, end_column_index):
-                if column_index == start_column_index:
-                    cursor.close()
-                    cursor = conn.cursor()
-                    cursor.execute('''SELECT size
-                                      FROM columns''')
-                    # cursor.execute('''SELECT size
-                    #                   FROM columns
-                    #                   WHERE column_index BETWEEN ? AND ?
-                    #                   ORDER BY column_index''', (start_column_index, end_column_index,))
+                if len(column_size_cache) == 0:
+                    if column_index == start_column_index:
+                        cursor.close()
+                        cursor = conn.cursor()
+                        cursor.execute('''SELECT size
+                                          FROM columns''')
 
-                out_list.append(format_string_as_fixed_width(value, cursor.fetchone()["size"]))
+                    column_size = cursor.fetchone()["size"]
+                else:
+                    column_size = column_size_cache[column_index]
+
+                out_list.append(format_string_as_fixed_width(value, column_size))
 
                 if len(out_list) == out_items_chunk_size:
                     data_file.write(b"".join(out_list))
