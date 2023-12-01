@@ -819,12 +819,27 @@ def run_super_tests(num_parallel, size, extension, compression_type, verbose, tm
     print("-------------------------------------------------------------------")
 
     # Clean up data files if they already exist
-    for file_path in glob.glob(f"{f4_file_path}*"):
-        os.unlink(file_path)
+    #for file_path in glob.glob(f"{f4_file_path}*"):
+    #    os.unlink(file_path)
 
-    f4.convert_delimited_file(in_file_path, f4_file_path, compression_type=compression_type, num_parallel=num_parallel, index_columns=["Categorical1"], verbose=verbose, tmp_dir_path=tmp_dir_path)
+    #f4.convert_delimited_file(in_file_path, f4_file_path, compression_type=compression_type, num_parallel=num_parallel, index_columns=["Categorical1"], verbose=verbose, tmp_dir_path=tmp_dir_path)
 
-run_all_small_tests()
+    f4.query(f4_file_path, f4.StringFilter("ID", operator.eq, "Row1"), ["Categorical1", "Numeric1"], out_file_path, num_parallel=num_parallel, tmp_dir_path=tmp_dir_path)
+    check_results("Filter ID = Row1", read_file_into_lists(out_file_path), [[b"Categorical1", b"Numeric1"], [b"B", b"0.8"]])
+
+    f4.query(f4_file_path, f4.StringFilter("ID", operator.eq, "Row99999"), ["Categorical1", "Numeric1"], out_file_path, num_parallel=num_parallel, tmp_dir_path=tmp_dir_path)
+    check_results("Filter ID = Row99999", read_file_into_lists(out_file_path), [[b"Categorical1", b"Numeric1"], [b"C", b"0.0"]])
+
+    fltr = f4.OrFilter(f4.HeadFilter(1000), f4.TailFilter(1000))
+    fltr = f4.AndFilter(fltr, f4.StringFilter("Categorical1", operator.eq, "B"))
+    fltr = f4.AndFilter(fltr, f4.FloatFilter("Numeric1", operator.eq, 0.3))
+    f4.query(f4_file_path, fltr, ["Categorical1", "Numeric1"], out_file_path, num_parallel=num_parallel, tmp_dir_path=tmp_dir_path)
+    check_results("Complex filter", read_file_into_lists(out_file_path), [[b"Categorical1", b"Numeric1"], [b"C", b"0.0"]])
+
+    print(out_file_path)
+    #os.unlink(out_file_path)
+
+#run_all_small_tests()
 
 #for compression_type in [None, "dictionary", "zstd"]:
 #for compression_type in [None, "zstd"]:
@@ -858,7 +873,7 @@ for compression_type in [None]:
     #f4.inner_join("data/medium.f4", "data/medium.f4", "ID", "/tmp/medium_joined.f4", num_parallel=num_parallel, verbose=verbose)
     #f4.inner_join("data/large_tall.f4", "data/large_wide.f4", "ID", "/tmp/large_joined.f4", num_parallel=num_parallel, verbose=verbose)
 
-#    run_super_tests(num_parallel=num_parallel, size="super_tall", extension=".gz", compression_type=compression_type, verbose=verbose, tmp_dir_path="/tmp/super_tall")
+    run_super_tests(num_parallel=num_parallel, size="super_tall", extension=".gz", compression_type=compression_type, verbose=verbose, tmp_dir_path="/tmp/super_tall")
 #    run_super_tests(num_parallel=num_parallel, size="super_wide", extension=".gz", compression_type=compression_type, verbose=verbose, tmp_dir_path="/tmp/super_wide")
 #    run_super_tests(num_parallel=num_parallel, size="hyper_tall", extension=".gz", compression_type=compression_type, verbose=verbose, tmp_dir_path="/tmp/hyper_tall")
 #    run_super_tests(num_parallel=num_parallel, size="hyper_wide", extension=".gz", compression_type=compression_type, verbose=verbose, tmp_dir_path="/tmp/hyper_wide")
