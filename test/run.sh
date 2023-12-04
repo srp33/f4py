@@ -34,38 +34,12 @@ fi
 #$dockerCommand bash -c "time python3 build_tsv.py 250 250 500 8 1000000 data/large_tall.tsv.gz"
 #$dockerCommand bash -c "time python3 build_tsv.py 250000 250000 500000 8 1000 data/large_wide.tsv.gz"
 
-#####$dockerCommand bash -c "time python3 build_tsv.py 1 0 1 1 100000 data/super_tall.tsv.gz"
-#$dockerCommand bash -c "time python3 build_tsv.py 1 0 1 1 1000000000 data/super_tall.tsv.gz"
-#####$dockerCommand bash -c "time python3 build_tsv.py 100000 0 0 1 2 data/super_wide.tsv.gz"
-#$dockerCommand bash -c "time python3 build_tsv.py 1000000000 0 0 1 2 data/super_wide.tsv.gz"
-#$dockerCommand bash -c "time python3 build_tsv.py 1 0 1 1 10000000000 data/hyper_tall.tsv.gz"
-#$dockerCommand bash -c "time python3 build_tsv.py 10000000000 0 0 1 2 data/hyper_wide.tsv.gz"
-
-$dockerCommand bash -c "zcat data/super_tall.tsv.gz | head -n 1000 > /tmp/a"
-$dockerCommand bash -c "zcat data/super_tall.tsv.gz | tail -n 1000 > /tmp/b"
-$dockerCommand bash -c "cat /tmp/a /tmp/b | gzip > data/super_tall_check.tsv.gz"
-
-$dockerCommand bash -c "zcat data/super_wide.tsv.gz | cut -d$'\t' -f 1-1001 > /tmp/a"
-$dockerCommand bash -c "zcat data/super_wide.tsv.gz | head -n 1 | tr -cd '\t' | wc -c > /tmp/b"
-num_cols=$(cat /tmp/b)
-num_cols=$((num_cols + 1))
-start_index=$((num_cols - 999))
-$dockerCommand bash -c "zcat data/super_wide.tsv.gz | cut -d$'\t' -f ${start_index}-${num_cols} > /tmp/c"
-$dockerCommand bash -c "paste -d '' /tmp/a /tmp/c | gzip > data/super_wide_check.tsv.gz"
-
-$dockerCommand bash -c "zcat data/hyper_tall.tsv.gz | head -n 1000 > /tmp/a"
-$dockerCommand bash -c "zcat data/hyper_tall.tsv.gz | tail -n 1000 > /tmp/b"
-$dockerCommand bash -c "cat /tmp/a /tmp/b | gzip > data/hyper_tall_check.tsv.gz"
-
-$dockerCommand bash -c "zcat data/hyper_wide.tsv.gz | cut -d$'\t' -f 1-1001 > /tmp/a"
-$dockerCommand bash -c "zcat data/hyper_wide.tsv.gz | head -n 1 | tr -cd '\t' | wc -c > /tmp/b"
-num_cols=$(cat /tmp/b)
-num_cols=$((num_cols + 1))
-start_index=$((num_cols - 999))
-$dockerCommand bash -c "zcat data/hyper_wide.tsv.gz | cut -d$'\t' -f ${start_index}-${num_cols} > /tmp/c"
-$dockerCommand bash -c "paste -d '' /tmp/a /tmp/c | gzip > data/hyper_wide_check.tsv.gz"
-
-rm /tmp/a /tmp/b /tmp/c /tmp/d
+#$dockerCommand bash -c "time python3 build_tsv_utf8.py 1000000 4 data/test_tall.tsv.gz"
+#$dockerCommand bash -c "time python3 build_tsv_utf8.py 2 1000000 data/test_wide.tsv.gz"
+#$dockerCommand bash -c "time python3 build_tsv_utf8.py 1000000000 3 data/super_tall.tsv.gz"
+#$dockerCommand bash -c "time python3 build_tsv_utf8.py 2 1000000000 data/super_wide.tsv.gz"
+#$dockerCommand bash -c "time python3 build_tsv_utf8.py 10000000000 4 data/hyper_tall.tsv.gz"
+#$dockerCommand bash -c "time python3 build_tsv_utf8.py 2 10000000000 data/hyper_wide.tsv.gz"
 
 #######################################################
 # Run tests
@@ -74,13 +48,13 @@ rm /tmp/a /tmp/b /tmp/c /tmp/d
 #python3 test.py
 #time python3 test.py
 
-#if [[ "${run_in_background}" == "no" ]]
-#then
-#  $dockerCommand bash -c "python3 test.py"
-#else
-#  echo Saving output to /tmp/f4.out and /tmp/f4.err
-#  $dockerCommand bash -c "python3 test.py > /tmp/f4.out 2> /tmp/f4.err"
-#fi
+if [[ "${run_in_background}" == "no" ]]
+then
+  $dockerCommand bash -c "python3 test.py"
+else
+  echo Saving output to /tmp/f4.out and /tmp/f4.err
+  $dockerCommand bash -c "python3 test.py > /tmp/f4.out 2> /tmp/f4.err"
+fi
 
 #######################################################
 # Cleanup
