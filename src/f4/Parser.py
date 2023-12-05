@@ -19,6 +19,7 @@ class FileData:
     def get_index_number(self, fltr):
         if "i" in self.cache_dict:
             dict_key = []
+
             for f in fltr.get_sub_filters():
                 if hasattr(f, "column_name"):
                     dict_key.append((f.column_name.decode(), isinstance(f, EndsWithFilter)))
@@ -474,8 +475,6 @@ def query(data_file_path, fltr=NoFilter(), select_columns=[], out_file_path=None
 
         fltr._check_types(column_type_dict)
 
-        # has_index = len(glob(f"{data_file_path}*.idx")) > 0
-
         if isinstance(fltr, NoFilter):
             keep_row_indices = list(range(file_data.cache_dict["num_rows"]))
         else:
@@ -522,21 +521,8 @@ def query(data_file_path, fltr=NoFilter(), select_columns=[], out_file_path=None
                 out_file.write(b"\t".join(select_columns) + b"\n") # Header line
 
                 if num_parallel == 1 or len(keep_row_indices) <= num_parallel:
-                    # lines_per_chunk = 10
-                    # out_lines = []
-
                     for row_index in keep_row_indices:
                         out_file.write(b"\t".join(parse_function(file_data, "", row_index, select_column_coords, bigram_size_dict=bigram_size_dict, column_names=select_columns)) + b"\n")
-
-                    #     out_values = parse_function(file_data, row_index, select_column_coords, bigram_size_dict=bigram_size_dict, column_names=select_columns)
-                    #     out_lines.append(b"\t".join(out_values))
-                    #
-                    #     if len(out_lines) % lines_per_chunk == 0:
-                    #         out_file.write(b"\n".join(out_lines) + b"\n")
-                    #         out_lines = []
-                    #
-                    # if len(out_lines) > 0:
-                    #     out_file.write(b"\n".join(out_lines) + b"\n")
                 else:
                     if tmp_dir_path:
                         makedirs(tmp_dir_path, exist_ok=True)

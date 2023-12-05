@@ -818,6 +818,9 @@ def build_index(f4_file_path, tmp_dir_path, index_number, index_columns, num_row
     conn.close()
 
     print_message(f"Querying temporary database when indexing the {', '.join(index_columns)} column(s) in {f4_file_path}.", verbose)
+    print(index_database_file_path)
+    import sys
+    sys.exit(1)
 
     conn = connect_sql(index_database_file_path)
     max_row_index_length = len(str(num_rows - 1))
