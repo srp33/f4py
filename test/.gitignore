@@ -3,5 +3,6 @@ data/hyper*
 data/large*
 data/medium*
 data/super*
+data/test*
 data/*.f4*
 f4/
