@@ -18,13 +18,19 @@ class FileData:
 
     def get_index_number(self, fltr):
         if "i" in self.cache_dict:
-            dict_key = []
+            # FYI: This code supports multi-column indices.
+            #      However, for simplicity, we will not support that for users for now.
+            # dict_key = []
+            #
+            # for f in fltr.get_sub_filters():
+            #     if hasattr(f, "column_name"):
+            #         dict_key.append((f.column_name.decode(), isinstance(f, EndsWithFilter)))
+            #
+            # return self.cache_dict["i"].get(tuple(dict_key), -1)
 
-            for f in fltr.get_sub_filters():
-                if hasattr(f, "column_name"):
-                    dict_key.append((f.column_name.decode(), isinstance(f, EndsWithFilter)))
-
-            return self.cache_dict["i"].get(tuple(dict_key), -1)
+            if hasattr(fltr, "column_name"):
+                dict_key = (fltr.column_name.decode(), isinstance(fltr, EndsWithFilter))
+                return self.cache_dict["i"].get(tuple(dict_key), -1)
 
         return -1
 
@@ -35,40 +41,23 @@ class __BaseFilter:
     def _check_types(self, column_type_dict):
         pass
 
-    # def _get_component_filter_set(self):
-    #     pass
-
     def get_sub_filters(self):
         return [self]
 
+    def get_matching_row_indices(self, data_file_path, row_indices, num_parallel):
+        # return row_indices
+        raise NotImplementedError
+
     def _filter_column_values(self, data_file_path, row_indices, column_coords_dict, bigram_size_dict):
-        pass
+        raise NotImplementedError
 
     def _filter_indexed_column_values(self, file_data, index_number, end_row, num_parallel):
-        # index_file_path = get_index_file_path(file_data.data_file_path, self.column_name.decode())
-
-        #with initialize(index_file_path) as index_file_data:
-        return filter_using_operator(file_data, f"i{index_number}", self, end_row, num_parallel)
-        # return filter_using_operator(index_file_data, self, end_row, num_parallel)
-
-        # index_file_path = get_index_file_path(file_data.data_file_path)
-
-        # conn = connect_sql(index_file_path)
-        # sql_prefix = f'''SELECT rowid - 1 AS rowid
-        #           FROM {self._get_index_name()}
-        #           WHERE '''
-
-        # for row in self._get_where_cursor(conn, sql_prefix):
-        #     yield row["rowid"]
-        #
-        # conn.close()
-
-    # def _get_where_cursor(self, conn, sql_prefix):
-    #     pass
+        # return filter_using_operator(file_data, f"i{index_number}", self, end_row, num_parallel)
+        raise NotImplementedError
 
 class NoFilter(__BaseFilter):
-    # def _get_component_filter_set(self):
-    #     return set()
+    def get_matching_row_indices(self, data_file_path, row_indices, num_parallel):
+        return row_indices
 
     def _filter_column_values(self, data_file_path, row_indices, column_coords_dict, bigram_size_dict):
         return row_indices
@@ -89,8 +78,19 @@ class __SimpleBaseFilter(__BaseFilter):
         if type(x) != expected_value_type:
             raise Exception(f"A variable of {expected_value_type.__name__} type is required for the {argument_name} argument of the {type(self).__name__} class, but the type was {type(x).__name__}.")
 
-    # def _get_component_filter_set(self):
-    #     return set([self])
+    def get_matching_row_indices(self, data_file_path, row_indices, num_parallel):
+        with initialize(data_file_path) as file_data:
+            column_index = get_column_index_from_name(file_data, self.column_name.decode())
+            coords = parse_data_coords(file_data, "", [column_index])
+
+            parse_function = get_parse_row_value_function(file_data)
+
+            passing_row_indices = set()
+            for i in row_indices:
+                if self._passes(parse_function(file_data, "", i, coords, bigram_size_dict=None, column_name=self.column_name)):
+                    passing_row_indices.add(i)
+
+            return passing_row_indices
 
     def _filter_column_values(self, data_file_path, row_indices, column_coords_dict, bigram_size_dict):
         with initialize(data_file_path) as file_data:
@@ -246,6 +246,9 @@ class HeadFilter(__BaseFilter):
     #     # return self.select_columns_set
     #     return set(self)
 
+    def get_matching_row_indices(self, data_file_path, row_indices, num_parallel):
+        return set(range(min(get_num_rows(data_file_path), self.n))) & row_indices
+
     def _filter_column_values(self, data_file_path, row_indices, column_coords_dict, bigram_size_dict):
         return set(range(min(get_num_rows(data_file_path), self.n))) & row_indices
 
@@ -272,19 +275,6 @@ class __CompositeFilter(__BaseFilter):
 
     def get_sub_filters(self):
         return self.filter1.get_sub_filters() + self.filter2.get_sub_filters()
-
-#    def get_sub_filter_row_indices(self, fltr_results_dict):
-#        if len(self.filter1.get_sub_filters()) == 1:
-#            row_indices_1 = fltr_results_dict[str(self.filter1)]
-#        else:
-#            row_indices_1 = self.filter1.filter_indexed_column_values_parallel(fltr_results_dict)
-#
-#        if len(self.filter2.get_sub_filters()) == 1:
-#            row_indices_2 = fltr_results_dict[str(self.filter2)]
-#        else:
-#            row_indices_2 = self.filter2.filter_indexed_column_values_parallel(fltr_results_dict)
-#
-#        return row_indices_1, row_indices_2
 
 class AndFilter(__CompositeFilter):
     """
@@ -463,55 +453,70 @@ def query(data_file_path, fltr=NoFilter(), select_columns=[], out_file_path=None
         global joblib
         joblib = __import__('joblib', globals(), locals())
 
-    with initialize(data_file_path) as file_data:
-        # Store column indices and types in dictionaries so we only have to retrieve
-        # each once, even if we use the same column in multiple filters.
-        filter_columns = set()
-        for f in fltr.get_sub_filters():
-            if hasattr(f, "column_name"):
-                filter_columns.add(f.column_name)
+    # Store column indices and types in dictionaries so we only have to retrieve
+    # each once, even if we use the same column in multiple filters.
+    filter_columns = set()
+    for f in fltr.get_sub_filters():
+        if hasattr(f, "column_name"):
+            filter_columns.add(f.column_name)
 
+    with initialize(data_file_path) as file_data:
+        #TODO: Make sure this works with billions of columns.
         select_columns, column_type_dict, column_coords_dict, bigram_size_dict = get_column_meta(file_data, filter_columns, select_columns)
 
         fltr._check_types(column_type_dict)
 
-        if isinstance(fltr, NoFilter):
-            keep_row_indices = list(range(file_data.cache_dict["num_rows"]))
-        else:
-            index_number = file_data.get_index_number(fltr)
+        # if isinstance(fltr, NoFilter):
+        #     keep_row_indices = list(range(file_data.cache_dict["num_rows"]))
+        # else:
+        # TODO: Make sure this works with billions of columns.
+        keep_row_indices = fltr.get_matching_row_indices(data_file_path, set(range(file_data.cache_dict["num_rows"])), num_parallel)
+        print("got here")
+        print(keep_row_indices)
+        import sys
+        sys.exit(1)
 
-            if index_number > -1:
-    #TODO: Remove this stuff if we don't need it after testing on huge files.
-    #            sub_filters = fltr.get_sub_filters()
+            # filter_tasks = []
+            # filter_args = []
+            # filter_is_indexed = []
+            #
+            # for f in fltr.get_sub_filters():
+            #     index_number = file_data.get_index_number(fltr)
+            #
+            #     if index_number > -1:
+            #         filter_tasks.append(fltr._filter_indexed_column_values)
+            #         filter_args.append([file_data, index_number, file_data.cache_dict["num_rows"]])
+            #         filter_is_indexed.append(True)
+            #     else:
+            #         filter_tasks.append(fltr._filter_column_values)
+            #         filter_args.append([data_file_path, column_coords_dict])
+            #         filter_is_indexed.append(False)
 
-    #            if num_parallel == 1 or len(sub_filters) == 1:
-    #             x = fltr._filter_indexed_column_values(file_data, index_number, file_data.cache_dict["num_rows"], num_parallel)
-    #             print(x)
+                # if index_number > -1:
+                #     keep_row_indices = sorted(fltr._filter_indexed_column_values(file_data, index_number, file_data.cache_dict["num_rows"], num_parallel))
+                # else:
+                #     if num_parallel == 1:
+                #         row_indices = set(range(file_data.cache_dict["num_rows"]))
+                #         keep_row_indices = sorted(fltr._filter_column_values(data_file_path, row_indices, column_coords_dict, bigram_size_dict))
+                #     else:
+                #         # Loop through the rows in parallel and find matching row indices.
+                #         keep_row_indices = sorted(chain.from_iterable(joblib.Parallel(n_jobs = num_parallel)(joblib.delayed(fltr._filter_column_values)(data_file_path, row_indices, column_coords_dict, bigram_size_dict) for row_indices in generate_query_row_chunks(file_data.cache_dict["num_rows"], num_parallel))))
 
-                keep_row_indices = sorted(fltr._filter_indexed_column_values(file_data, index_number, file_data.cache_dict["num_rows"], num_parallel))
-                # import sys
-                # sys.exit(1)
-
-    #            else:
-    #                fltr_results_dict = {}
-
-    ##                for f in sub_filters:
-    ##                    fltr_results_dict[str(f)] = f.filter_indexed_column_values(self.data_file_path, self.compression_level, column_index_dict, column_type_dict, column_coords_dict, self.get_num_rows(), num_parallel)
-
-                    # This is a parallelization of the above code.
-                    # At least in some cases, it slows things down more than it speeds things up.
-    #                fltr_results = Parallel(n_jobs = num_parallel)(delayed(f.filter_indexed_column_values)(self.data_file_path, self.compression_level, column_index_dict, column_type_dict, column_coords_dict, self.get_num_rows(), num_parallel) for f in sub_filters)
-    #                for i in range(len(sub_filters)):
-    #                    fltr_results_dict[str(sub_filters[i])] = fltr_results[i]
-    #
-    #                keep_row_indices = sorted(fltr.filter_indexed_column_values_parallel(fltr_results_dict))
-            else:
-                if num_parallel == 1:
-                    row_indices = set(range(file_data.cache_dict["num_rows"]))
-                    keep_row_indices = sorted(fltr._filter_column_values(data_file_path, row_indices, column_coords_dict, bigram_size_dict))
-                else:
-                    # Loop through the rows in parallel and find matching row indices.
-                    keep_row_indices = sorted(chain.from_iterable(joblib.Parallel(n_jobs = num_parallel)(joblib.delayed(fltr._filter_column_values)(data_file_path, row_indices, column_coords_dict, bigram_size_dict) for row_indices in generate_query_row_chunks(file_data.cache_dict["num_rows"], num_parallel))))
+            # If you have no indexes, you should filter in succession so you don't need to parse as many values.
+            #     However, each filter should use parallelization.
+            # If all filter columns are indexed, you should filter in parallel.
+            # If you have a mix of indexed and non-indexed columns, you should filter in parallel.
+            #     The non-indexed columns will use parallelization during filtering.
+            # However, don't do any parallelization if there are fewer than 1000[?] rows.
+            # TODO: Can we actually allow double indexes?
+            # TODO: Combine and sort the row indices at the end.
+            # TODO: For memory limits, take into account the total number of rows.
+            # TODO: Execute them in succession (might be faster)? Or in parallel
+            # if len(filter_tasks) == 1 and num_parallel == 1:
+                # No parallelization
+            # else:
+                # Parallelization
+            # keep_row_indices = sorted(chain.from_iterable(joblib.Parallel(n_jobs=num_parallel)(joblib.delayed(fltr._filter_column_values)(data_file_path, row_indices, column_coords_dict, bigram_size_dict) for row_indices in generate_query_row_chunks(file_data.cache_dict["num_rows"], num_parallel))))
 
         select_column_coords = [column_coords_dict[name] for name in select_columns]
         parse_function = get_parse_row_values_function(file_data)

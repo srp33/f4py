@@ -723,8 +723,13 @@ def build_indexes(f4_file_path, tmp_dir_path, index_columns, num_rows, line_leng
         index_info_dict[(index_columns, reverse_statuses[0])] = 0
     elif isinstance(index_columns, list):
         for i, index_column in enumerate(index_columns):
-            if not isinstance(index_column, str) and not isinstance(index_column, list):
-                raise Exception("When specifying index columns, they must either be a string or a list.")
+            # if not isinstance(index_column, str) and not isinstance(index_column, list):
+            #     raise Exception("When specifying index columns, they must either be a string or a list.")
+
+            # FYI: This code was designed to support multi-colum indexes.
+            #      However, for simplicity, we will not support that for users for now.
+            if not isinstance(index_column, str):
+                raise Exception("When specifying an index column, it must be a string.")
 
             index_column_list = [index_column] if isinstance(index_column, str) else index_column
             reverse_statuses = build_index(f4_file_path, tmp_dir_path, i, index_column_list, num_rows, line_length, verbose)
@@ -740,6 +745,8 @@ def build_indexes(f4_file_path, tmp_dir_path, index_columns, num_rows, line_leng
 
     write_str_to_file(f"{tmp_dir_path}i", serialize(index_info_dict))
 
+# FYI: This code was designed to support multi-colum indexes.
+#      However, for simplicity, we will not support that for users for now.
 def build_index(f4_file_path, tmp_dir_path, index_number, index_columns, num_rows, line_length, verbose):
     # TODO: Add logic to verify that index_column is valid. Make sure to check for names ending with $ (reverse).
 
@@ -818,9 +825,6 @@ def build_index(f4_file_path, tmp_dir_path, index_number, index_columns, num_row
     conn.close()
 
     print_message(f"Querying temporary database when indexing the {', '.join(index_columns)} column(s) in {f4_file_path}.", verbose)
-    print(index_database_file_path)
-    import sys
-    sys.exit(1)
 
     conn = connect_sql(index_database_file_path)
     max_row_index_length = len(str(num_rows - 1))
