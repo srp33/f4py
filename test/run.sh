@@ -2,6 +2,8 @@
 
 set -o errexit
 
+#local_dev=no
+local_dev=yes
 run_in_background=no
 #run_in_background=yes
 
@@ -12,7 +14,10 @@ cp -r ../src/f4 .
 # Build the Docker image
 #######################################################
 
-#docker build -t srp33/f4_test .
+if [[ "${local_dev}" == "no" ]]
+then
+  docker build -t srp33/f4_test .
+fi
 
 #######################################################
 # Run preparatory steps
@@ -45,15 +50,17 @@ fi
 # Run tests
 #######################################################
 
-#python3 test.py
-#time python3 test.py
-
-if [[ "${run_in_background}" == "no" ]]
+if [[ "${local_dev}" == "yes" ]]
 then
-  $dockerCommand bash -c "python3 test.py"
+  python3 test.py
 else
-  echo Saving output to /tmp/f4.out and /tmp/f4.err
-  $dockerCommand bash -c "python3 test.py > /tmp/f4.out 2> /tmp/f4.err"
+  if [[ "${run_in_background}" == "no" ]]
+  then
+    $dockerCommand bash -c "python3 test.py"
+  else
+    echo Saving output to /tmp/f4.out and /tmp/f4.err
+    $dockerCommand bash -c "python3 test.py > /tmp/f4.out 2> /tmp/f4.err"
+  fi
 fi
 
 #######################################################

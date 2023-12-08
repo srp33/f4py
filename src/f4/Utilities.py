@@ -202,6 +202,9 @@ def decompress(compressed_value, compression_dict, bigram_size):
 
     return value
 
+def convert_bytes_to_str(bytes_data):
+    return bytes_data.decode()
+
 def convert_bytes_to_int(b):
     return int.from_bytes(b, byteorder="big")
 

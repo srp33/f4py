@@ -178,11 +178,11 @@ def run_small_tests(in_file_path, f4_file_path, out_file_path, num_parallel = 1,
     os.unlink(out_file_path)
 
     f4.query(f4_file_path, f4.FloatFilter("FloatA", operator.ne, 1.1), ["FloatA"], out_file_path, num_parallel=num_parallel)
-    check_results("Float not equals filter", read_file_into_lists(out_file_path), [[b"FloatA"],[b"9.9"],[b"2.2"],[b"2.2"],[b"4.4"]])
+    check_results("Float not equals filter", read_file_into_lists(out_file_path), [[b"FloatA"], [b"9.9"], [b"2.2"], [b"2.2"], [b"4.4"]])
     os.unlink(out_file_path)
 
     f4.query(f4_file_path, f4.AndFilter(f4.IntFilter("IntA", operator.eq, 7), f4.FloatFilter("FloatA", operator.ne, 1.1)), ["FloatA"], out_file_path, num_parallel=num_parallel)
-    check_results("Two numeric filters", read_file_into_lists(out_file_path), [[b"FloatA"],[b"2.2"]])
+    check_results("Two numeric filters", read_file_into_lists(out_file_path), [[b"FloatA"], [b"2.2"]])
     os.unlink(out_file_path)
 
     fltr = f4.AndFilter(
@@ -211,7 +211,7 @@ def run_small_tests(in_file_path, f4_file_path, out_file_path, num_parallel = 1,
              )
     fltr = f4.AndFilter(or_1, or_2)
     f4.query(f4_file_path, fltr, ["FloatA"], out_file_path, num_parallel=num_parallel)
-    check_results("Nested or filters", read_file_into_lists(out_file_path), [[b"FloatA"],[b"2.2"],[b"2.2"],[b"4.4"]])
+    check_results("Nested or filters", read_file_into_lists(out_file_path), [[b"FloatA"], [b"2.2"], [b"2.2"], [b"4.4"]])
     os.unlink(out_file_path)
 
     fltr = f4.AndFilter(
@@ -225,15 +225,15 @@ def run_small_tests(in_file_path, f4_file_path, out_file_path, num_parallel = 1,
              f4.FloatFilter("FloatB", operator.le, 44.4)
            )
     f4.query(f4_file_path, fltr, ["FloatA"], out_file_path, num_parallel=num_parallel)
-    check_results("Numeric filters and string filters", read_file_into_lists(out_file_path), [[b"FloatA"],[b"9.9"],[b"2.2"],[b"4.4"]])
+    check_results("Numeric filters and string filters", read_file_into_lists(out_file_path), [[b"FloatA"], [b"9.9"], [b"2.2"], [b"4.4"]])
     os.unlink(out_file_path)
 
     f4.query(f4_file_path, f4.StartsWithFilter("CategoricalB", "Ye"), ["ID"], out_file_path, num_parallel=num_parallel)
-    check_results("StartsWithFilter on categorical column B", read_file_into_lists(out_file_path), [[b"ID"],[b"A"],[b"B"]])
+    check_results("StartsWithFilter on categorical column B", read_file_into_lists(out_file_path), [[b"ID"], [b"A"], [b"B"]])
     os.unlink(out_file_path)
 
     f4.query(f4_file_path, f4.EndsWithFilter("CategoricalB", "ow"), ["ID"], out_file_path, num_parallel=num_parallel)
-    check_results("EndsWithFilter on categorical column B", read_file_into_lists(out_file_path), [[b"ID"],[b"A"],[b"B"]])
+    check_results("EndsWithFilter on categorical column B", read_file_into_lists(out_file_path), [[b"ID"], [b"A"], [b"B"]])
     os.unlink(out_file_path)
 
     #if index_columns:
@@ -247,7 +247,7 @@ def run_small_tests(in_file_path, f4_file_path, out_file_path, num_parallel = 1,
 
     if not index_columns:
         f4.query(f4_file_path, f4.RegularExpressionFilter("CategoricalB", r"ow$"), ["FloatA"], out_file_path, num_parallel=num_parallel)
-        check_results("Regular expression filter on categorical column", read_file_into_lists(out_file_path), [[b"FloatA"],[b"1.1"],[b"2.2"]])
+        check_results("Regular expression filter on categorical column", read_file_into_lists(out_file_path), [[b"FloatA"], [b"1.1"], [b"2.2"]])
         os.unlink(out_file_path)
 
     f4.query(f4_file_path, f4.FloatRangeFilter("FloatA", -9.9, 4.4), ["FloatA"], out_file_path, num_parallel=num_parallel)
@@ -750,30 +750,30 @@ def run_all_small_tests():
     # Basic small tests
     f4_file_path = "data/small.f4"
     out_file_path = "/tmp/small_out.tsv"
-    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1)
-    print("got here - test.py - line 754")
-    return
-    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2)
+    # run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1)
+    # run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2)
 
-    # Basic small tests (with gzipped files)
-    run_small_tests("data/small.tsv.gz", f4_file_path, out_file_path, num_parallel = 1)
-    run_small_tests("data/small.tsv.gz", f4_file_path, out_file_path, num_parallel = 2)
+    # # Basic small tests (with gzipped files)
+    # run_small_tests("data/small.tsv.gz", f4_file_path, out_file_path, num_parallel = 1)
+    # run_small_tests("data/small.tsv.gz", f4_file_path, out_file_path, num_parallel = 2)
 
-    # Make sure we print to standard out properly (this code does not work inside a function).
-    f4.convert_delimited_file("data/small.tsv", f4_file_path)
-    old_stdout = sys.stdout
-    sys.stdout = TextIOWrapper(BytesIO(), sys.stdout.encoding)
-    f4.query(f4_file_path, f4.NoFilter(), [], out_file_path=None, num_parallel=1)
-    sys.stdout.seek(0)
-    out = sys.stdout.read()
-    sys.stdout.close()
-    sys.stdout = old_stdout
-    check_results("No filters, select all columns - std out", read_string_into_lists(out), read_file_into_lists("data/small.tsv"))
+    # # Make sure we print to standard out properly (this code does not work inside a function).
+    # f4.convert_delimited_file("data/small.tsv", f4_file_path)
+    # old_stdout = sys.stdout
+    # sys.stdout = TextIOWrapper(BytesIO(), sys.stdout.encoding)
+    # f4.query(f4_file_path, f4.NoFilter(), [], out_file_path=None, num_parallel=1)
+    # sys.stdout.seek(0)
+    # out = sys.stdout.read()
+    # sys.stdout.close()
+    # sys.stdout = old_stdout
+    # check_results("No filters, select all columns - std out", read_string_into_lists(out), read_file_into_lists("data/small.tsv"))
 
     index_columns = ["ID", "CategoricalB", "CategoricalB_endswith", "FloatA", "FloatB", "IntA", "IntB", "OrdinalA", ["CategoricalB", "IntB"]]
 
     # Small tests with indexing
     run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, index_columns = index_columns)
+    print("got here - test.py - line 772")
+    return
     run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2, index_columns = index_columns)
 
     ## Small tests with dictionary-based compression
