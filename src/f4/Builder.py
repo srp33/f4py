@@ -517,18 +517,23 @@ def save_column_name_info(delimited_file_path, f4_file_path, out_items_chunk_siz
     conn = connect_sql(get_columns_database_path(tmp_dir_path))
     cursor = conn.cursor()
 
-    max_column1_length = get_max_column_length(cursor, "column_name")
-    max_column2_length = get_max_column_length(cursor, "column_index")
+    max_column_name_length = get_max_column_length(cursor, "column_name")
+    max_column_index_length = get_max_column_length(cursor, "column_index")
 
-    cnccml = max(len(str(max_column1_length)), len(str(max_column1_length + max_column2_length)))
-    write_str_to_file(get_data_path(tmp_dir_path, f"cnccml"), str(cnccml).encode())
+    ##########################################################
+    # cni = column name first, sorted by column name
+    # cin = column index first, sorted by column index
+    ##########################################################
 
-    cncc = format_string_as_fixed_width(b"0", cnccml)
-    cncc += format_string_as_fixed_width(str(max_column1_length).encode(), cnccml)
-    cncc += format_string_as_fixed_width(str(max_column1_length + max_column2_length).encode(), cnccml)
-    write_str_to_file(get_data_path(tmp_dir_path, f"cncc"), cncc)
+    cniccml = max(len(str(max_column_name_length)), len(str(max_column_name_length + max_column_index_length)))
+    write_str_to_file(get_data_path(tmp_dir_path, f"cniccml"), str(cniccml).encode())
 
-    with open(get_data_path(tmp_dir_path, f"cn"), "wb") as data_file:
+    cnicc = format_string_as_fixed_width(b"0", cniccml)
+    cnicc += format_string_as_fixed_width(str(max_column_name_length).encode(), cniccml)
+    cnicc += format_string_as_fixed_width(str(max_column_name_length + max_column_index_length).encode(), cniccml)
+    write_str_to_file(get_data_path(tmp_dir_path, f"cnicc"), cnicc)
+
+    with open(get_data_path(tmp_dir_path, f"cni"), "wb") as data_file:
         sql = f'''SELECT CAST(column_name AS TEXT) AS column_name, CAST(column_index AS TEXT) AS column_index
                   FROM columns
                   ORDER BY column_name'''
@@ -542,29 +547,34 @@ def save_column_name_info(delimited_file_path, f4_file_path, out_items_chunk_siz
 
             out_list = []
             for row in batch:
-                out_list.append(format_string_as_fixed_width(row["column_name"].encode(), max_column1_length) + format_string_as_fixed_width(row["column_index"].encode(), max_column2_length))
-
+                out_list.append(format_string_as_fixed_width(row["column_name"].encode(), max_column_name_length) + format_string_as_fixed_width(row["column_index"].encode(), max_column_index_length))
             data_file.write(b"".join(out_list))
 
-                # if len(out_list) == out_items_chunk_size:
-                #     data_file.write(b"".join(out_list))
-                #     out_list = []
+    with open(get_data_path(tmp_dir_path, f"cn"), "wb") as data_file:
+        sql = f'''SELECT CAST(column_name AS TEXT) AS column_name
+                  FROM columns
+                  ORDER BY column_index'''
+        cursor.execute(sql)
 
-        # if len(out_list) > 0:
-        #     data_file.write(b"".join(out_list))
+        is_first_batch = True
 
+        while True:
+            batch = cursor.fetchmany(out_items_chunk_size)
 
+            if not batch:
+                break
 
+            out_list = []
+            for row in batch:
+                #out_list.append(format_string_as_fixed_width(row["column_name"].encode(), max_column_name_length))
+                out_list.append(row["column_name"].encode())
 
-        # for row in cursor.fetchall():
-        #     out_list.append(format_string_as_fixed_width(row["column_name"].encode(), max_column1_length) + format_string_as_fixed_width(row["column_index"].encode(), max_column2_length))
-        #
-        #     if len(out_list) == out_items_chunk_size:
-        #         data_file.write(b"".join(out_list))
-        #         out_list = []
-        #
-        # if len(out_list) > 0:
-        #     data_file.write(b"".join(out_list))
+            if is_first_batch:
+                is_first_batch = False
+            else:
+                data_file.write(b"\n")
+
+            data_file.write(b"\n".join(out_list))
 
     cursor.close()
     conn.close()

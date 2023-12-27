@@ -263,6 +263,17 @@ def split_integer_list_into_chunks(int_list, num_parallel):
     if len(return_indices) > 0:
         yield return_indices
 
+def iterate_single_value(value):
+    yield value
+
+def generate_range_chunks(total_n, n_per_chunk):
+    num_chunks = ceil(total_n / n_per_chunk)
+    current_n = -n_per_chunk
+
+    for chunk_index in range(num_chunks):
+        current_n += n_per_chunk
+        yield range(current_n, min(total_n, current_n + n_per_chunk))
+
 def connect_sql(file_path):
     conn = sqlite3.connect(
         file_path,

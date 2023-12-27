@@ -26,24 +26,19 @@ class FileData:
 
             return self.cache_dict["i"].get(tuple(dict_key), -1)
 
-            # if hasattr(fltr, "column_name"):
-            #     dict_key = (fltr.column_name.decode(), isinstance(fltr, EndsWithFilter))
-            #     return self.cache_dict["i"].get(tuple(dict_key), -1)
-
         return -1
 
 """
 This class is used to indicate that no filtering should be performed.
 """
 class __BaseFilter:
-    def _check_types(self, column_type_dict):
+    def _check_types(self, file_data):
         pass
 
     def get_sub_filters(self):
         return [self]
 
     def get_matching_row_indices(self, data_file_path, row_indices, num_parallel):
-        # return row_indices
         raise NotImplementedError
 
     def _filter_column_values(self, data_file_path, row_indices, column_coords_dict, bigram_size_dict):
@@ -74,7 +69,7 @@ class __SimpleBaseFilter(__BaseFilter):
             index_number = file_data.get_index_number(self)
 
             if index_number < 0:
-                column_index = get_column_index_from_name(file_data, self.column_name.decode())
+                column_index = get_column_index_from_name(file_data, self.column_name)
                 coords = parse_data_coords(file_data, "", [column_index])[0]
 
                 parse_function = get_parse_row_value_function(file_data)
@@ -86,23 +81,12 @@ class __SimpleBaseFilter(__BaseFilter):
 
                 return passing_row_indices
             else:
-                return filter_using_operator(file_data, f"i{index_number}", self, end_row, num_parallel)
+                return self.get_matching_row_indices_filter(file_data, index_number, num_parallel)
+                # num_rows = file_data.cache_dict["num_rows"]
+                # return filter_using_operator(file_data, f"i{index_number}", self, num_rows, num_parallel)
 
-    # def _filter_column_values(self, data_file_path, row_indices, column_coords_dict, bigram_size_dict):
-    #     with initialize(data_file_path) as file_data:
-    #         coords = column_coords_dict[self.column_name]
-    #
-    #         parse_function = get_parse_row_value_function(file_data)
-    #
-    #         passing_row_indices = set()
-    #         for i in row_indices:
-    #             if self._passes(parse_function(file_data, "", i, coords)):
-    #                 passing_row_indices.add(i)
-    #
-    #         return passing_row_indices
-
-    # def _get_index_name(self):
-    #     return self.column_name.decode()
+    def get_matching_row_indices_filter(self, file_data, index_number, num_parallel):
+        raise NotImplementedError
 
     def _get_conversion_function(self):
         return do_nothing
@@ -116,54 +100,160 @@ class __OperatorFilter(__SimpleBaseFilter):
 
         self.oper = oper
 
-    def _check_column_types(self, column_index_dict, column_type_dict, expected_column_type, expected_column_type_description):
-        if column_type_dict[column_index_dict[self.column_name]] != expected_column_type:
-            raise Exception(f"A {type(self).__name__} may only be used with {expected_column_type_description} columns, and {self.column_name.decode()} is not a {expected_column_type_description}.")
-
     def _passes(self, value):
         return self.oper(self._get_conversion_function()(value), self.value)
+
+    def get_matching_row_indices_filter(self, file_data, index_number, num_parallel):
+        return filter_using_operator(file_data, f"i{index_number}", self, file_data.cache_dict["num_rows"], num_parallel)
 
 class StringFilter(__OperatorFilter):
     def __init__(self, column_name, oper, value):
         self._check_argument(value, "value", str)
         super().__init__(column_name, oper, value.encode())
 
-    def _check_types(self, column_type_dict):
-        if column_type_dict[self.column_name] != "s":
-            raise Exception(f"A StringFilter may only be used with string columns, and {self.column_name.decode()} is not a string ({column_type_dict[self.column_name]}).")
+    def _check_types(self, file_data):
+        column_index = get_column_index_from_name(file_data, self.column_name)
+        column_type = get_column_type_from_index(file_data, column_index)
 
-class FloatFilter(__OperatorFilter):
-    def __init__(self, column_name, oper, value):
-        self._check_argument(value, "value", float)
-        super().__init__(column_name, oper, value)
-
-    def _check_types(self, column_type_dict):
-        if column_type_dict[self.column_name] != "f":
-            raise Exception(f"A float filter may only be used with float columns, but {self.column_name.decode()} is not a float.")
-
-    def _get_conversion_function(self):
-        return fast_float
+        if column_type != "s":
+            raise Exception(f"A StringFilter may only be used with string columns, and {self.column_name.decode()} is not a string ({column_type}).")
 
 class IntFilter(__OperatorFilter):
     def __init__(self, column_name, oper, value):
         self._check_argument(value, "value", int)
         super().__init__(column_name, oper, value)
 
-    def _check_types(self, column_type_dict):
-        if column_type_dict[self.column_name] != "i":
-            raise Exception(f"An integer filter may only be used with integer columns, but {self.column_name.decode()} is not an integer.")
+    def _check_types(self, file_data):
+        column_index = get_column_index_from_name(file_data, self.column_name)
+        column_type = get_column_type_from_index(file_data, column_index)
+
+        if column_type != "i":
+            raise Exception(f"An IntegerFilter may only be used with integer columns, but {self.column_name.decode()} is not an integer ({column_type}).")
 
     def _get_conversion_function(self):
         return fast_int
+
+class FloatFilter(__OperatorFilter):
+    def __init__(self, column_name, oper, value):
+        self._check_argument(value, "value", float)
+        super().__init__(column_name, oper, value)
+
+    def _check_types(self, file_data):
+        column_index = get_column_index_from_name(file_data, self.column_name)
+        column_type = get_column_type_from_index(file_data, column_index)
+
+        if column_type != "f":
+            raise Exception(f"A FloatFilter may only be used with float columns, but {self.column_name.decode()} is not a float ({column_type}).")
+
+    def _get_conversion_function(self):
+        return fast_float
+
+class __RangeFilter(__SimpleBaseFilter):
+    def __init__(self, column_name, lower_bound_value, upper_bound_value):
+        self._check_argument(column_name, "column_name", str)
+
+        if lower_bound_value > upper_bound_value:
+            raise Exception("The lower_bound_value must be less than or equal to the upper_bound_value.")
+
+        self.column_name = column_name.encode()
+        self.lower_bound_value = lower_bound_value
+        self.upper_bound_value = upper_bound_value
+
+    def _passes(self, value):
+        typed_value = self._get_conversion_function()(value)
+        return self.lower_bound_value <= typed_value <= self.upper_bound_value
+
+    def get_matching_row_indices_filter(self, file_data, index_number, num_parallel):
+
+    # def _filter_column_values(self, data_file_path, row_indices, column_coords_dict, bigram_size_dict):
+    #     return AndFilter(self.filter1, self.filter2)._filter_column_values(data_file_path, row_indices, column_coords_dict, bigram_size_dict)
+    #
+    # def _filter_indexed_column_values(self, file_data, index_number, end_row, num_parallel):
+    #     data_file_key = f"i{index_number}"
+    #     coords = parse_data_coords(file_data, data_file_key, [0, 1])
+    #
+    #     return find_row_indices_for_range(file_data, data_file_key, coords[0], coords[1], self.filter1, self.filter2, end_row, num_parallel)
+
+    def _get_conversion_function(self):
+        raise NotImplementedError
+
+class StringRangeFilter(__RangeFilter):
+    def __init__(self, column_name, lower_bound_value, upper_bound_value):
+        # filter1 = StringFilter(column_name, ge, lower_bound_value)
+        # filter2 = StringFilter(column_name, le, upper_bound_value)
+        #
+        # super().__init__(filter1, filter2)
+        super().__init__(column_name, lower_bound_value, upper_bound_value)
+
+    def _check_types(self, file_data):
+        column_index = get_column_index_from_name(file_data, self.column_name)
+        column_type = get_column_type_from_index(file_data, column_index)
+
+        if column_type != "s":
+            raise Exception(f"A StringFilter may only be used with string columns, and {self.column_name.decode()} is not a string ({column_type}).")
+
+    def _get_conversion_function(self):
+        return convert_bytes_to_str
+
+class IntRangeFilter(__RangeFilter):
+    def __init__(self, column_name, lower_bound_value, upper_bound_value):
+        # filter1 = IntFilter(column_name, ge, lower_bound_value)
+        # filter2 = IntFilter(column_name, le, upper_bound_value)
+        #
+        # super().__init__(filter1, filter2)
+        super().__init__(column_name, lower_bound_value, upper_bound_value)
+
+    def _check_types(self, file_data):
+        column_index = get_column_index_from_name(file_data, self.column_name)
+        column_type = get_column_type_from_index(file_data, column_index)
+
+        if column_type != "i":
+            raise Exception(f"An IntRangeFilter may only be used with int columns, and {self.column_name.decode()} is not an integer ({column_type}).")
+
+    def _get_conversion_function(self):
+        return fast_int
+
+class FloatRangeFilter(__RangeFilter):
+    def __init__(self, column_name, lower_bound_value, upper_bound_value):
+        # filter1 = FloatFilter(column_name, ge, lower_bound_value)
+        # filter2 = FloatFilter(column_name, le, upper_bound_value)
+
+        # super().__init__(filter1, filter2)
+        super().__init__(column_name, lower_bound_value, upper_bound_value)
+
+    def _check_types(self, file_data):
+        column_index = get_column_index_from_name(file_data, self.column_name)
+        column_type = get_column_type_from_index(file_data, column_index)
+
+        if column_type != "f":
+            raise Exception(f"A FloatRangeFilter may only be used with float columns, and {self.column_name.decode()} is not a float ({column_type}).")
+
+    def _get_conversion_function(self):
+        return fast_float
+
+class HeadFilter(__BaseFilter):
+    def __init__(self, n):
+        self.n = n
+
+    def get_matching_row_indices(self, data_file_path, row_indices, num_parallel):
+        return set(range(min(get_num_rows(data_file_path), self.n))) & row_indices
+
+class TailFilter(HeadFilter):
+    def get_matching_row_indices(self, data_file_path, row_indices, num_parallel):
+        num_rows = get_num_rows(data_file_path)
+        return set(range(num_rows - self.n, num_rows)) & row_indices
 
 class StartsWithFilter(__SimpleBaseFilter):
     def __init__(self, column_name, value):
         self._check_argument(value, "value", str)
         super().__init__(column_name, value.encode())
 
-    def _check_types(self, column_type_dict):
-        if column_type_dict[self.column_name] != "s":
-            raise Exception(f"A StringFilter may only be used with string columns, and {self.column_name.decode()} is not a string ({column_type_dict[self.column_name]}).")
+    def _check_types(self, file_data):
+        column_index = get_column_index_from_name(file_data, self.column_name)
+        column_type = get_column_type_from_index(file_data, column_index)
+
+        if column_type != "s":
+            raise Exception(f"A StartsWithFilter or EndsWithFilter may only be used with string columns, and {self.column_name.decode()} is not a string ({column_type}).")
 
     def _passes(self, value):
         return value.startswith(self.value)
@@ -187,15 +277,22 @@ class EndsWithFilter(StartsWithFilter):
     #     #     return get_passing_row_indices_with_filter(index_file_data, custom_fltr, end_row, num_parallel)
     #     return get_passing_row_indices_with_filter(file_data, f"i{index_number}", custom_fltr, end_row, num_parallel)
 
-class RegularExpressionFilter(__SimpleBaseFilter):
-    def __init__(self, column_name, pattern):
-        super().__init__(column_name, pattern)
-
-        self._check_argument(pattern, "pattern", str)
-        self.value = compile(self.value)
-
-    def _passes(self, value):
-        return self.value.search(value.decode())
+# class RegularExpressionFilter(__SimpleBaseFilter):
+#     def __init__(self, column_name, pattern):
+#         super().__init__(column_name, pattern)
+#
+#         self._check_argument(pattern, "pattern", str)
+#         self.value = compile(self.value)
+#
+#     def _check_types(self, file_data):
+#         column_index = get_column_index_from_name(file_data, self.column_name)
+#         column_type = get_column_type_from_index(file_data, column_index)
+#
+#         if column_type != "s":
+#             raise Exception(f"A RegularExpressionFilter may only be used with string columns, and {self.column_name.decode()} is not a string ({column_type}).")
+#
+#     def _passes(self, value):
+#         return self.value.search(value.decode())
 
 # class LikeFilter(__SimpleBaseFilter):
 #     def __init__(self, column_name, pattern):
@@ -211,123 +308,18 @@ class RegularExpressionFilter(__SimpleBaseFilter):
 #
 #             return get_passing_row_indices(index_file_data, self, coords[0], coords[1], 0, end_index)
 
-    # def _get_where_cursor(self, conn, sql_prefix):
-    #     value = self.value.decode() if isinstance(self.value, bytes) else self.value
-    #     return fetchall_sql(conn, sql_prefix + f"value LIKE ?",  (value,))
-
 # class NotLikeFilter(LikeFilter):
 #     def _passes(self, value):
 #         return not self.value.search(value.decode())
-
-# class NotLikeFilter(__SimpleBaseFilter):
-#     def __init__(self, column_name, pattern):
-#         super().__init__(column_name, pattern)
-#
-#         self._check_argument(pattern, "pattern", str)
-
-    # def _get_where_cursor(self, conn, sql_prefix):
-    #     value = self.value.decode() if isinstance(self.value, bytes) else self.value
-    #     return fetchall_sql(conn, sql_prefix + f"value NOT LIKE ?",  (value,))
-
-class __RangeFilter(__SimpleBaseFilter):
-    def __init__(self, column_name, lower_bound_value, upper_bound_value):
-        self._check_argument(column_name, "column_name", str)
-
-        if lower_bound_value > upper_bound_value:
-            raise Exception("The lower_bound_value must be less than or equal to the upper_bound_value.")
-
-        self.column_name = column_name.encode()
-        self.lower_bound_value = lower_bound_value
-        self.upper_bound_value = upper_bound_value
-
-    def _passes(self, value):
-        typed_value = self._get_conversion_function()(value)
-        return self.lower_bound_value <= typed_value <= self.upper_bound_value
-
-    # def _filter_column_values(self, data_file_path, row_indices, column_coords_dict, bigram_size_dict):
-    #     return AndFilter(self.filter1, self.filter2)._filter_column_values(data_file_path, row_indices, column_coords_dict, bigram_size_dict)
-    #
-    # def _filter_indexed_column_values(self, file_data, index_number, end_row, num_parallel):
-    #     data_file_key = f"i{index_number}"
-    #     coords = parse_data_coords(file_data, data_file_key, [0, 1])
-    #
-    #     return find_row_indices_for_range(file_data, data_file_key, coords[0], coords[1], self.filter1, self.filter2, end_row, num_parallel)
-
-    def _get_conversion_function(self):
-        raise NotImplementedError
-
-class FloatRangeFilter(__RangeFilter):
-    def __init__(self, column_name, lower_bound_value, upper_bound_value):
-        # filter1 = FloatFilter(column_name, ge, lower_bound_value)
-        # filter2 = FloatFilter(column_name, le, upper_bound_value)
-
-        # super().__init__(filter1, filter2)
-        super().__init__(column_name, lower_bound_value, upper_bound_value)
-
-    def _get_conversion_function(self):
-        return fast_float
-
-class IntRangeFilter(__RangeFilter):
-    def __init__(self, column_name, lower_bound_value, upper_bound_value):
-        # filter1 = IntFilter(column_name, ge, lower_bound_value)
-        # filter2 = IntFilter(column_name, le, upper_bound_value)
-        #
-        # super().__init__(filter1, filter2)
-        super().__init__(column_name, lower_bound_value, upper_bound_value)
-
-    def _get_conversion_function(self):
-        return fast_int
-
-class StringRangeFilter(__RangeFilter):
-    def __init__(self, column_name, lower_bound_value, upper_bound_value):
-        # filter1 = StringFilter(column_name, ge, lower_bound_value)
-        # filter2 = StringFilter(column_name, le, upper_bound_value)
-        #
-        # super().__init__(filter1, filter2)
-        super().__init__(column_name, lower_bound_value, upper_bound_value)
-
-    def _get_conversion_function(self):
-        return convert_bytes_to_str
-
-class HeadFilter(__BaseFilter):
-    def __init__(self, n):
-        self.n = n
-        # self.select_columns_set = set([x.encode() for x in select_columns])
-
-    # def _get_component_filter_set(self):
-    #     # return self.select_columns_set
-    #     return set(self)
-
-    def get_matching_row_indices(self, data_file_path, row_indices, num_parallel):
-        return set(range(min(get_num_rows(data_file_path), self.n))) & row_indices
-
-    # def _filter_column_values(self, data_file_path, row_indices, column_coords_dict, bigram_size_dict):
-    #     return set(range(min(get_num_rows(data_file_path), self.n))) & row_indices
-
-    # def _filter_indexed_column_values(self, file_data, index_number, end_row, num_parallel):
-    #     return set(range(min(get_num_rows(file_data.data_file_path), self.n)))
-
-class TailFilter(HeadFilter):
-    def get_matching_row_indices(self, data_file_path, row_indices, num_parallel):
-        num_rows = get_num_rows(data_file_path)
-        return set(range(num_rows - self.n, num_rows)) & row_indices
-
-    # def _filter_column_values(self, data_file_path, row_indices, column_coords_dict, bigram_size_dict):
-        # num_rows = get_num_rows(data_file_path)
-        # return set(range(num_rows - self.n, num_rows)) & row_indices
-
-    # def _filter_indexed_column_values(self, file_data, index_number, end_row, num_parallel):
-    #     num_rows = get_num_rows(file_data.data_file_path)
-    #     return set(range(num_rows - self.n, num_rows))
 
 class __CompositeFilter(__BaseFilter):
     def __init__(self, filter1, filter2):
         self.filter1 = filter1
         self.filter2 = filter2
 
-    def _check_types(self, column_type_dict):
-        self.filter1._check_types(column_type_dict)
-        self.filter2._check_types(column_type_dict)
+    def _check_types(self, file_data):
+        self.filter1._check_types(file_data)
+        self.filter2._check_types(file_data)
 
     def get_sub_filters(self):
         return self.filter1.get_sub_filters() + self.filter2.get_sub_filters()
@@ -462,45 +454,93 @@ def query(data_file_path, fltr=NoFilter(), select_columns=[], out_file_path=None
     if out_file_type != "tsv":
         raise Exception("The only out_file_type currently supported is tsv.")
 
-    if select_columns:
-        if not isinstance(select_columns, list):
-            raise Exception("You must specify select_column as a list.")
-    else:
-        select_columns = []
-
     if num_parallel > 1:
         global joblib
         joblib = __import__('joblib', globals(), locals())
 
-    # Store column indices and types in dictionaries so we only have to retrieve
-    # each once, even if we use the same column in multiple filters.
-    filter_columns = set()
-    filter_indices = set()
-    for f in fltr.get_sub_filters():
-        if hasattr(f, "column_name"):
-            filter_columns.add(f.column_name)
-
-        filter_indices.add(file_data.get_index_number(f))
-    #TODO: I think we can remove filter_columns from the above logic, move the loop under the with statement,
-    #      modify get_column_meta() so it doesn't use filter_columns. We are parsing the column coords within
+    #TODO: We are parsing the column coords within
     #      the filter code to make things simpler.
-    #      Then we need to calculate whether all filters are indexed, non are indexed, or there is a mix.
+    #      We need to calculate whether all filters are indexed,
+    #      non are indexed, or there is a mix.
     #      If there is a mix, we should raise an exception (for now).
 
+    write_obj = sys.stdout.buffer
+    if out_file_path:
+        write_obj = open(out_file_path, 'wb')
+
     with initialize(data_file_path) as file_data:
-        #TODO: Make sure this works with billions of columns.
-        select_columns, column_type_dict, column_coords_dict, bigram_size_dict = get_column_meta(file_data, filter_columns, select_columns)
+        # Make sure the filters match the column types.
+        fltr._check_types(file_data)
 
-        fltr._check_types(column_type_dict)
-
-
-
-        # TODO: Make sure this works with billions of columns.
+        # Filter rows based on the data
         keep_row_indices = sorted(fltr.get_matching_row_indices(data_file_path, set(range(file_data.cache_dict["num_rows"])), num_parallel))
-        # print("got here")
-        # print(keep_row_indices)
-        # import sys
-        # sys.exit(1)
+
+        # Parse information about columns to be selected.
+        if select_columns:
+            if not isinstance(select_columns, list):
+                raise Exception("You must specify select_column as a list.")
+
+            # Save header line
+            select_columns = [c.encode() for c in select_columns]
+            write_obj.write(b"\t".join(select_columns) + b"\n")
+
+            # Get select column indices
+            select_column_index_chunks = iterate_single_value([get_column_index_from_name(file_data, c) for c in select_columns])
+            num_select_column_chunks = 1
+        else:
+            # Save header line
+            chunk_size = 1000000
+            cn_start = file_data.file_map_dict["cn"][0]
+            cn_end = file_data.file_map_dict["cn"][1]
+
+            for chunk_start in range(cn_start, cn_end, chunk_size):
+                chunk_text = file_data.file_handle[chunk_start:min(chunk_start + chunk_size, cn_end)]
+                write_obj.write(chunk_text.replace(b"\n", b"\t"))
+
+            write_obj.write(b"\n")
+
+            # Get select column indices
+            max_columns_per_chunk = 100000
+            num_cols = file_data.cache_dict["num_cols"]
+            select_column_index_chunks = generate_range_chunks(num_cols, max_columns_per_chunk)
+            num_select_column_chunks = ceil(num_cols / max_columns_per_chunk)
+
+        # filter_indices = set()
+        # for f in fltr.get_sub_filters():
+        #     filter_indices.add(file_data.get_index_number(f))
+
+        # select_columns, column_type_dict, column_coords_dict = get_column_meta(file_data, select_columns)
+
+    if num_select_column_chunks == 1:
+        save_output_rows(data_file_path, write_obj, keep_row_indices, next(select_column_index_chunks))
+    else:
+        if tmp_dir_path:
+            makedirs(tmp_dir_path, exist_ok=True)
+        else:
+            tmp_dir_path = mkdtemp()
+        tmp_dir_path = fix_dir_path_ending(tmp_dir_path)
+
+        for chunk_number, select_column_indices in enumerate(select_column_index_chunks):
+            with open(f"{tmp_dir_path}{chunk_number}", "wb") as chunk_file:
+                save_output_rows(data_file_path, chunk_file, keep_row_indices, select_column_indices)
+
+        chunk_file_dict = {}
+        for chunk_number in range(num_select_column_chunks):
+            chunk_file_dict[chunk_number] = open(f"{tmp_dir_path}{chunk_number}", "rb")
+
+        for row_index in keep_row_indices:
+            for chunk_number, chunk_file in chunk_file_dict.items():
+                if chunk_number + 1 == num_select_column_chunks:
+                    write_obj.write(chunk_file.readline())
+                else:
+                    write_obj.write(chunk_file.readline().rstrip(b"\n") + b"\t")
+
+        for chunk_number, chunk_file in chunk_file_dict.items():
+            chunk_file.close()
+            remove(f"{tmp_dir_path}{chunk_number}")
+
+    # TODO: Add logic for parallelizing across column chunks and row chunks.
+    # TODO: look for opportunities to change parse_data_coords( to parse_data_coord(
 
             # filter_tasks = []
             # filter_args = []
@@ -544,51 +584,20 @@ def query(data_file_path, fltr=NoFilter(), select_columns=[], out_file_path=None
                 # Parallelization
             # keep_row_indices = sorted(chain.from_iterable(joblib.Parallel(n_jobs=num_parallel)(joblib.delayed(fltr._filter_column_values)(data_file_path, row_indices, column_coords_dict, bigram_size_dict) for row_indices in generate_query_row_chunks(file_data.cache_dict["num_rows"], num_parallel))))
 
-        select_column_coords = [column_coords_dict[name] for name in select_columns]
-        parse_function = get_parse_row_values_function(file_data)
+    #     joblib.Parallel(n_jobs=num_parallel)(
+    #         joblib.delayed(save_output_rows)(file_data.data_file_path, f"{tmp_dir_path}/{chunk_number}", row_index_chunk, select_columns, select_column_coords) for
+    #         chunk_number, row_index_chunk in enumerate(row_index_chunks))
+    #
+    #         if os.path.exists(chunk_file_path):
+    #             with open(chunk_file_path, "rb") as read_file:
+    #                 with mmap(read_file.fileno(), 0, prot=PROT_READ) as mmap_handle:
+    #                     for start_pos in range(0, len(mmap_handle), read_length):
+    #                         write_obj.write(mmap_handle[start_pos:(start_pos + read_length)])
 
-        if out_file_path:
-            with open(out_file_path, 'wb') as out_file:
-                out_file.write(b"\t".join(select_columns) + b"\n") # Header line
-
-                if num_parallel == 1 or len(keep_row_indices) <= num_parallel:
-                    for row_index in keep_row_indices:
-                        out_file.write(b"\t".join(parse_function(file_data, "", row_index, select_column_coords)) + b"\n")
-                else:
-                    if tmp_dir_path:
-                        makedirs(tmp_dir_path, exist_ok=True)
-                    else:
-                        tmp_dir_path = mkdtemp()
-
-                    tmp_dir_path = fix_dir_path_ending(tmp_dir_path)
-                    makedirs(tmp_dir_path, exist_ok=True)
-
-                    row_index_chunks = split_integer_list_into_chunks(keep_row_indices, num_parallel)
-
-                    joblib.Parallel(n_jobs=num_parallel)(
-                        joblib.delayed(save_output_line_to_temp)(file_data.data_file_path, "", chunk_number, row_index_chunk, parse_function, select_column_coords, bigram_size_dict, select_columns, tmp_dir_path) for
-                        chunk_number, row_index_chunk in enumerate(row_index_chunks))
-
-                    read_length = 1000000
-                    for chunk_number in range(num_parallel):
-                        chunk_file_path = f"/{tmp_dir_path}/{chunk_number}"
-
-                        if os.path.exists(chunk_file_path):
-                            with open(chunk_file_path, "rb") as read_file:
-                                with mmap(read_file.fileno(), 0, prot=PROT_READ) as mmap_handle:
-                                    for start_pos in range(0, len(mmap_handle), read_length):
-                                        out_file.write(mmap_handle[start_pos:(start_pos + read_length)])
-
-                            remove(f"/{tmp_dir_path}/{chunk_number}")
-        else:
-            sys.stdout.buffer.write(b"\t".join(select_columns) + b"\n") # Header line
-
-            for row_index in keep_row_indices:
-                out_values = parse_function(file_data, "", row_index, select_column_coords)
-                sys.stdout.buffer.write(b"\t".join(out_values))
-
-                if row_index != keep_row_indices[-1]:
-                    sys.stdout.buffer.write(b"\n")
+    #TODO: Make this function a context manager? Or force the following code to happen
+    #      when an exit signal is received.
+    if out_file_path:
+        write_obj.close()
 
 def head(data_file_path, n = 10, select_columns=None, out_file_path=None, out_file_type="tsv"):
     if not select_columns:
@@ -617,7 +626,7 @@ def get_num_cols(data_file_path):
 def get_column_type_from_name(data_file_path, column_name):
     try:
         with initialize(data_file_path) as file_data:
-            column_index = get_column_index_from_name(file_data, column_name)
+            column_index = get_column_index_from_name(file_data, column_name.encode())
 
             return get_column_type_from_index(file_data, column_index)
     except:
@@ -659,9 +668,9 @@ def initialize(data_file_path):
             #     #     decompressor = deserialize(decompression_text)
             # else:
 
-            # Calculate line length based on last "cncc" value.
-            cache_dict["cnccml"] = fast_int(mmap_handle[file_map_dict["cnccml"][0]:file_map_dict["cnccml"][1]])
-            cache_dict["cnll"] = fast_int(mmap_handle[(file_map_dict["cncc"][1] - cache_dict["cnccml"]):file_map_dict["cncc"][1]])
+            # Calculate line length based on last "cnicc" value.
+            cache_dict["cniccml"] = fast_int(mmap_handle[file_map_dict["cniccml"][0]:file_map_dict["cniccml"][1]])
+            cache_dict["cnill"] = fast_int(mmap_handle[(file_map_dict["cnicc"][1] - cache_dict["cniccml"]):file_map_dict["cnicc"][1]])
 
             if "i" in file_map_dict:
                 cache_dict["i"] = deserialize(mmap_handle[file_map_dict["i"][0]:file_map_dict["i"][1]])
@@ -678,10 +687,18 @@ def initialize(data_file_path):
             yield FileData(data_file_path, mmap_handle, file_map_dict, cache_dict, ver, decompression_type, decompressor)
 
 def get_column_index_from_name(file_data, column_name):
-    position = get_identifier_row_index(file_data, "cn", column_name.encode(), file_data.cache_dict["num_cols"])
+    position = get_identifier_row_index(file_data, "cni", column_name, file_data.cache_dict["num_cols"])
 
     if position < 0:
-        raise Exception(f"Could not retrieve index because column named {column_name} was not found.")
+        raise Exception(f"Could not retrieve index because column named {column_name.decode()} was not found.")
+
+    return position
+
+def get_column_name_from_index(file_data, column_index):
+    position = get_identifier_row_index(file_data, "cin", column_index, file_data.cache_dict["num_cols"])
+
+    if position < 0:
+        raise Exception(f"Could not retrieve name because column index {column_index.decode()} was not found.")
 
     return position
 
@@ -692,57 +709,57 @@ def get_value_from_single_column_file(file_handle, content_start_index, segment_
     start_position = content_start_index + row_index * segment_length
     return file_handle[start_position:(start_position + segment_length)].rstrip(b" ")
 
-def get_column_meta(file_data, filter_column_set, select_columns):
-    column_type_dict = {}
-    column_coords_dict = {}
-    column_index_name_dict = {}
-
-    if len(select_columns) == 0:
-        num_cols = file_data.cache_dict["num_cols"]
-        coords = parse_data_coords(file_data, "cn", [0, 1])
-
-        for row_index in range(num_cols):
-            values = parse_row_values(file_data, "cn", row_index, coords)
-            column_name = values[0]
-            column_index = fast_int(values[1])
-
-            column_index_name_dict[column_index] = column_name
-
-            if column_name in filter_column_set:
-                column_type_dict[column_name] = get_column_type_from_index(file_data, row_index)
-
-        all_coords = parse_data_coords(file_data, "", range(num_cols))
-        for row_index in range(num_cols):
-            column_coords_dict[column_index_name_dict[row_index]] = all_coords[row_index]
-
-        all_columns = [x[1] for x in sorted(column_index_name_dict.items())]
-        select_columns = all_columns
-    else:
-        select_columns = [name.encode() for name in select_columns]
-        all_columns = list(filter_column_set | set(select_columns))
-
-        column_name_index_dict = {}
-        for column_name in all_columns:
-            column_index = get_column_index_from_name(file_data, column_name.decode())
-            column_name_index_dict[column_name] = column_index
-            column_index_name_dict[column_index] = column_name
-
-        for column_name in filter_column_set:
-            column_type_dict[column_name] = get_column_type_from_index(file_data, column_name_index_dict[column_name])
-
-        all_column_indices = [column_name_index_dict[name] for name in all_columns]
-        all_coords = parse_data_coords(file_data, "", all_column_indices)
-
-        for i, column_name in enumerate(all_columns):
-            column_coords_dict[column_name] = all_coords[i]
-
-    bigram_size_dict = {}
-
-    if file_data.decompression_type == "dictionary":
-        for column_name in all_columns:
-            bigram_size_dict[column_name] = get_bigram_size(len(file_data.decompressor[column_name]["map"]))
-
-    return select_columns, column_type_dict, column_coords_dict, bigram_size_dict
+# def get_column_meta(file_data, filter_column_set, select_columns):
+#     column_type_dict = {}
+#     column_coords_dict = {}
+#     column_index_name_dict = {}
+#
+#     if len(select_columns) == 0:
+#         num_cols = file_data.cache_dict["num_cols"]
+#         coords = parse_data_coords(file_data, "cn", [0, 1])
+#
+#         for row_index in range(num_cols):
+#             values = parse_row_values(file_data, "cn", row_index, coords)
+#             column_name = values[0]
+#             column_index = fast_int(values[1])
+#
+#             column_index_name_dict[column_index] = column_name
+#
+#             if column_name in filter_column_set:
+#                 column_type_dict[column_name] = get_column_type_from_index(file_data, row_index)
+#
+#         all_coords = parse_data_coords(file_data, "", range(num_cols))
+#         for row_index in range(num_cols):
+#             column_coords_dict[column_index_name_dict[row_index]] = all_coords[row_index]
+#
+#         all_columns = [x[1] for x in sorted(column_index_name_dict.items())]
+#         select_columns = all_columns
+#     else:
+#         select_columns = [name.encode() for name in select_columns]
+#         all_columns = list(filter_column_set | set(select_columns))
+#
+#         column_name_index_dict = {}
+#         for column_name in all_columns:
+#             column_index = get_column_index_from_name(file_data, column_name.decode())
+#             column_name_index_dict[column_name] = column_index
+#             column_index_name_dict[column_index] = column_name
+#
+#         for column_name in filter_column_set:
+#             column_type_dict[column_name] = get_column_type_from_index(file_data, column_name_index_dict[column_name])
+#
+#         all_column_indices = [column_name_index_dict[name] for name in all_columns]
+#         all_coords = parse_data_coords(file_data, "", all_column_indices)
+#
+#         for i, column_name in enumerate(all_columns):
+#             column_coords_dict[column_name] = all_coords[i]
+#
+#     bigram_size_dict = {}
+#
+#     if file_data.decompression_type == "dictionary":
+#         for column_name in all_columns:
+#             bigram_size_dict[column_name] = get_bigram_size(len(file_data.decompressor[column_name]["map"]))
+#
+#     return select_columns, column_type_dict, column_coords_dict, bigram_size_dict
 
 def generate_query_row_chunks(num_rows, num_parallel):
     rows_per_chunk = ceil(num_rows / num_parallel)
@@ -758,6 +775,21 @@ def generate_query_row_chunks(num_rows, num_parallel):
 
     if len(row_indices) > 0:
         yield row_indices
+
+def parse_data_coord(file_data, data_file_key, index):
+    ccml = file_data.cache_dict[data_file_key + "ccml"]
+
+    start_pos = index * ccml
+    next_start_pos = start_pos + ccml
+    further_next_start_pos = next_start_pos + ccml
+
+    # Retrieve the start position from the cc file and then cache it.
+    data_start_pos = fast_int(parse_data_value_from_file(file_data, data_file_key + "cc", 0, 0, [start_pos, next_start_pos]).rstrip(b" "))
+
+    # Retrieve the end position from the cc file and then cache it.
+    data_end_pos = fast_int(parse_data_value_from_file(file_data, data_file_key + "cc", 0, 0, [next_start_pos, further_next_start_pos]).rstrip(b" "))
+
+    return data_start_pos, data_end_pos
 
 def parse_data_coords(file_data, data_file_key, indices):
     data_coords = []
@@ -899,12 +931,42 @@ def parse_values_in_column(file_data, data_file_key, column_name, column_coords,
 
     return values
 
-def save_output_line_to_temp(data_file_path, data_file_key, chunk_number, row_indices, parse_function, select_column_coords, bigram_size_dict, select_columns, tmp_dir_path):
-    with initialize(data_file_path) as file_data:
-        with open(f"/{tmp_dir_path}/{chunk_number}", "wb") as tmp_file:
-            for row_index in row_indices:
-                out_values = parse_function(file_data, data_file_key, row_index, select_column_coords)
-                tmp_file.write(b"\t".join(out_values) + b"\n")
+def save_output_rows(in_file_path, out_file_path_or_obj, row_indices, column_indices):
+    # if isinstance(out_file_path_or_obj, str):
+    #     out_file_path_or_obj = open(out_file_path_or_obj, "wb")
+
+    with initialize(in_file_path) as file_data:
+        select_column_coords = parse_data_coords(file_data, "", column_indices)
+        parse_row_values_function = get_parse_row_values_function(file_data)
+
+        for row_index in row_indices:
+            out_file_path_or_obj.write(b"\t".join(parse_row_values_function(file_data, "", row_index, select_column_coords)) + b"\n")
+
+        # for row_index in row_indices:
+        #     if select_columns:
+        #         parse_row_values_function = get_parse_row_values_function(file_data)
+        #         out_file_path_or_obj.write(b"\t".join(parse_row_values_function(file_data, "", row_index, select_column_coords)) + b"\n")
+        #     else:
+        #         parse_row_value_function = get_parse_row_value_function(file_data)
+        #
+        #         out_items = []
+        #         for select_col_index in range(file_data.cache_dict["num_cols"] - 1):
+        #             select_col_coords = parse_data_coord(file_data, "", select_col_index)
+        #             out_items.append(parse_row_value_function(file_data, "", row_index, select_col_coords))
+        #
+        #             if len(out_items) == 1000000:
+        #                 out_file_path_or_obj.write(b"\t".join(out_items) + b"\t")
+        #                 out_items = []
+        #
+        #         if len(out_items) > 0:
+        #             out_file_path_or_obj.write(b"\t".join(out_items) + b"\t")
+        #
+        #         last_col_coords = parse_data_coord(file_data, "", file_data.cache_dict['num_cols'] - 1)
+        #         last_col_item = parse_row_value_function(file_data, '', row_index, last_col_coords)
+        #         out_file_path_or_obj.write(last_col_item + b"\n")
+
+    # if hasattr(out_file_path_or_obj, "close"):
+    #     out_file_path_or_obj.close()
 
 # def _get_decompression_dict(self, file_path, column_index_name_dict):
 #     with open(file_path, "rb") as cmpr_file:

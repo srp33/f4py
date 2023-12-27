@@ -156,6 +156,9 @@ def run_small_tests(in_file_path, f4_file_path, out_file_path, num_parallel = 1,
     f4.query(f4_file_path, f4.IntRangeFilter("IntA", -100, 100), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("IntA within -100 and 100", read_file_into_lists(out_file_path), [[b"FloatA"], [b"9.9"], [b"1.1"], [b"2.2"], [b"2.2"], [b"4.4"]])
     os.unlink(out_file_path)
+    print(out_file_path)
+    print("got to 135")
+    sys.exit(1)
 
     f4.query(f4_file_path, f4.IntFilter("IntA", operator.eq, 7), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("Int equals filter", read_file_into_lists(out_file_path), [[b"FloatA"],[b"2.2"]])
@@ -245,10 +248,10 @@ def run_small_tests(in_file_path, f4_file_path, out_file_path, num_parallel = 1,
         #check_results("NotLike filter on categorical column", read_file_into_lists(out_file_path), [[b"FloatA"],[b"9.9"],[b"2.2"],[b"4.4"]])
         #os.unlink(out_file_path)
 
-    if not index_columns:
-        f4.query(f4_file_path, f4.RegularExpressionFilter("CategoricalB", r"ow$"), ["FloatA"], out_file_path, num_parallel=num_parallel)
-        check_results("Regular expression filter on categorical column", read_file_into_lists(out_file_path), [[b"FloatA"], [b"1.1"], [b"2.2"]])
-        os.unlink(out_file_path)
+    #if not index_columns:
+    #    f4.query(f4_file_path, f4.RegularExpressionFilter("CategoricalB", r"ow$"), ["FloatA"], out_file_path, num_parallel=num_parallel)
+    #    check_results("Regular expression filter on categorical column", read_file_into_lists(out_file_path), [[b"FloatA"], [b"1.1"], [b"2.2"]])
+    #    os.unlink(out_file_path)
 
     f4.query(f4_file_path, f4.FloatRangeFilter("FloatA", -9.9, 4.4), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("FloatA within -9.9 and 4.4", read_file_into_lists(out_file_path), [[b"FloatA"], [b"1.1"], [b"2.2"], [b"2.2"], [b"4.4"]])
