@@ -67,7 +67,7 @@ class __SimpleBaseFilter(__BaseFilter):
 
         if index_number < 0:
             column_index = get_column_index_from_name(file_data, self.column_name)
-            coords = parse_data_coords(file_data, "", [column_index])[0]
+            coords = parse_data_coord(file_data, "", column_index)
 
             parse_function = get_parse_row_value_function(file_data)
 
@@ -320,8 +320,8 @@ class AndFilter(__CompositeFilter):
         #     column_index1 = get_column_index_from_name(file_data, self.filter1.column_name.decode())
         #     column_index2 = get_column_index_from_name(file_data, self.filter1.column_name.decode())
         #
-        #     coords1 = parse_data_coords(file_data, "", [column_index1])[0]
-        #     coords2 = parse_data_coords(file_data, "", [column_index2])[0]
+        #     coords1 = parse_data_coord(file_data, "", column_index1)
+        #     coords2 = parse_data_coord(file_data, "", column_index2)
         #
         #     parse_function = get_parse_row_value_function(file_data)
         #
@@ -454,7 +454,6 @@ def query(data_file_path, fltr=NoFilter(), select_columns=[], out_file_path=None
             remove(f"{tmp_dir_path}{chunk_number}")
 
     # TODO: Add logic for parallelizing across column chunks and row chunks.
-    # TODO: look for opportunities to change parse_data_coords( to parse_data_coord(
 
             # filter_tasks = []
             # filter_args = []
@@ -867,8 +866,8 @@ def get_identifier_row_index(file_data, data_file_key, query_value, end_index):
     if end_index == 0:
         return -1
 
-    value_coords = parse_data_coords(file_data, data_file_key, [0])[0]
-    position_coords = parse_data_coords(file_data, data_file_key, [1])[0]
+    value_coords = parse_data_coord(file_data, data_file_key, 0)
+    position_coords = parse_data_coord(file_data, data_file_key, 1)
 
     matching_position = binary_identifier_search(file_data, data_file_key, value_coords, query_value, 0, end_index)
 
