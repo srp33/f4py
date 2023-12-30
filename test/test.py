@@ -34,7 +34,10 @@ def read_string_into_lists(s, delimiter="\t"):
     out_items = []
 
     for line in s.split("\n"):
-        out_items.append([x.encode() for x in line.split(delimiter)])
+        items = [x.encode() for x in line.split(delimiter) if len(x) > 0]
+
+        if len(items) > 0:
+            out_items.append(items)
 
     return out_items
 
@@ -156,9 +159,6 @@ def run_small_tests(in_file_path, f4_file_path, out_file_path, num_parallel = 1,
     f4.query(f4_file_path, f4.IntRangeFilter("IntA", -100, 100), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("IntA within -100 and 100", read_file_into_lists(out_file_path), [[b"FloatA"], [b"9.9"], [b"1.1"], [b"2.2"], [b"2.2"], [b"4.4"]])
     os.unlink(out_file_path)
-    print(out_file_path)
-    print("got to 135")
-    sys.exit(1)
 
     f4.query(f4_file_path, f4.IntFilter("IntA", operator.eq, 7), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("Int equals filter", read_file_into_lists(out_file_path), [[b"FloatA"],[b"2.2"]])
@@ -753,31 +753,31 @@ def run_all_small_tests():
     # Basic small tests
     f4_file_path = "data/small.f4"
     out_file_path = "/tmp/small_out.tsv"
-    # run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1)
-    # run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2)
+    #run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1)
+    #run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2)
 
-    # # Basic small tests (with gzipped files)
-    # run_small_tests("data/small.tsv.gz", f4_file_path, out_file_path, num_parallel = 1)
-    # run_small_tests("data/small.tsv.gz", f4_file_path, out_file_path, num_parallel = 2)
+    # Basic small tests (with gzipped files)
+    #run_small_tests("data/small.tsv.gz", f4_file_path, out_file_path, num_parallel = 1)
+    #run_small_tests("data/small.tsv.gz", f4_file_path, out_file_path, num_parallel = 2)
 
-    # # Make sure we print to standard out properly (this code does not work inside a function).
-    # f4.convert_delimited_file("data/small.tsv", f4_file_path)
-    # old_stdout = sys.stdout
-    # sys.stdout = TextIOWrapper(BytesIO(), sys.stdout.encoding)
-    # f4.query(f4_file_path, f4.NoFilter(), [], out_file_path=None, num_parallel=1)
-    # sys.stdout.seek(0)
-    # out = sys.stdout.read()
-    # sys.stdout.close()
-    # sys.stdout = old_stdout
-    # check_results("No filters, select all columns - std out", read_string_into_lists(out), read_file_into_lists("data/small.tsv"))
+    # Make sure we print to standard out properly (this code does not work inside a function).
+    #f4.convert_delimited_file("data/small.tsv", f4_file_path)
+    #old_stdout = sys.stdout
+    #sys.stdout = TextIOWrapper(BytesIO(), sys.stdout.encoding)
+    #f4.query(f4_file_path, f4.NoFilter(), [], out_file_path=None, num_parallel=1)
+    #sys.stdout.seek(0)
+    #out = sys.stdout.read()
+    #sys.stdout.close()
+    #sys.stdout = old_stdout
+    #check_results("No filters, select all columns - std out", read_string_into_lists(out), read_file_into_lists("data/small.tsv"))
 
     index_columns = ["ID", "CategoricalB", "CategoricalB_endswith", "FloatA", "FloatB", "IntA", "IntB", "OrdinalA", ["CategoricalB", "IntB"]]
 
     # Small tests with indexing
-    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, index_columns = index_columns)
-    print("got here - test.py - line 772")
-    return
+    #run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, index_columns = index_columns)
     run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2, index_columns = index_columns)
+    print("got here - test.py - line 778")
+    return
 
     ## Small tests with dictionary-based compression
     ##run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, compression_type = "dictionary")
