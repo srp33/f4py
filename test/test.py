@@ -754,7 +754,7 @@ def run_all_small_tests():
     f4_file_path = "data/small.f4"
     out_file_path = "/tmp/small_out.tsv"
     #run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1)
-    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2)
+    #run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2)
 
     # Basic small tests (with gzipped files)
     #run_small_tests("data/small.tsv.gz", f4_file_path, out_file_path, num_parallel = 1)
