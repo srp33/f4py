@@ -185,22 +185,21 @@ def run_small_tests(in_file_path, f4_file_path, out_file_path, num_parallel = 1,
     os.unlink(out_file_path)
 
     f4.query(f4_file_path, f4.AndFilter(f4.IntFilter("IntA", operator.eq, 7), f4.FloatFilter("FloatA", operator.ne, 1.1)), ["FloatA"], out_file_path, num_parallel=num_parallel)
-    check_results("Two numeric filters", read_file_into_lists(out_file_path), [[b"FloatA"], [b"2.2"]])
+    check_results("Two filters (And)", read_file_into_lists(out_file_path), [[b"FloatA"], [b"2.2"]])
     os.unlink(out_file_path)
 
-    fltr = f4.AndFilter(
-             f4.OrFilter(
-               f4.StringFilter("OrdinalA", operator.eq, "Med"),
-               f4.StringFilter("OrdinalA", operator.eq, "High")
-             ),
-             f4.OrFilter(
-               f4.OrFilter(
-                 f4.StringFilter("IntB", operator.eq, "44"),
-                 f4.StringFilter("IntB", operator.eq, "99")
-               ),
-               f4.StringFilter("IntB", operator.eq, "77")
-             )
-           )
+    f4.query(f4_file_path, f4.AndFilter(f4.StringFilter("OrdinalA", operator.eq, "Med"), f4.IntFilter("IntA", operator.gt, 0), f4.FloatFilter("FloatA", operator.lt, 3.0)), ["ID"], out_file_path, num_parallel=num_parallel)
+    check_results("Three filters (And)", read_file_into_lists(out_file_path), [[b"ID"], [b"C"]])
+    os.unlink(out_file_path)
+
+    f4.query(f4_file_path, f4.OrFilter(f4.IntFilter("IntA", operator.eq, 7), f4.FloatFilter("FloatA", operator.eq, 1.1)), ["ID"], out_file_path, num_parallel=num_parallel)
+    check_results("Two filters (Or)", read_file_into_lists(out_file_path), [[b"ID"], [b"A"], [b"C"]])
+    os.unlink(out_file_path)
+
+    f4.query(f4_file_path, f4.OrFilter(f4.StringFilter("OrdinalA", operator.eq, "Med"), f4.IntFilter("IntA", operator.gt, 5), f4.FloatFilter("FloatA", operator.gt, 1.1)), ["ID"], out_file_path, num_parallel=num_parallel)
+    check_results("Three filters (Or)", read_file_into_lists(out_file_path), [[b"ID"], [b"E"], [b"B"], [b"C"], [b"D"]])
+    os.unlink(out_file_path)
+
     or_1 = f4.OrFilter(
        f4.StringFilter("OrdinalA", operator.eq, "Med"),
        f4.StringFilter("OrdinalA", operator.eq, "High")
@@ -214,15 +213,23 @@ def run_small_tests(in_file_path, f4_file_path, out_file_path, num_parallel = 1,
              )
     fltr = f4.AndFilter(or_1, or_2)
     f4.query(f4_file_path, fltr, ["FloatA"], out_file_path, num_parallel=num_parallel)
-    check_results("Nested or filters", read_file_into_lists(out_file_path), [[b"FloatA"], [b"2.2"], [b"2.2"], [b"4.4"]])
+    check_results("Nested Or filters", read_file_into_lists(out_file_path), [[b"FloatA"], [b"2.2"], [b"2.2"], [b"4.4"]])
+    os.unlink(out_file_path)
+
+    or_3 = f4.OrFilter(
+             f4.IntFilter("IntB", operator.eq, 44),
+             f4.IntFilter("IntB", operator.eq, 99),
+             f4.IntFilter("IntB", operator.eq, 77)
+           )
+    fltr = f4.AndFilter(or_1, or_3)
+    f4.query(f4_file_path, fltr, ["FloatA"], out_file_path, num_parallel=num_parallel)
+    check_results("Nested Or filters (simplified)", read_file_into_lists(out_file_path), [[b"FloatA"], [b"2.2"], [b"2.2"], [b"4.4"]])
     os.unlink(out_file_path)
 
     fltr = f4.AndFilter(
              f4.OrFilter(
-               f4.OrFilter(
-                 f4.StringFilter("OrdinalA", operator.eq, "Low"),
-                 f4.StringFilter("OrdinalA", operator.eq, "Med")
-               ),
+               f4.StringFilter("OrdinalA", operator.eq, "Low"),
+               f4.StringFilter("OrdinalA", operator.eq, "Med"),
                f4.StringFilter("OrdinalA", operator.eq, "High")
              ),
              f4.FloatFilter("FloatB", operator.le, 44.4)
@@ -238,20 +245,6 @@ def run_small_tests(in_file_path, f4_file_path, out_file_path, num_parallel = 1,
     f4.query(f4_file_path, f4.EndsWithFilter("CategoricalB", "ow"), ["ID"], out_file_path, num_parallel=num_parallel)
     check_results("EndsWithFilter on categorical column B", read_file_into_lists(out_file_path), [[b"ID"], [b"A"], [b"B"]])
     os.unlink(out_file_path)
-
-    #if index_columns:
-        #f4.query(f4_file_path, f4.LikeFilter("CategoricalB", "%ow"), ["FloatA"], out_file_path, num_parallel=num_parallel)
-        #check_results("Like filter on categorical column", read_file_into_lists(out_file_path), [[b"FloatA"],[b"1.1"],[b"2.2"]])
-        #os.unlink(out_file_path)
-
-        #f4.query(f4_file_path, f4.NotLikeFilter("CategoricalB", "%ow"), ["FloatA"], out_file_path, num_parallel=num_parallel)
-        #check_results("NotLike filter on categorical column", read_file_into_lists(out_file_path), [[b"FloatA"],[b"9.9"],[b"2.2"],[b"4.4"]])
-        #os.unlink(out_file_path)
-
-    #if not index_columns:
-    #    f4.query(f4_file_path, f4.RegularExpressionFilter("CategoricalB", r"ow$"), ["FloatA"], out_file_path, num_parallel=num_parallel)
-    #    check_results("Regular expression filter on categorical column", read_file_into_lists(out_file_path), [[b"FloatA"], [b"1.1"], [b"2.2"]])
-    #    os.unlink(out_file_path)
 
     f4.query(f4_file_path, f4.FloatRangeFilter("FloatA", -9.9, 4.4), ["FloatA"], out_file_path, num_parallel=num_parallel)
     check_results("FloatA within -9.9 and 4.4", read_file_into_lists(out_file_path), [[b"FloatA"], [b"1.1"], [b"2.2"], [b"2.2"], [b"4.4"]])
@@ -510,31 +503,39 @@ def run_small_tests(in_file_path, f4_file_path, out_file_path, num_parallel = 1,
 
     fltr = f4.AndFilter(
              f4.OrFilter(
-               f4.OrFilter(
-                 f4.StringFilter("ID", operator.eq, "A"),
-                 f4.StringFilter("ID", operator.eq, "B"),
-               ),
-               f4.StringFilter("ID", operator.eq, "C"),
+               f4.StringFilter("ID", operator.eq, "A"),
+               f4.StringFilter("ID", operator.eq, "B"),
+               f4.StringFilter("ID", operator.eq, "C")
              ),
              f4.FloatFilter("FloatA", operator.ge, 2.0)
            )
     f4.query(f4_file_path, fltr, ["FloatA"], out_file_path, num_parallel=num_parallel)
-    check_results("Filter using two index columns", read_file_into_lists(out_file_path), [[b"FloatA"], [b"2.2"], [b"2.2"]])
+    check_results("Filter using two, single-index columns", read_file_into_lists(out_file_path), [[b"FloatA"], [b"2.2"], [b"2.2"]])
     os.unlink(out_file_path)
 
     fltr = f4.AndFilter(f4.StringFilter("CategoricalB", operator.eq, "Yellow"), f4.IntRangeFilter("IntB", 0, 50))
     f4.query(f4_file_path, fltr, ["FloatA"], out_file_path, num_parallel=num_parallel)
-    check_results("Filter using string/int-range two-column index", read_file_into_lists(out_file_path), [[b"FloatA"], [b"2.2"]])
+    check_results("Filter using string/int-range two-column index - A", read_file_into_lists(out_file_path), [[b"FloatA"], [b"2.2"]])
     os.unlink(out_file_path)
 
     fltr = f4.AndFilter(f4.StringFilter("CategoricalB", operator.eq, "Yellow"), f4.IntRangeFilter("IntB", 0, 25))
     f4.query(f4_file_path, fltr, ["FloatA"], out_file_path, num_parallel=num_parallel)
-    check_results("Filter using string/int-range two-column index", read_file_into_lists(out_file_path), [[b"FloatA"]])
+    check_results("Filter using string/int-range two-column index - B", read_file_into_lists(out_file_path), [[b"FloatA"]])
     os.unlink(out_file_path)
 
     fltr = f4.AndFilter(f4.StringFilter("CategoricalB", operator.eq, "Brown"), f4.IntRangeFilter("IntB", 50, 100))
     f4.query(f4_file_path, fltr, ["FloatA"], out_file_path, num_parallel=num_parallel)
-    check_results("Filter using string/int-range two-column index", read_file_into_lists(out_file_path), [[b"FloatA"], [b"9.9"], [b"2.2"]])
+    check_results("Filter using string/int-range two-column index - C", read_file_into_lists(out_file_path), [[b"FloatA"], [b"9.9"], [b"2.2"]])
+    os.unlink(out_file_path)
+
+    fltr = f4.AndFilter(f4.FloatFilter("FloatA", operator.eq, 2.2), f4.StringFilter("OrdinalA", operator.eq, "Med"), f4.IntFilter("IntA", operator.gt, 6))
+    f4.query(f4_file_path, fltr, ["ID"], out_file_path, num_parallel=num_parallel)
+    check_results("Filter using 3-column index - All 3", read_file_into_lists(out_file_path), [[b"ID"], [b"C"]])
+    os.unlink(out_file_path)
+
+    fltr = f4.AndFilter(f4.FloatFilter("FloatA", operator.eq, 2.2), f4.StringFilter("OrdinalA", operator.eq, "Med"))
+    f4.query(f4_file_path, fltr, ["ID"], out_file_path, num_parallel=num_parallel)
+    check_results("3-column index - Only partial match", read_file_into_lists(out_file_path), [[b"ID"], [b"C"]])
     os.unlink(out_file_path)
 
     # Clean up data files
@@ -753,28 +754,28 @@ def run_all_small_tests():
     # Basic small tests
     f4_file_path = "data/small.f4"
     out_file_path = "/tmp/small_out.tsv"
-    #run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1)
-    #run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2)
+    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1)
+    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2)
 
     # Basic small tests (with gzipped files)
-    #run_small_tests("data/small.tsv.gz", f4_file_path, out_file_path, num_parallel = 1)
-    #run_small_tests("data/small.tsv.gz", f4_file_path, out_file_path, num_parallel = 2)
+    run_small_tests("data/small.tsv.gz", f4_file_path, out_file_path, num_parallel = 1)
+    run_small_tests("data/small.tsv.gz", f4_file_path, out_file_path, num_parallel = 2)
 
     # Make sure we print to standard out properly (this code does not work inside a function).
-    #f4.convert_delimited_file("data/small.tsv", f4_file_path)
-    #old_stdout = sys.stdout
-    #sys.stdout = TextIOWrapper(BytesIO(), sys.stdout.encoding)
-    #f4.query(f4_file_path, f4.NoFilter(), [], out_file_path=None, num_parallel=1)
-    #sys.stdout.seek(0)
-    #out = sys.stdout.read()
-    #sys.stdout.close()
-    #sys.stdout = old_stdout
-    #check_results("No filters, select all columns - std out", read_string_into_lists(out), read_file_into_lists("data/small.tsv"))
+    f4.convert_delimited_file("data/small.tsv", f4_file_path)
+    old_stdout = sys.stdout
+    sys.stdout = TextIOWrapper(BytesIO(), sys.stdout.encoding)
+    f4.query(f4_file_path, f4.NoFilter(), [], out_file_path=None, num_parallel=1)
+    sys.stdout.seek(0)
+    out = sys.stdout.read()
+    sys.stdout.close()
+    sys.stdout = old_stdout
+    check_results("No filters, select all columns - std out", read_string_into_lists(out), read_file_into_lists("data/small.tsv"))
 
-    index_columns = ["ID", "CategoricalB", "CategoricalB_endswith", "FloatA", "FloatB", "IntA", "IntB", "OrdinalA", ["CategoricalB", "IntB"]]
+    index_columns = ["ID", "CategoricalB", "CategoricalB_endswith", "FloatA", "FloatB", "IntA", "IntB", "OrdinalA", ["CategoricalB", "IntB"], ["FloatA", "OrdinalA", "IntA"]]
 
     # Small tests with indexing
-    #run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, index_columns = index_columns)
+    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, index_columns = index_columns)
     run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2, index_columns = index_columns)
     print("got here - test.py - line 778")
     return

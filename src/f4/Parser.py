@@ -273,13 +273,16 @@ class EndsWithFilter(StartsWithFilter):
         return value.endswith(self.value)
 
 class _CompositeFilter(_BaseFilter):
-    def __init__(self, filter1, filter2):
-        self.filter1 = filter1
-        self.filter2 = filter2
+    def __init__(self, filters):
+        for f in filters:
+            if not isinstance(f, _BaseFilter):
+                raise Exception("The inputs to this filter must be filters.")
+
+        self.filters = filters
 
     def _check_types(self, file_data):
-        self.filter1._check_types(file_data)
-        self.filter2._check_types(file_data)
+        for f in self.filters:
+            f._check_types(file_data)
 
 class AndFilter(_CompositeFilter):
     """
@@ -291,37 +294,45 @@ class AndFilter(_CompositeFilter):
         filter1: The first filter to be evaluated.
         filter2: The second filter to be evaluated.
     """
-    def __init__(self, filter1, filter2):
-        super().__init__(filter1, filter2)
+    def __init__(self, *filters):
+        super().__init__(filters)
 
     def get_matching_row_indices(self, file_data, row_indices, num_parallel):
         index_number = self._get_index_number(file_data)
 
         if index_number < 0:
-            row_indices_1 = self.filter1.get_matching_row_indices(file_data, row_indices, num_parallel)
-            row_indices_2 = self.filter2.get_matching_row_indices(file_data, row_indices_1, num_parallel)
+            for f in self.filters:
+                row_indices_f = f.get_matching_row_indices(file_data, row_indices, num_parallel)
+                row_indices = row_indices & row_indices_f
 
-            return row_indices_1 & row_indices_2
+            return row_indices
         else:
-            # TODO: Currently, only one combination (StringFilter + IntRangeFilter) of
-            #   two-column filters is supported. Not sure if still true?
-            #   Create a test for 2+ other columns with different types.
-            #TODO: This only scales to two filters right now. Maybe AndFilter and OrFilter can handle a list of filters.
+            num_filters = len(self.filters)
+            rows_start_end = (0, file_data.cache_dict["num_rows"])
 
-            rows_start_end_1 = self.filter1.get_matching_row_indices_indexed(file_data, index_number, 0, 2, 0, file_data.cache_dict["num_rows"], False, num_parallel)
-            return self.filter2.get_matching_row_indices_indexed(file_data, index_number, 1, 2, rows_start_end_1[0], rows_start_end_1[1], True, num_parallel)
+            for i, f in enumerate(self.filters[:-1]):
+                rows_start_end = f.get_matching_row_indices_indexed(file_data, index_number, i, num_filters, rows_start_end[0], rows_start_end[1], False, num_parallel)
+
+            return self.filters[-1].get_matching_row_indices_indexed(file_data, index_number, num_filters - 1, num_filters, rows_start_end[0], rows_start_end[1], True, num_parallel)
 
     def _get_index_number(self, file_data):
         if "i" in file_data.cache_dict:
             # Multi-column indices are only supported in certain situations.
-            if not isinstance(self.filter1, _SimpleBaseFilter) or not isinstance(self.filter2, _SimpleBaseFilter):
-                return -1
+            # Composite sub-filters are not allowed.
+            for f in self.filters:
+                if not isinstance(f, _SimpleBaseFilter):
+                    return -1
 
-            if (isinstance(self.filter1, _OperatorFilter) and self.filter1.oper == operator.ne) or (isinstance(self.filter2, _OperatorFilter) and self.filter2.oper == operator.ne):
-                return -1
+            # All but the last filter must use oper.eq.
+            for f in self.filters[:-1]:
+                if not isinstance(f, _OperatorFilter) or f.oper != operator.eq:
+                    return -1
 
-            dict_key = [(self.filter1.column_name.decode(), isinstance(self.filter1, EndsWithFilter)),
-                        (self.filter2.column_name.decode(), isinstance(self.filter2, EndsWithFilter))]
+            dict_key = []
+
+            # Find the longest match that there is. It can return shorter than the full match.
+            for i, f in enumerate(self.filters):
+                dict_key.append((f.column_name.decode(), isinstance(f, EndsWithFilter)))
 
             return file_data.cache_dict["i"].get(tuple(dict_key), -1)
 
@@ -336,14 +347,17 @@ class OrFilter(_CompositeFilter):
     Args:
         *args (list): A variable number of filters that should be evaluated. At least two filters must be specified.
     """
-    def __init__(self, filter1, filter2):
-        super().__init__(filter1, filter2)
+    def __init__(self, *filters):
+        super().__init__(filters)
 
     def get_matching_row_indices(self, file_data, row_indices, num_parallel):
-        row_indices_1 = self.filter1.get_matching_row_indices(file_data, row_indices, num_parallel)
-        row_indices_2 = self.filter2.get_matching_row_indices(file_data, row_indices - row_indices_1, num_parallel)
+        row_indices_out = self.filters[0].get_matching_row_indices(file_data, row_indices, num_parallel)
 
-        return row_indices_1 | row_indices_2
+        for f in self.filters[1:]:
+            row_indices_f = f.get_matching_row_indices(file_data, row_indices, num_parallel)
+            row_indices_out = row_indices_out | row_indices_f
+
+        return row_indices_out
 
 #####################################################
 # Public function(s)
@@ -900,26 +914,36 @@ def find_positions_g(file_data, data_file_key, value_coords, fltr, start_search_
         return start_search_position, start_search_position
 
     matching_position = search(file_data, data_file_key, value_coords, fltr, 0, end_search_position, end_search_position, all_false_operator)
-
+    # print(file_data.file_handle[file_data.file_map_dict["i8"][0]:file_data.file_map_dict["i8"][1]])
+    # print(file_data.file_handle[file_data.file_map_dict["i9"][0]:file_data.file_map_dict["i9"][1]])
+    # print(fltr.column_name, fltr.value, fltr.oper, smallest_value, largest_value, start_search_position, end_search_position, matching_position)
+    # print(matching_position + 1, end_search_position)
     return matching_position + 1, end_search_position
 
 def find_positions_l(file_data, data_file_key, value_coords, fltr, start_search_position, end_search_position, all_true_operator):
     smallest_value = parse_row_value(file_data, data_file_key, start_search_position, value_coords)
     if smallest_value == b"":
+        # print("a")
         return start_search_position, start_search_position
 
     if not all_true_operator(fltr._get_conversion_function()(smallest_value), fltr.value):
+        # print("b")
         return start_search_position, start_search_position
 
     largest_value = parse_row_value(file_data, data_file_key, end_search_position - 1, value_coords)
     if largest_value == b"":
+        # print("c")
         return start_search_position, end_search_position
 
     if all_true_operator(fltr._get_conversion_function()(largest_value), fltr.value):
+        # print(all_true_operator)
+        # print(fltr._get_conversion_function()(largest_value), fltr.value)
+        # print("d")
         return start_search_position, end_search_position
 
     matching_position = search(file_data, data_file_key, value_coords, fltr, 0, end_search_position, end_search_position, all_true_operator)
 
+    # print("e")
     return start_search_position, matching_position + 1
 
 # TODO: It might make sense to combine this function with _search_with_filter
@@ -1017,8 +1041,19 @@ def retrieve_matching_row_indices(file_data, data_file_key, position_coords, pos
         )
 
 def find_bounds_for_range(file_data, data_file_key, value_coords, filter1, filter2, start_search_position, end_search_position):
+    # print(data_file_key)
+    # print(filter1.column_name)
+    # print(filter1.value)
+    # print(filter1.oper)
+    # print(start_search_position)
+    # print(end_search_position)
     lower_positions = find_positions_g(file_data, data_file_key, value_coords, filter1, start_search_position, end_search_position, lt)
+    # print(lower_positions)
+    # print(filter2.column_name)
+    # print(filter2.value)
+    # print(filter2.oper)
     upper_positions = find_positions_l(file_data, data_file_key, value_coords, filter2, lower_positions[0], lower_positions[1], le)
+    # print(upper_positions)
 
     lower_position = max(lower_positions[0], upper_positions[0])
     upper_position = min(lower_positions[1], upper_positions[1])

@@ -883,16 +883,16 @@ def build_index(f4_file_path, tmp_dir_path, index_number, index_columns, num_row
 
     print_message(f"Done querying temporary database when indexing the {', '.join(index_columns)} column(s) in {f4_file_path}.", verbose)
 
-    coords = []
+    coords = [0]
     for mvl in max_value_lengths:
-        coords.append(sum(coords) + mvl)
+        coords.append(coords[-1] + mvl)
     coords.append(coords[-1] + max_row_index_length)
     coords = [str(x).encode() for x in coords]
 
     ccml = max([len(x) for x in coords])
     write_str_to_file(f"{out_index_file_path_prefix}ccml", str(ccml).encode())
 
-    cc = format_string_as_fixed_width(b"0", ccml)
+    cc = b""
     for x in coords:
         cc += format_string_as_fixed_width(x, ccml)
     write_str_to_file(f"{out_index_file_path_prefix}cc", cc)
