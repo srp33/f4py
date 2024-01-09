@@ -417,7 +417,7 @@ def query(data_file_path, fltr=NoFilter(), select_columns=[], out_file_path=None
             num_select_column_chunks = 1
         else:
             # Save header line
-            chunk_size = 1000000
+            chunk_size = 1000001
             cn_start = file_data.file_map_dict["cn"][0]
             cn_end = file_data.file_map_dict["cn"][1]
 
@@ -428,7 +428,7 @@ def query(data_file_path, fltr=NoFilter(), select_columns=[], out_file_path=None
             write_obj.write(b"\n")
 
             # Get select column indices
-            max_columns_per_chunk = 100000
+            max_columns_per_chunk = 1000001
             num_cols = file_data.cache_dict["num_cols"]
             select_column_index_chunks = generate_range_chunks(num_cols, max_columns_per_chunk)
             num_select_column_chunks = ceil(num_cols / max_columns_per_chunk)
@@ -676,7 +676,7 @@ def parse_zstd_compressed_row_value(file_data, data_file_key, row_index, column_
     line_start_search_position = data_start_search_position + fast_int(get_value_from_single_column_file(file_data.file_handle, file_data.file_map_dict["ll"][0], file_data.cache_dict["mlll"], row_index))
     next_line_start_search_position = data_start_search_position + fast_int(get_value_from_single_column_file(file_data.file_handle, file_data.file_map_dict["ll"][0], file_data.cache_dict["mlll"], row_index + 1))
 
-    chunk_size = 100000
+    chunk_size = 1000001
     all_text = b""
     # TODO: all_text could get really large. Find a way to use a generator.
     for i in range(line_start_search_position, next_line_start_search_position, chunk_size):
@@ -707,7 +707,7 @@ def parse_zstd_compressed_row_values(file_data, data_file_key, row_index, column
     line_start_search_position = data_start_search_position + fast_int(get_value_from_single_column_file(file_data.file_handle, file_data.file_map_dict["ll"][0], file_data.cache_dict["mlll"], row_index))
     next_line_start_search_position = data_start_search_position + fast_int(get_value_from_single_column_file(file_data.file_handle, file_data.file_map_dict["ll"][0], file_data.cache_dict["mlll"], row_index + 1))
 
-    chunk_size = 100000
+    chunk_size = 1000001
     all_text = b""
     #TODO: all_text could get really large. Find a way to use a generator.
     for i in range(line_start_search_position, next_line_start_search_position, chunk_size):
