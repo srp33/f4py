@@ -27,14 +27,6 @@ def get_current_version():
 # Constants
 #####################################################
 
-# We use these dictionaries so that when we store the file map, it takes less space on disk.
-# FILE_KEY_ABBREVIATIONS_STATS = {"mccl": 3, "mctl": 6, "cnmccl": 10, "cnll": 11, "mlll": 13}
-# FILE_KEY_ABBREVIATIONS_OTHER = {"cmpr": 7, "ver": 12}
-# FILE_KEY_ABBREVIATIONS_NOCACHE = {"data": 1, "cc": 2, "ll": 4, "ct": 5, "cndata": 8, "cncc": 9}
-# FILE_KEY_ABBREVIATIONS_NOCACHE = {"data": 2, "cc": 3, "cndata": 4, "cncc": 5, "ct": 6}
-# FILE_KEY_ABBREVIATIONS_STATS = {"ccml": 7, "cnccml": 8}
-# FILE_KEY_ABBREVIATIONS_OTHER = {"cmpr": 9, "ver": 1}
-
 def get_current_version_major():
     return get_current_version().split(".")[0]
 
@@ -45,72 +37,6 @@ def read_str_from_file(file_path, file_extension=""):
 def write_str_to_file(file_path, the_string):
     with open(file_path, 'wb') as the_file:
         the_file.write(the_string)
-
-# def save_column_coords(column_sizes_dict_file_path, column_coords_dict_file_path):
-#     # Calculate the position where each column starts.
-#     with shelve.open(column_sizes_dict_file_path, "r") as column_sizes_dict:
-#         with shelve.open(column_coords_dict_file_path, "n") as column_coords_dict:
-#             cumulative_position = 0
-#
-#             for column_index in range(len(column_sizes_dict)):
-#                 column_index = str(column_index)
-#                 column_coords_dict[column_index] = cumulative_position
-#                 cumulative_position += column_sizes_dict[column_index]
-#
-#             column_coords_dict[str(len(column_sizes_dict))] = cumulative_position
-
-    # column_start_coords = []
-    # cumulative_position = 0
-    #
-    # for column_size in column_sizes:
-    #     column_start_coords.append(str(cumulative_position).encode())
-    #     cumulative_position += column_size
-    #
-    # column_start_coords.append(str(cumulative_position).encode())
-    #
-    # return column_start_coords
-
-# def save_string_map(dict_file_path, out_values_file_path, out_lengths_file_path):
-#     with shelve.open(dict_file_path, "r") as the_dict:
-#         # Find maximum length of value.
-#         max_value_length = get_max_string_length(the_dict)
-#         write_str_to_file(out_lengths_file_path, str(max_value_length).encode())
-#
-#         with open(out_values_file_path, "wb") as out_file:
-#             formatter = "{:<" + str(max_value_length) + "}"
-#
-#             for index in range(len(the_dict)):
-#                 value = the_dict[str(index)]
-#                 out_file.write(formatter.format(value).encode())
-
-    # # Find maximum length of value.
-    # max_value_length = get_max_string_length(the_list)
-    #
-    # column_items = format_column_items(the_list, max_value_length)
-    # return b"".join(column_items), max_value_length
-
-# def get_max_string_length(values):
-#     max_length = 0
-#
-#     for value in values:
-#         max_length = max(max_length, len(str(value)))
-#
-#     return max_length
-
-# def get_max_string_length(the_dict):
-#     max_length = 0
-#
-#     for key, value in the_dict.items():
-#         length = len(str(value))
-#         if length > max_length:
-#             max_length = length
-#
-#     return max_length
-    # return max([len(x) for x in set(the_list)])
-
-# def format_column_items(the_list, max_value_length):
-#     formatter = "{:<" + str(max_value_length) + "}"
-#     return [formatter.format(value.decode()).encode() for value in the_list]
 
 def print_message(message, verbose=False, count=None):
     if verbose:
@@ -124,27 +50,8 @@ def print_message(message, verbose=False, count=None):
             sys.stderr.write(f"{message} - {datetime.now().strftime('%d/%m/%Y %H:%M:%S.%f')}\n")
             sys.stderr.flush()
 
-# def decode_string(x):
-#     return x.decode()
-
 def do_nothing(x):
      return(x)
-
-# def get_conversion_function(column_type):
-#     if column_type == "n": # column name
-#         return do_nothing
-#     elif column_type == "s":
-#         return decode_string
-#     elif column_type == "f":
-#         return fast_float
-#     else:
-#         return fast_int
-
-# def sort_first_column(list_of_lists):
-#     list_of_lists.sort(key=itemgetter(0))
-#
-# def sort_first_two_columns(list_of_lists):
-#     list_of_lists.sort(key=itemgetter(0, 1))
 
 def reverse_string(s):
     return s[::-1]
@@ -211,11 +118,9 @@ def convert_bytes_to_int(b):
 def serialize(obj):
     #https://github.com/TkTech/json_benchmark
     return msgpack.encode(obj)
-#    return msgpack.packb(obj)
 
 def deserialize(msg):
     return msgpack.decode(msg)
-#    return msgpack.unpackb(msg, strict_map_key=False)
 
 def fix_dir_path_ending(dir_path):
     return dir_path if dir_path.endswith("/") else dir_path + "/"
@@ -229,24 +134,6 @@ def remove_tmp_dir(tmp_dir_path, verbose):
         except:
             print_message(f"Warning: {tmp_dir_path} directory could not be removed", verbose)
             pass
-
-# def get_index_file_path(f4_file_path):
-#     return f"{f4_file_path}.idx.db"
-
-# def get_index_file_path(f4_file_path):
-#     for i in range(1, 1000000000):
-#         index_file_path = f"{f4_file_path}.idx_{i}"
-#
-#         if not path.exists(index_file_path):
-#             return index_file_path
-
-# def get_index_file_path(data_file_path, index_name, custom_index_type=None):
-#     if custom_index_type == None:
-#         index_file_path_extension = f"_{index_name}.idx"
-#     else:
-#         index_file_path_extension = f"_{index_name}_{custom_index_type}.idx"
-#
-#     return f"{data_file_path}{index_file_path_extension}"
 
 def split_integer_list_into_chunks(int_list, num_parallel):
     items_per_chunk = ceil(len(int_list) / num_parallel)
@@ -283,12 +170,8 @@ def connect_sql(file_path):
 
     conn.row_factory = sqlite3.Row
 
-    # execute_sql(conn, "PRAGMA synchronous=OFF")
     execute_sql(conn, "PRAGMA synchronous=NORMAL")
     execute_sql(conn, "PRAGMA cache_size=100000")
-    # execute_sql(conn, "PRAGMA temp_store=MEMORY")
-    # execute_sql(conn, "PRAGMA journal_mode=MEMORY")
-    # execute_sql(conn, 'PRAGMA journal_mode=WAL')
     execute_sql(conn, 'PRAGMA journal_mode=OFF')
 
     return conn
@@ -303,22 +186,6 @@ def execute_sql(conn, sql, params=(), commit=True):
         conn.commit()
 
     return lastrowid
-
-# def fetchone_sql(conn, sql, params=()):
-#     cursor = conn.cursor()
-#     cursor.execute(sql, params)
-#     result = cursor.fetchone()
-#     cursor.close()
-#
-#     return result
-
-# def fetchall_sql(conn, sql, params=()):
-#     cursor = conn.cursor()
-#     cursor.execute(sql, params)
-#     result = cursor.fetchall()
-#     cursor.close()
-#
-#     return result
 
 # def convert_to_sql_type(type_abbreviation):
 #     if type_abbreviation == "i":
@@ -340,30 +207,3 @@ def execute_sql(conn, sql, params=(), commit=True):
 #     elif op == lt:
 #         return "<"
 #     return "<>"
-
-# def get_path_with_possible_suffix(file_path):
-#     if path.exists(file_path):
-#         return file_path
-#
-#     paths = glob(f"{file_path}*")
-#
-#     if len(paths) == 0:
-#         raise Exception("Did not find any file that matched this pattern: {file_path}*", verbose)
-#
-#     elif len(paths) == 1:
-#         return paths[0]
-#     else:
-#         raise Exception("Found multiple files to remove that matched this pattern: {file_path}*. None were removed.", verbose)
-
-# def remove_file_with_possible_suffix(file_path, verbose):
-#     if path.exists(file_path):
-#         remove(file_path)
-#     else:
-#         paths = glob(f"{file_path}*")
-#
-#         if len(paths) == 0:
-#             print_message(f"Did not find any file to remove that matched this pattern: {file_path}*", verbose)
-#         elif len(paths) == 1:
-#             remove(paths[0])
-#         else:
-#             print_message(f"Found multiple files to remove that matched this pattern: {file_path}*. None were removed.", verbose)

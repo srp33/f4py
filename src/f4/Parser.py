@@ -1,5 +1,4 @@
 import operator
-import os.path
 
 from .Utilities import *
 
@@ -56,7 +55,7 @@ class _SimpleBaseFilter(_BaseFilter):
 
             parse_function = get_parse_row_value_function(file_data)
 
-            if len(row_indices) <= 100:
+            if len(row_indices) <= 100 or num_parallel == 1:
                 return self._do_row_indices_pass(file_data, coords, parse_function, row_indices)
             else:
                 return set(chain.from_iterable(joblib.Parallel(n_jobs=num_parallel)(
@@ -468,16 +467,7 @@ def query(data_file_path, fltr=NoFilter(), select_columns=[], out_file_path=None
     # parallelize across columns.
 
     #TODO: Be able to hande billions of rows.
-
-    #     joblib.Parallel(n_jobs=num_parallel)(
-    #         joblib.delayed(save_output_rows)(file_data.data_file_path, f"{tmp_dir_path}/{chunk_number}", row_index_chunk, select_columns, select_column_coords) for
-    #         chunk_number, row_index_chunk in enumerate(row_index_chunks))
-    #
-    #         if os.path.exists(chunk_file_path):
-    #             with open(chunk_file_path, "rb") as read_file:
-    #                 with mmap(read_file.fileno(), 0, prot=PROT_READ) as mmap_handle:
-    #                     for start_pos in range(0, len(mmap_handle), read_length):
-    #                         write_obj.write(mmap_handle[start_pos:(start_pos + read_length)])
+    #TODO: Use the RangeSet or intervaltree packages to store discrete indices more compactly (and quickly)? ChatGPT can provide examples of how to do this. First, test for speed on the CADD file.
 
     #TODO: Make this function a context manager? Or force the following code to happen
     #      when an exit signal is received.
@@ -579,13 +569,13 @@ def get_column_index_from_name(file_data, column_name):
 
     return position
 
-def get_column_name_from_index(file_data, column_index):
-    position = get_identifier_row_index(file_data, "cin", column_index, file_data.cache_dict["num_cols"])
-
-    if position < 0:
-        raise Exception(f"Could not retrieve name because column index {column_index.decode()} was not found.")
-
-    return position
+# def get_column_name_from_index(file_data, column_index):
+#     position = get_identifier_row_index(file_data, "cin", column_index, file_data.cache_dict["num_cols"])
+#
+#     if position < 0:
+#         raise Exception(f"Could not retrieve name because column index {column_index.decode()} was not found.")
+#
+#     return position
 
 def get_column_type_from_index(file_data, column_index):
     return next(parse_data_values_from_file(file_data, "ct", column_index, 1, [[0, 1]])).decode()
@@ -594,20 +584,20 @@ def get_value_from_single_column_file(file_handle, content_start_index, segment_
     start_search_position = content_start_index + row_index * segment_length
     return file_handle[start_search_position:(start_search_position + segment_length)].rstrip(b" ")
 
-def generate_query_row_chunks(num_rows, num_parallel):
-    rows_per_chunk = ceil(num_rows / num_parallel)
-
-    row_indices = set()
-
-    for row_index in range(num_rows):
-        row_indices.add(row_index)
-
-        if len(row_indices) == rows_per_chunk:
-            yield row_indices
-            row_indices = set()
-
-    if len(row_indices) > 0:
-        yield row_indices
+# def generate_query_row_chunks(num_rows, num_parallel):
+#     rows_per_chunk = ceil(num_rows / num_parallel)
+#
+#     row_indices = set()
+#
+#     for row_index in range(num_rows):
+#         row_indices.add(row_index)
+#
+#         if len(row_indices) == rows_per_chunk:
+#             yield row_indices
+#             row_indices = set()
+#
+#     if len(row_indices) > 0:
+#         yield row_indices
 
 def parse_data_coord(file_data, data_file_key, index):
     ccml = file_data.cache_dict[data_file_key + "ccml"]
@@ -664,11 +654,6 @@ def parse_data_values_from_string(data_coords, string):
         yield string[(coords[0]):(coords[1])].rstrip(b" ")
 
 def parse_data_values_from_file(file_data, data_file_key, start_element, segment_length, data_coords):
-    # print(start_element)
-    # print(data_file_key)
-    # print(segment_length)
-    # print(file_data.file_map_dict[data_file_key][0])
-    # print(sorted(file_data.file_map_dict.keys()))
     start_pos = start_element * segment_length + file_data.file_map_dict[data_file_key][0]
 
     for coords in data_coords:
@@ -684,12 +669,6 @@ def get_parse_row_value_function(file_data):
     #     return parse_dictionary_compressed_row_value
 
 def parse_row_value(file_data, data_file_key, row_index, column_coords):
-    # print(data_file_key)
-    # print(row_index)
-    # print(column_coords)
-    # print(column_name)
-    # print(data_file_key + "ll")
-    # print(file_data.cache_dict[data_file_key + "ll"])
     return parse_data_value_from_file(file_data, data_file_key, row_index, file_data.cache_dict[data_file_key + "ll"], column_coords).rstrip(b" ")
 
 def parse_zstd_compressed_row_value(file_data, data_file_key, row_index, column_coords):
@@ -706,16 +685,6 @@ def parse_zstd_compressed_row_value(file_data, data_file_key, row_index, column_
         all_text += text
 
     return all_text[column_coords[0]:column_coords[1]].rstrip(b" ")
-    # import sys
-    # sys.exit()
-    # line_lengths = file_data.cache_dict["ll"]
-    # line_start_search_position = line_lengths[row_index]
-    # line_length = line_lengths[row_index + 1] - line_start_search_position
-    #
-    # line = parse_data_value_from_file(file_data, line_start_search_position, 1, [0, line_length], data_prefix, "data")
-    # line = file_data.decompressor.decompress(line)
-    #
-    # return line[column_coords[0]:column_coords[1]].rstrip(b" ")
 
 # def parse_dictionary_compressed_row_value(file_data, data_file_key, row_index, column_coords, bigram_size_dict=None, column_name=None):
 #     value = parse_data_value_from_file(file_data, data_file_key, row_index, file_data.cache_dict["ll"], column_coords).rstrip(b" ")
@@ -737,7 +706,6 @@ def parse_zstd_compressed_row_values(file_data, data_file_key, row_index, column
     data_start_search_position = file_data.file_map_dict[""][0]
     line_start_search_position = data_start_search_position + fast_int(get_value_from_single_column_file(file_data.file_handle, file_data.file_map_dict["ll"][0], file_data.cache_dict["mlll"], row_index))
     next_line_start_search_position = data_start_search_position + fast_int(get_value_from_single_column_file(file_data.file_handle, file_data.file_map_dict["ll"][0], file_data.cache_dict["mlll"], row_index + 1))
-    # line_length = next_line_start_search_position - line_start_search_position
 
     chunk_size = 100000
     all_text = b""
@@ -765,9 +733,6 @@ def parse_values_in_column(file_data, data_file_key, column_name, column_coords,
     return values
 
 def save_output_rows(in_file_path, out_file_path_or_obj, row_indices, column_indices):
-    # if isinstance(out_file_path_or_obj, str):
-    #     out_file_path_or_obj = open(out_file_path_or_obj, "wb")
-
     with initialize(in_file_path) as file_data:
         select_column_coords = parse_data_coords(file_data, "", column_indices)
         parse_row_values_function = get_parse_row_values_function(file_data)
@@ -914,36 +879,26 @@ def find_positions_g(file_data, data_file_key, value_coords, fltr, start_search_
         return start_search_position, start_search_position
 
     matching_position = search(file_data, data_file_key, value_coords, fltr, 0, end_search_position, end_search_position, all_false_operator)
-    # print(file_data.file_handle[file_data.file_map_dict["i8"][0]:file_data.file_map_dict["i8"][1]])
-    # print(file_data.file_handle[file_data.file_map_dict["i9"][0]:file_data.file_map_dict["i9"][1]])
-    # print(fltr.column_name, fltr.value, fltr.oper, smallest_value, largest_value, start_search_position, end_search_position, matching_position)
-    # print(matching_position + 1, end_search_position)
+
     return matching_position + 1, end_search_position
 
 def find_positions_l(file_data, data_file_key, value_coords, fltr, start_search_position, end_search_position, all_true_operator):
     smallest_value = parse_row_value(file_data, data_file_key, start_search_position, value_coords)
     if smallest_value == b"":
-        # print("a")
         return start_search_position, start_search_position
 
     if not all_true_operator(fltr._get_conversion_function()(smallest_value), fltr.value):
-        # print("b")
         return start_search_position, start_search_position
 
     largest_value = parse_row_value(file_data, data_file_key, end_search_position - 1, value_coords)
     if largest_value == b"":
-        # print("c")
         return start_search_position, end_search_position
 
     if all_true_operator(fltr._get_conversion_function()(largest_value), fltr.value):
-        # print(all_true_operator)
-        # print(fltr._get_conversion_function()(largest_value), fltr.value)
-        # print("d")
         return start_search_position, end_search_position
 
     matching_position = search(file_data, data_file_key, value_coords, fltr, 0, end_search_position, end_search_position, all_true_operator)
 
-    # print("e")
     return start_search_position, matching_position + 1
 
 # TODO: It might make sense to combine this function with _search_with_filter
@@ -1041,19 +996,8 @@ def retrieve_matching_row_indices(file_data, data_file_key, position_coords, pos
         )
 
 def find_bounds_for_range(file_data, data_file_key, value_coords, filter1, filter2, start_search_position, end_search_position):
-    # print(data_file_key)
-    # print(filter1.column_name)
-    # print(filter1.value)
-    # print(filter1.oper)
-    # print(start_search_position)
-    # print(end_search_position)
     lower_positions = find_positions_g(file_data, data_file_key, value_coords, filter1, start_search_position, end_search_position, lt)
-    # print(lower_positions)
-    # print(filter2.column_name)
-    # print(filter2.value)
-    # print(filter2.oper)
     upper_positions = find_positions_l(file_data, data_file_key, value_coords, filter2, lower_positions[0], lower_positions[1], le)
-    # print(upper_positions)
 
     lower_position = max(lower_positions[0], upper_positions[0])
     upper_position = min(lower_positions[1], upper_positions[1])
@@ -1067,15 +1011,6 @@ def find_row_indices_for_range(file_data, data_file_key, value_coords, position_
         return retrieve_matching_row_indices(file_data, data_file_key, position_coords, (lower_position, upper_position), num_parallel)
     else:
         return (lower_position, upper_position)
-
-def get_passing_row_indices(file_data, data_file_key, fltr, coords_value, coords_position, start_search_position, end_search_position):
-    passing_row_indices = set()
-
-    for i in range(start_search_position, end_search_position):
-        if fltr._passes(parse_row_value(file_data, data_file_key, i, coords_value)):
-            passing_row_indices.add(fast_int(parse_row_value(file_data, data_file_key, i, coords_position)))
-
-    return passing_row_indices
 
 def get_passing_row_indices_with_filter(file_data, data_file_key, fltr, cc_value_column_index, cc_position_column_index, start_search_position, end_search_position, retrieve_row_indices, num_parallel):
     coords = parse_data_coords(file_data, data_file_key, [cc_value_column_index, cc_position_column_index])

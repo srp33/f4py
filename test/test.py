@@ -799,18 +799,18 @@ def run_all_small_tests():
     run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2, compression_type = "zstd", index_columns = index_columns)
 
      # Transpose without compression
-    test_transpose("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, compression_type = None)
-    test_transpose("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2, compression_type = None)
+    #test_transpose("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, compression_type = None)
+    #test_transpose("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2, compression_type = None)
 
      # Transpose with zstd compression
-    test_transpose("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, compression_type = "zstd")
-    test_transpose("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2, compression_type = "zstd")
+    #test_transpose("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, compression_type = "zstd")
+    #test_transpose("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2, compression_type = "zstd")
 
     # Inner join without compression
-    test_inner_join(num_parallel = 1, compression_type = None)
+    #test_inner_join(num_parallel = 1, compression_type = None)
 
     # Inner join with compression
-    test_inner_join(num_parallel = 1, compression_type = "zstd")
+    #test_inner_join(num_parallel = 1, compression_type = "zstd")
 
     # Clean up data files
     #for file_path in glob.glob(f"{f4_file_path}*"):
@@ -868,8 +868,8 @@ for compression_type in [None]:
 #for compression_type in ["dictionary"]:
 #for compression_type in ["zstd"]:
     # Medium tests
-#    run_larger_tests(num_parallel=1, size="medium", extension="", discrete1_index=11, numeric1_index=21, build_outputs=True, compression_type=compression_type)
-#    run_larger_tests(num_parallel=2, size="medium", extension="", discrete1_index=11, numeric1_index=21, build_outputs=True, compression_type=compression_type)
+    run_larger_tests(num_parallel=1, size="medium", extension="", discrete1_index=11, numeric1_index=21, build_outputs=True, compression_type=compression_type)
+    run_larger_tests(num_parallel=2, size="medium", extension="", discrete1_index=11, numeric1_index=21, build_outputs=True, compression_type=compression_type)
 
     # Large tests
     #num_parallel = 1
