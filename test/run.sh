@@ -2,8 +2,8 @@
 
 set -o errexit
 
-#local_dev=no
-local_dev=yes
+local_dev=no
+#local_dev=yes
 run_in_background=no
 #run_in_background=yes
 
@@ -32,7 +32,7 @@ else
   dockerCommand="docker run -d --rm --platform linux/x86_64 --user $(id -u):$(id -g) -v $(pwd):/sandbox -v $(pwd)/data:/data -v /tmp:/tmp --workdir=/sandbox srp33/f4_test"
 fi
 
-$dockerCommand bash -c "time python3 build_tsv.py 10 10 10 8 10000 data/medium.tsv"
+#$dockerCommand bash -c "time python3 build_tsv.py 10 10 10 8 10000 data/medium.tsv"
 
 #$dockerCommand bash -c "time python3 build_tsv.py 250 250 500 8 1000000 data/large_tall.tsv"
 #$dockerCommand bash -c "time python3 build_tsv.py 250000 250000 500000 8 1000 data/large_wide.tsv"
