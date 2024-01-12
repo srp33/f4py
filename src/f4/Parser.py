@@ -452,10 +452,14 @@ def query(data_file_path, fltr=NoFilter(), select_columns=[], out_file_path=None
                 tmp_dir_path = mkdtemp()
             tmp_dir_path = fix_dir_path_ending(tmp_dir_path)
 
-            chain.from_iterable(joblib.Parallel(n_jobs=num_parallel)(
-                joblib.delayed(save_output_rows)(data_file_path, f"{tmp_dir_path}{chunk_number}", keep_row_indices, select_column_indices)
-                for chunk_number, select_column_indices in enumerate(select_column_index_chunks))
-            )
+            if num_parallel == 1:
+                for chunk_number, select_column_indices in enumerate(select_column_index_chunks):
+                    save_output_rows(data_file_path, f"{tmp_dir_path}{chunk_number}", keep_row_indices, select_column_indices)
+            else:
+                chain.from_iterable(joblib.Parallel(n_jobs=num_parallel)(
+                    joblib.delayed(save_output_rows)(data_file_path, f"{tmp_dir_path}{chunk_number}", keep_row_indices, select_column_indices)
+                    for chunk_number, select_column_indices in enumerate(select_column_index_chunks))
+                )
 
             chunk_file_dict = {}
             for chunk_number in range(num_select_column_chunks):
