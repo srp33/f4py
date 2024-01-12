@@ -59,7 +59,7 @@ class _SimpleBaseFilter(_BaseFilter):
                 return self._do_row_indices_pass(file_data, coords, parse_function, row_indices)
             else:
                 return set(chain.from_iterable(joblib.Parallel(n_jobs=num_parallel)(
-                    joblib.delayed(self._do_row_indices_pass_parallel)(file_data.data_file_path, coords, parse_function, chunk_row_indices)
+                    joblib.delayed(self._do_row_indices_pass_parallel)(file_data.data_file_path, "", coords, parse_function, chunk_row_indices)
                     for chunk_row_indices in split_list_into_chunks(row_indices, 1000001)))
                 )
         else:
@@ -392,9 +392,9 @@ def query(data_file_path, fltr=NoFilter(), select_columns=[], out_file_path=None
         global joblib
         joblib = __import__('joblib', globals(), locals())
 
-    write_obj = sys.stdout.buffer
-    if out_file_path:
-        write_obj = open(out_file_path, 'wb')
+    # write_obj = sys.stdout.buffer
+    # if out_file_path:
+    #     write_obj = open(out_file_path, 'wb')
 
     with initialize(data_file_path) as file_data:
         # Make sure the filters match the column types.
@@ -410,7 +410,8 @@ def query(data_file_path, fltr=NoFilter(), select_columns=[], out_file_path=None
 
             # Save header line
             select_columns = [c.encode() for c in select_columns]
-            write_obj.write(b"\t".join(select_columns) + b"\n")
+            with get_write_object(out_file_path) as write_obj:
+                write_obj.write(b"\t".join(select_columns) + b"\n")
 
             # Get select column indices
             if len(select_columns) <= 100:
@@ -429,11 +430,12 @@ def query(data_file_path, fltr=NoFilter(), select_columns=[], out_file_path=None
             cn_start = file_data.file_map_dict["cn"][0]
             cn_end = file_data.file_map_dict["cn"][1]
 
-            for chunk_start in range(cn_start, cn_end, chunk_size):
-                chunk_text = file_data.file_handle[chunk_start:min(chunk_start + chunk_size, cn_end)]
-                write_obj.write(chunk_text.replace(b"\n", b"\t"))
+            with get_write_object(out_file_path) as write_obj:
+                for chunk_start in range(cn_start, cn_end, chunk_size):
+                    chunk_text = file_data.file_handle[chunk_start:min(chunk_start + chunk_size, cn_end)]
+                    write_obj.write(chunk_text.replace(b"\n", b"\t"))
 
-            write_obj.write(b"\n")
+                write_obj.write(b"\n")
 
             # Get select column indices
             max_columns_per_chunk = 1000001
@@ -442,7 +444,7 @@ def query(data_file_path, fltr=NoFilter(), select_columns=[], out_file_path=None
             num_select_column_chunks = ceil(num_cols / max_columns_per_chunk)
 
         if num_select_column_chunks == 1:
-            save_output_rows(data_file_path, write_obj, keep_row_indices, next(select_column_index_chunks))
+            save_output_rows(data_file_path, out_file_path, keep_row_indices, next(select_column_index_chunks))
         else:
             if tmp_dir_path:
                 makedirs(tmp_dir_path, exist_ok=True)
@@ -450,37 +452,35 @@ def query(data_file_path, fltr=NoFilter(), select_columns=[], out_file_path=None
                 tmp_dir_path = mkdtemp()
             tmp_dir_path = fix_dir_path_ending(tmp_dir_path)
 
-            for chunk_number, select_column_indices in enumerate(select_column_index_chunks):
-                with open(f"{tmp_dir_path}{chunk_number}", "wb") as chunk_file:
-                    save_output_rows(data_file_path, chunk_file, keep_row_indices, select_column_indices)
+            chain.from_iterable(joblib.Parallel(n_jobs=num_parallel)(
+                joblib.delayed(save_output_rows)(data_file_path, f"{tmp_dir_path}{chunk_number}", keep_row_indices, select_column_indices)
+                for chunk_number, select_column_indices in enumerate(select_column_index_chunks))
+            )
 
             chunk_file_dict = {}
             for chunk_number in range(num_select_column_chunks):
                 chunk_file_dict[chunk_number] = open(f"{tmp_dir_path}{chunk_number}", "rb")
 
-            for row_index in keep_row_indices:
-                for chunk_number, chunk_file in chunk_file_dict.items():
-                    if chunk_number + 1 == num_select_column_chunks:
-                        write_obj.write(chunk_file.readline())
-                    else:
-                        write_obj.write(chunk_file.readline().rstrip(b"\n") + b"\t")
+            with get_write_object(out_file_path, "ab") as write_obj:
+                for row_index in keep_row_indices:
+                    for chunk_number, chunk_file in chunk_file_dict.items():
+                        if chunk_number + 1 == num_select_column_chunks:
+                            write_obj.write(chunk_file.readline())
+                        else:
+                            write_obj.write(chunk_file.readline().rstrip(b"\n") + b"\t")
 
             for chunk_number, chunk_file in chunk_file_dict.items():
                 chunk_file.close()
                 remove(f"{tmp_dir_path}{chunk_number}")
 
-    # TODO: Add logic for parallelizing across column chunks and row chunks?
-    # Maybe not because we are already parallelizing row retrieval.
-    # Then again, if there are few rows and many columns, it would be helpful to
-    # parallelize across columns.
+    # TODO: Add logic for parallelizing across column chunks.
+    # TODO: Parallelize across rows so you can handle billions of rows?
+    #         And/or Use the RangeSet or intervaltree packages to store discrete
+    #         indices more compactly (and quickly)? ChatGPT can provide examples
+    #         of how to do this.
 
-    #TODO: Be able to hande billions of rows.
-    #TODO: Use the RangeSet or intervaltree packages to store discrete indices more compactly (and quickly)? ChatGPT can provide examples of how to do this. First, test for speed on the CADD file.
-
-    #TODO: Make this function a context manager? Or force the following code to happen
-    #      when an exit signal is received.
-    if out_file_path:
-        write_obj.close()
+    # if out_file_path:
+    #     write_obj.close()
 
 def head(data_file_path, n = 10, select_columns=None, out_file_path=None, out_file_type="tsv"):
     if not select_columns:
@@ -586,7 +586,6 @@ def get_column_index_chunks_from_names(file_data, column_names_chunks):
         yield _get_column_index_chunk_from_names(file_data, name_index_coords, set(column_names_chunk))
 
 def _get_column_index_chunk_from_names(file_data, name_index_coords, column_names_set):
-    print("got to _get_column_index_chunk_names")
     column_indices = []
 
     for column_index in range(file_data.cache_dict["num_cols"]):
@@ -760,13 +759,26 @@ def parse_values_in_column(file_data, data_file_key, column_name, column_coords,
 
     return values
 
-def save_output_rows(in_file_path, out_file_path_or_obj, row_indices, column_indices):
-    with initialize(in_file_path) as file_data:
-        select_column_coords = parse_data_coords(file_data, "", column_indices)
-        parse_row_values_function = get_parse_row_values_function(file_data)
+@contextmanager
+def get_write_object(out_file_path, mode="wb"):
+    if out_file_path:
+        write_obj = open(out_file_path, mode)
 
-        for row_index in row_indices:
-            out_file_path_or_obj.write(b"\t".join(parse_row_values_function(file_data, "", row_index, select_column_coords)) + b"\n")
+        try:
+            yield write_obj
+        finally:
+            write_obj.close()
+    else:
+        yield sys.stdout.buffer
+
+def save_output_rows(in_file_path, out_file_path, row_indices, column_indices):
+    with initialize(in_file_path) as file_data:
+        with get_write_object(out_file_path, "ab") as write_obj:
+            select_column_coords = parse_data_coords(file_data, "", column_indices)
+            parse_row_values_function = get_parse_row_values_function(file_data)
+
+            for row_index in row_indices:
+                write_obj.write(b"\t".join(parse_row_values_function(file_data, "", row_index, select_column_coords)) + b"\n")
 
 # def _get_decompression_dict(self, file_path, column_index_name_dict):
 #     with open(file_path, "rb") as cmpr_file:

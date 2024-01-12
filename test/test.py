@@ -833,29 +833,28 @@ def run_super_tests(num_parallel, size, extension, compression_type, verbose, tm
 
     #f4.convert_delimited_file(in_file_path, f4_file_path, compression_type=compression_type, num_parallel=num_parallel, index_columns=["X1", "X2", ["X1", "X2"]], verbose=verbose, tmp_dir_path=tmp_dir_path)
 
-    #run_super_test("[Ignore] Just priming the timer...", f4.HeadFilter(n = 1), ["X1"], num_parallel, tmp_dir_path, f4_file_path, out_file_path)
-    #run_super_test("Querying all rows, one column", f4.NoFilter(), ["X2"], num_parallel, tmp_dir_path, f4_file_path, out_file_path)
+    run_super_test("[Ignore] Just priming the timer...", f4.HeadFilter(n = 1), ["X1"], num_parallel, tmp_dir_path, f4_file_path, out_file_path)
+    run_super_test("Querying all rows, one column", f4.NoFilter(), ["X2"], num_parallel, tmp_dir_path, f4_file_path, out_file_path)
 
-    #run_super_test("Querying many rows, one column - String filter, no index", f4.StringFilter("X3", operator.eq, "A"), ["X4"], num_parallel, tmp_dir_path, f4_file_path, out_file_path)
-    #run_super_test("Querying many rows, one column - String filter, index", f4.StringFilter("X1", operator.eq, "A"), ["X2"], num_parallel, tmp_dir_path, f4_file_path, out_file_path)
+    run_super_test("Querying many rows, one column - String filter, no index", f4.StringFilter("X3", operator.eq, "A"), ["X4"], num_parallel, tmp_dir_path, f4_file_path, out_file_path)
+    run_super_test("Querying many rows, one column - String filter, index", f4.StringFilter("X1", operator.eq, "A"), ["X2"], num_parallel, tmp_dir_path, f4_file_path, out_file_path)
 
-    #select_columns = ["X1", "X2", "X3", "X4"]
+    select_columns = ["X1", "X2", "X3", "X4"]
 
-    #fltr = f4.AndFilter(f4.StringFilter("X3", operator.eq, "A"), f4.StringFilter("X3", operator.eq, "A"))
-    #run_super_test("Querying fewer rows (AndFilter), four columns, no index", fltr, select_columns, num_parallel, tmp_dir_path, f4_file_path, out_file_path)
+    fltr = f4.AndFilter(f4.StringFilter("X3", operator.eq, "A"), f4.StringFilter("X3", operator.eq, "A"))
+    run_super_test("Querying fewer rows (AndFilter), four columns, no index", fltr, select_columns, num_parallel, tmp_dir_path, f4_file_path, out_file_path)
 
-    #fltr = f4.AndFilter(f4.StringFilter("X1", operator.eq, "A"), f4.StringFilter("X2", operator.eq, "A"))
-    #run_super_test("Querying fewer rows (AndFilter), four columns, multi-column index", fltr, select_columns, num_parallel, tmp_dir_path, f4_file_path, out_file_path)
+    fltr = f4.AndFilter(f4.StringFilter("X1", operator.eq, "A"), f4.StringFilter("X2", operator.eq, "A"))
+    run_super_test("Querying fewer rows (AndFilter), four columns, multi-column index", fltr, select_columns, num_parallel, tmp_dir_path, f4_file_path, out_file_path)
 
-    #run_super_test("Querying all columns, one row", f4.HeadFilter(n = 1), [], num_parallel, tmp_dir_path, f4_file_path, out_file_path)
+    run_super_test("Querying all columns, one row", f4.HeadFilter(n = 1), [], num_parallel, tmp_dir_path, f4_file_path, out_file_path)
 
     select_columns = [f"X{i}" for i in range(1, min(f4.get_num_cols(f4_file_path) + 1, 1000001))]
     run_super_test("Querying many columns, one row", f4.HeadFilter(n = 1), select_columns, num_parallel, tmp_dir_path, f4_file_path, out_file_path)
-    print(out_file_path)
 
-    #run_super_test("Querying a single value", f4.HeadFilter(n = 1), ["X1"], num_parallel, tmp_dir_path, f4_file_path, out_file_path)
+    run_super_test("Querying a single value", f4.HeadFilter(n = 1), ["X1"], num_parallel, tmp_dir_path, f4_file_path, out_file_path)
 
-    #os.unlink(out_file_path)
+    os.unlink(out_file_path)
 
 def run_super_test(description, fltr, select_columns, num_parallel, tmp_dir_path, f4_file_path, out_file_path):
     print(f"{description}:")
@@ -907,7 +906,7 @@ for compression_type in [None]:
     ##f4.inner_join("data/medium.f4", "data/medium.f4", "ID", "/tmp/medium_joined.f4", num_parallel=num_parallel, verbose=verbose)
     ##f4.inner_join("data/large_tall.f4", "data/large_wide.f4", "ID", "/tmp/large_joined.f4", num_parallel=num_parallel, verbose=verbose)
 
-    #run_super_tests(num_parallel=num_parallel, size="test_tall", extension=".gz", compression_type=compression_type, verbose=verbose, tmp_dir_path="/tmp/test_tall")
+    run_super_tests(num_parallel=num_parallel, size="test_tall", extension=".gz", compression_type=compression_type, verbose=verbose, tmp_dir_path="/tmp/test_tall")
     run_super_tests(num_parallel=num_parallel, size="test_wide", extension=".gz", compression_type=compression_type, verbose=verbose, tmp_dir_path="/tmp/test_wide")
     #run_super_tests(num_parallel=num_parallel, size="super_tall", extension=".gz", compression_type=compression_type, verbose=verbose, tmp_dir_path="/tmp/super_tall")
     #run_super_tests(num_parallel=num_parallel, size="super_wide", extension=".gz", compression_type=compression_type, verbose=verbose, tmp_dir_path="/tmp/super_wide")
