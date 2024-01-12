@@ -135,20 +135,33 @@ def remove_tmp_dir(tmp_dir_path, verbose):
             print_message(f"Warning: {tmp_dir_path} directory could not be removed", verbose)
             pass
 
-def split_integer_list_into_chunks(int_list, num_parallel):
-    items_per_chunk = ceil(len(int_list) / num_parallel)
+def split_list_into_chunks(my_list, max_items_per_chunk):
+    return_list = list()
 
-    return_indices = list()
+    for x in my_list:
+        return_list.append(x)
 
-    for an_int in int_list:
-        return_indices.append(an_int)
+        if len(return_list) == max_items_per_chunk:
+            yield return_list
+            return_list = list()
 
-        if len(return_indices) == items_per_chunk:
-            yield return_indices
-            return_indices = list()
+    if len(return_list) > 0:
+        yield return_list
 
-    if len(return_indices) > 0:
-        yield return_indices
+# def split_list_into_chunks(my_list, num_parallel):
+#     items_per_chunk = ceil(len(my_list) / num_parallel)
+#
+#     return_indices = list()
+#
+#     for an_int in my_list:
+#         return_indices.append(an_int)
+#
+#         if len(return_indices) == items_per_chunk:
+#             yield return_indices
+#             return_indices = list()
+#
+#     if len(return_indices) > 0:
+#         yield return_indices
 
 def iterate_single_value(value):
     yield value

@@ -60,7 +60,7 @@ class _SimpleBaseFilter(_BaseFilter):
             else:
                 return set(chain.from_iterable(joblib.Parallel(n_jobs=num_parallel)(
                     joblib.delayed(self._do_row_indices_pass_parallel)(file_data.data_file_path, coords, parse_function, chunk_row_indices)
-                    for chunk_row_indices in split_integer_list_into_chunks(row_indices, num_parallel)))
+                    for chunk_row_indices in split_list_into_chunks(row_indices, 1000001)))
                 )
         else:
             return self.get_matching_row_indices_indexed(file_data, index_number, 0, 1, file_data.cache_dict["num_rows"], 1, True, num_parallel)
@@ -83,12 +83,12 @@ class _SimpleBaseFilter(_BaseFilter):
 
         return passing_row_indices
 
-    def _do_row_indices_pass_parallel(self, data_file_path, coords, parse_function, row_indices_to_check):
+    def _do_row_indices_pass_parallel(self, data_file_path, data_file_key, coords, parse_function, row_indices_to_check):
         passing_row_indices = set()
 
         with initialize(data_file_path) as file_data:
             for i in row_indices_to_check:
-                if self._passes(parse_function(file_data, "", i, coords)):
+                if self._passes(parse_function(file_data, data_file_key, i, coords)):
                     passing_row_indices.add(i)
 
         return passing_row_indices
@@ -413,8 +413,16 @@ def query(data_file_path, fltr=NoFilter(), select_columns=[], out_file_path=None
             write_obj.write(b"\t".join(select_columns) + b"\n")
 
             # Get select column indices
-            select_column_index_chunks = iterate_single_value([get_column_index_from_name(file_data, c) for c in select_columns])
-            num_select_column_chunks = 1
+            if len(select_columns) <= 100:
+                select_column_index_chunks = iterate_single_value([get_column_index_from_name(file_data, c) for c in select_columns])
+                num_select_column_chunks = 1
+            else:
+                max_columns_per_chunk = 1000001
+
+                select_column_name_chunks = split_list_into_chunks(select_columns, max_columns_per_chunk)
+                select_column_index_chunks = get_column_index_chunks_from_names(file_data, select_column_name_chunks)
+
+                num_select_column_chunks = ceil(len(select_columns) / max_columns_per_chunk)
         else:
             # Save header line
             chunk_size = 1000001
@@ -433,33 +441,33 @@ def query(data_file_path, fltr=NoFilter(), select_columns=[], out_file_path=None
             select_column_index_chunks = generate_range_chunks(num_cols, max_columns_per_chunk)
             num_select_column_chunks = ceil(num_cols / max_columns_per_chunk)
 
-    if num_select_column_chunks == 1:
-        save_output_rows(data_file_path, write_obj, keep_row_indices, next(select_column_index_chunks))
-    else:
-        if tmp_dir_path:
-            makedirs(tmp_dir_path, exist_ok=True)
+        if num_select_column_chunks == 1:
+            save_output_rows(data_file_path, write_obj, keep_row_indices, next(select_column_index_chunks))
         else:
-            tmp_dir_path = mkdtemp()
-        tmp_dir_path = fix_dir_path_ending(tmp_dir_path)
+            if tmp_dir_path:
+                makedirs(tmp_dir_path, exist_ok=True)
+            else:
+                tmp_dir_path = mkdtemp()
+            tmp_dir_path = fix_dir_path_ending(tmp_dir_path)
 
-        for chunk_number, select_column_indices in enumerate(select_column_index_chunks):
-            with open(f"{tmp_dir_path}{chunk_number}", "wb") as chunk_file:
-                save_output_rows(data_file_path, chunk_file, keep_row_indices, select_column_indices)
+            for chunk_number, select_column_indices in enumerate(select_column_index_chunks):
+                with open(f"{tmp_dir_path}{chunk_number}", "wb") as chunk_file:
+                    save_output_rows(data_file_path, chunk_file, keep_row_indices, select_column_indices)
 
-        chunk_file_dict = {}
-        for chunk_number in range(num_select_column_chunks):
-            chunk_file_dict[chunk_number] = open(f"{tmp_dir_path}{chunk_number}", "rb")
+            chunk_file_dict = {}
+            for chunk_number in range(num_select_column_chunks):
+                chunk_file_dict[chunk_number] = open(f"{tmp_dir_path}{chunk_number}", "rb")
 
-        for row_index in keep_row_indices:
+            for row_index in keep_row_indices:
+                for chunk_number, chunk_file in chunk_file_dict.items():
+                    if chunk_number + 1 == num_select_column_chunks:
+                        write_obj.write(chunk_file.readline())
+                    else:
+                        write_obj.write(chunk_file.readline().rstrip(b"\n") + b"\t")
+
             for chunk_number, chunk_file in chunk_file_dict.items():
-                if chunk_number + 1 == num_select_column_chunks:
-                    write_obj.write(chunk_file.readline())
-                else:
-                    write_obj.write(chunk_file.readline().rstrip(b"\n") + b"\t")
-
-        for chunk_number, chunk_file in chunk_file_dict.items():
-            chunk_file.close()
-            remove(f"{tmp_dir_path}{chunk_number}")
+                chunk_file.close()
+                remove(f"{tmp_dir_path}{chunk_number}")
 
     # TODO: Add logic for parallelizing across column chunks and row chunks?
     # Maybe not because we are already parallelizing row retrieval.
@@ -568,6 +576,26 @@ def get_column_index_from_name(file_data, column_name):
         raise Exception(f"Could not retrieve index because column named {column_name.decode()} was not found.")
 
     return position
+
+def get_column_index_chunks_from_names(file_data, column_names_chunks):
+    name_index_coords = parse_data_coords(file_data, "cni", [0, 1])
+    num_column_chunks = 0
+
+    for column_names_chunk in column_names_chunks:
+        num_column_chunks += 1
+        yield _get_column_index_chunk_from_names(file_data, name_index_coords, set(column_names_chunk))
+
+def _get_column_index_chunk_from_names(file_data, name_index_coords, column_names_set):
+    print("got to _get_column_index_chunk_names")
+    column_indices = []
+
+    for column_index in range(file_data.cache_dict["num_cols"]):
+        column_name = parse_row_value(file_data, "cni", column_index, name_index_coords[0])
+
+        if column_name in column_names_set:
+            column_indices.append(column_index)
+
+    return column_indices
 
 # def get_column_name_from_index(file_data, column_index):
 #     position = get_identifier_row_index(file_data, "cin", column_index, file_data.cache_dict["num_cols"])
