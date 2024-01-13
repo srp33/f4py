@@ -2,8 +2,8 @@
 
 set -o errexit
 
-#local_dev=no
-local_dev=yes
+local_dev=no
+#local_dev=yes
 run_in_background=no
 #run_in_background=yes
 
@@ -41,7 +41,7 @@ fi
 
 #$dockerCommand bash -c "time python3 build_tsv_utf8.py 1000000 4 data/test_tall.tsv.gz"
 #$dockerCommand bash -c "time python3 build_tsv_utf8.py 2 1000000 data/test_wide.tsv.gz"
-#$dockerCommand bash -c "time python3 build_tsv_utf8.py 1000000000 3 data/super_tall.tsv.gz"
+#$dockerCommand bash -c "time python3 build_tsv_utf8.py 1000000000 4 data/super_tall.tsv.gz"
 #$dockerCommand bash -c "time python3 build_tsv_utf8.py 2 1000000000 data/super_wide.tsv.gz"
 #$dockerCommand bash -c "time python3 build_tsv_utf8.py 10000000000 4 data/hyper_tall.tsv.gz"
 #$dockerCommand bash -c "time python3 build_tsv_utf8.py 2 10000000000 data/hyper_wide.tsv.gz"
