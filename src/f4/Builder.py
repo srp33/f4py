@@ -64,9 +64,8 @@ def convert_delimited_file(delimited_file_path, f4_file_path, index_columns=[], 
 
     write_compression_info(tmp_dir_path2, compression_type)
 
-    #TODO: Build each index in parallel
     if index_columns:
-        build_indexes(f4_file_path, tmp_dir_path2, index_columns, num_rows, line_length, verbose)
+        build_indexes(f4_file_path, tmp_dir_path2, index_columns, num_rows, line_length, num_parallel, verbose)
 
     remove(get_columns_database_path(tmp_dir_path2))
 
@@ -654,7 +653,7 @@ def write_compression_info(tmp_dir_path, compression_type):
         # else:
             cmpr_file.write(b"z")
 
-def build_indexes(f4_file_path, tmp_dir_path, index_columns, num_rows, line_length, verbose=False):
+def build_indexes(f4_file_path, tmp_dir_path, index_columns, num_rows, line_length, num_parallel, verbose=False):
     index_info_dict = {}
 
     if isinstance(index_columns, str):
@@ -665,14 +664,12 @@ def build_indexes(f4_file_path, tmp_dir_path, index_columns, num_rows, line_leng
             if not isinstance(index_column, str) and not isinstance(index_column, list):
                 raise Exception("When specifying index columns, they must either be a string or a list.")
 
-            index_column_list = [index_column] if isinstance(index_column, str) else index_column
-            reverse_statuses = build_index(f4_file_path, tmp_dir_path, i, index_column_list, num_rows, line_length, verbose)
+        keys = joblib.Parallel(n_jobs=num_parallel)(
+            joblib.delayed(build_index_parallel)(f4_file_path, tmp_dir_path, num_rows, line_length, i, index_column, verbose)
+            for i, index_column in enumerate(index_columns)
+        )
 
-            key = []
-            for j, index_column in enumerate(index_column_list):
-                key.append((index_column, reverse_statuses[j]))
-            key = tuple(key)
-
+        for i, key in enumerate(keys):
             index_info_dict[key] = i
     else:
         raise Exception("When specifying index columns, they must either be a string or a list.")
@@ -823,6 +820,16 @@ def build_index(f4_file_path, tmp_dir_path, index_number, index_columns, num_row
     print_message(f"Done building index file for {index_column} column in {f4_file_path}.", verbose)
 
     return reverse_statuses
+
+def build_index_parallel(f4_file_path, tmp_dir_path, num_rows, line_length, index_number, index_column, verbose):
+    index_column_list = [index_column] if isinstance(index_column, str) else index_column
+    reverse_statuses = build_index(f4_file_path, tmp_dir_path, index_number, index_column_list, num_rows, line_length, verbose)
+
+    key = []
+    for j, index_column in enumerate(index_column_list):
+        key.append((index_column, reverse_statuses[j]))
+
+    return tuple(key)
 
 def get_column_index_and_type(tmp_dir_path, index_column_name):
     columns_file_path = get_columns_database_path(tmp_dir_path)

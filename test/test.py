@@ -826,13 +826,12 @@ def run_super_tests(num_parallel, size, extension, compression_type, verbose, tm
     print("-------------------------------------------------------------------")
 
     # Clean up files if they already exist
-    if os.path.exists(f4_file_path):
-        os.unlink(f4_file_path)
+#    if os.path.exists(f4_file_path):
+#        os.unlink(f4_file_path)
+#    if os.path.exists(out_file_path):
+#        os.unlink(out_file_path)
 
-    if os.path.exists(out_file_path):
-        os.unlink(out_file_path)
-
-    f4.convert_delimited_file(in_file_path, f4_file_path, compression_type=compression_type, num_parallel=num_parallel, index_columns=["X1", "X2", ["X1", "X2"]], verbose=verbose, tmp_dir_path=tmp_dir_path)
+#    f4.convert_delimited_file(in_file_path, f4_file_path, compression_type=compression_type, num_parallel=num_parallel, index_columns=["X1", "X2", ["X1", "X2"]], verbose=verbose, tmp_dir_path=tmp_dir_path)
 
     run_super_test("[Ignore] Just priming the timer...", f4.HeadFilter(n = 1), ["X1"], num_parallel, tmp_dir_path, f4_file_path, out_file_path)
     run_super_test("Querying all rows, one column", f4.NoFilter(), ["X2"], num_parallel, tmp_dir_path, f4_file_path, out_file_path)
@@ -881,8 +880,8 @@ for compression_type in [None]:
 #for compression_type in ["dictionary"]:
 #for compression_type in ["zstd"]:
     # Medium tests
-    #run_larger_tests(num_parallel=1, size="medium", extension="", discrete1_index=11, numeric1_index=21, build_outputs=True, compression_type=compression_type)
-    #run_larger_tests(num_parallel=2, size="medium", extension="", discrete1_index=11, numeric1_index=21, build_outputs=True, compression_type=compression_type)
+#    run_larger_tests(num_parallel=1, size="medium", extension="", discrete1_index=11, numeric1_index=21, build_outputs=True, compression_type=compression_type)
+#    run_larger_tests(num_parallel=2, size="medium", extension="", discrete1_index=11, numeric1_index=21, build_outputs=True, compression_type=compression_type)
 
     # Large tests
     #num_parallel = 1
@@ -907,9 +906,9 @@ for compression_type in [None]:
     ##f4.inner_join("data/medium.f4", "data/medium.f4", "ID", "/tmp/medium_joined.f4", num_parallel=num_parallel, verbose=verbose)
     ##f4.inner_join("data/large_tall.f4", "data/large_wide.f4", "ID", "/tmp/large_joined.f4", num_parallel=num_parallel, verbose=verbose)
 
-    #run_super_tests(num_parallel=num_parallel, size="test_tall", extension=".gz", compression_type=compression_type, verbose=verbose, tmp_dir_path="/tmp/test_tall")
+    run_super_tests(num_parallel=num_parallel, size="test_tall", extension=".gz", compression_type=compression_type, verbose=verbose, tmp_dir_path="/tmp/test_tall")
     #run_super_tests(num_parallel=num_parallel, size="test_wide", extension=".gz", compression_type=compression_type, verbose=verbose, tmp_dir_path="/tmp/test_wide")
-    run_super_tests(num_parallel=num_parallel, size="super_tall", extension=".gz", compression_type=compression_type, verbose=verbose, tmp_dir_path="/tmp/super_tall")
+    #run_super_tests(num_parallel=num_parallel, size="super_tall", extension=".gz", compression_type=compression_type, verbose=verbose, tmp_dir_path="/tmp/super_tall")
     #run_super_tests(num_parallel=num_parallel, size="super_wide", extension=".gz", compression_type=compression_type, verbose=verbose, tmp_dir_path="/tmp/super_wide")
     #run_super_tests(num_parallel=num_parallel, size="hyper_tall", extension=".gz", compression_type=compression_type, verbose=verbose, tmp_dir_path="/tmp/hyper_tall")
     #run_super_tests(num_parallel=num_parallel, size="hyper_wide", extension=".gz", compression_type=compression_type, verbose=verbose, tmp_dir_path="/tmp/hyper_wide")

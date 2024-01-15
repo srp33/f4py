@@ -68,9 +68,9 @@ class _SimpleBaseFilter(_BaseFilter):
     def _get_index_number(self, file_data):
         if "i" in file_data.cache_dict:
             if hasattr(self, "column_name"):
-                dict_key = (self.column_name.decode(), isinstance(self, EndsWithFilter))
+                dict_key = ((self.column_name.decode(), isinstance(self, EndsWithFilter)), )
 
-                return file_data.cache_dict["i"].get(tuple(dict_key), -1)
+                return file_data.cache_dict["i"].get(dict_key, -1)
 
         return -1
 
