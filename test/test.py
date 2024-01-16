@@ -777,8 +777,6 @@ def run_all_small_tests():
     # Small tests with indexing
     run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, index_columns = index_columns)
     run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2, index_columns = index_columns)
-    print("got here - test.py - line 778")
-    return
 
     ## Small tests with dictionary-based compression
     ##run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, compression_type = "dictionary")

@@ -63,7 +63,7 @@ class _SimpleBaseFilter(_BaseFilter):
                     for chunk_row_indices in split_list_into_chunks(row_indices, 1000001)))
                 )
         else:
-            return self.get_matching_row_indices_indexed(file_data, index_number, 0, 1, file_data.cache_dict["num_rows"], 1, True, num_parallel)
+            return self.get_matching_row_indices_indexed(file_data, index_number, 0, 1, 0, file_data.cache_dict["num_rows"], True, num_parallel)
 
     def _get_index_number(self, file_data):
         if "i" in file_data.cache_dict:
