@@ -872,7 +872,7 @@ def run_super_test(description, fltr, select_columns, num_parallel, tmp_dir_path
 
     print(f"  {elapsed_time:.2f} seconds, {num_lines} lines in output file")
 
-#run_all_small_tests()
+run_all_small_tests()
 
 #for compression_type in [None, "dictionary", "zstd"]:
 #for compression_type in [None, "zstd"]:
@@ -880,8 +880,8 @@ for compression_type in [None]:
 #for compression_type in ["dictionary"]:
 #for compression_type in ["zstd"]:
     # Medium tests
-#    run_larger_tests(num_parallel=1, size="medium", extension="", discrete1_index=11, numeric1_index=21, build_outputs=True, compression_type=compression_type)
-#    run_larger_tests(num_parallel=2, size="medium", extension="", discrete1_index=11, numeric1_index=21, build_outputs=True, compression_type=compression_type)
+    run_larger_tests(num_parallel=1, size="medium", extension="", discrete1_index=11, numeric1_index=21, build_outputs=True, compression_type=compression_type)
+    run_larger_tests(num_parallel=2, size="medium", extension="", discrete1_index=11, numeric1_index=21, build_outputs=True, compression_type=compression_type)
 
     # Large tests
     #num_parallel = 1
@@ -906,7 +906,7 @@ for compression_type in [None]:
     ##f4.inner_join("data/medium.f4", "data/medium.f4", "ID", "/tmp/medium_joined.f4", num_parallel=num_parallel, verbose=verbose)
     ##f4.inner_join("data/large_tall.f4", "data/large_wide.f4", "ID", "/tmp/large_joined.f4", num_parallel=num_parallel, verbose=verbose)
 
-    run_super_tests(num_parallel=num_parallel, size="test_tall", extension=".gz", compression_type=compression_type, verbose=verbose, tmp_dir_path="/tmp/test_tall")
+#    run_super_tests(num_parallel=num_parallel, size="test_tall", extension=".gz", compression_type=compression_type, verbose=verbose, tmp_dir_path="/tmp/test_tall")
     #run_super_tests(num_parallel=num_parallel, size="test_wide", extension=".gz", compression_type=compression_type, verbose=verbose, tmp_dir_path="/tmp/test_wide")
     #run_super_tests(num_parallel=num_parallel, size="super_tall", extension=".gz", compression_type=compression_type, verbose=verbose, tmp_dir_path="/tmp/super_tall")
     #run_super_tests(num_parallel=num_parallel, size="super_wide", extension=".gz", compression_type=compression_type, verbose=verbose, tmp_dir_path="/tmp/super_wide")
