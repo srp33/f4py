@@ -1,4 +1,6 @@
 data/*.f4*
+data/hyper*
+data/kinda*
 data/medium*
 data/large*
 data/super*
