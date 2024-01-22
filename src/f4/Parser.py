@@ -493,11 +493,12 @@ def query(data_file_path, fltr=NoFilter(), select_columns=[], out_file_path=None
         # print(ncls.all_overlaps_both(starts2, ends2, indexes2))
         # https://stackoverflow.com/questions/58535825/combine-overlapping-ranges-of-numbers
 
-        keep_row_indices = sorted(fltr.get_matching_row_indices(file_data, set(range(file_data.cache_dict["num_rows"])), num_parallel))
-        # keep_row_indices = fltr.get_matching_row_indices(file_data, None, num_parallel)
+        keep_row_indices = fltr.get_matching_row_indices(file_data, None, num_parallel)
 
         if keep_row_indices is None:
             keep_row_indices = range(file_data.cache_dict["num_rows"])
+        else:
+            keep_row_indices = sorted(keep_row_indices)
 
         # Parse information about columns to be selected.
         if select_columns:
