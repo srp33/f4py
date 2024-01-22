@@ -2,8 +2,8 @@
 
 set -o errexit
 
-#local_dev=no
-local_dev=yes
+local_dev=no
+#local_dev=yes
 run_in_background=no
 #run_in_background=yes
 
