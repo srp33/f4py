@@ -52,18 +52,33 @@ class _SimpleBaseFilter(_BaseFilter):
         if index_number < 0:
             column_index = get_column_index_from_name(file_data, self.column_name)
             coords = parse_data_coord(file_data, "", column_index)
-
             parse_function = get_parse_row_value_function(file_data)
 
-            if len(row_indices) <= 100 or num_parallel == 1:
-                return self._do_row_indices_pass(file_data, coords, parse_function, row_indices)
+            if row_indices is None:
+                num_rows = file_data.cache_dict["num_rows"]
+
+                if num_rows <= 100 or num_parallel == 1:
+                    return self._do_row_indices_pass(file_data, coords, parse_function, range(num_rows))
+                else:
+                    return set(chain.from_iterable(joblib.Parallel(n_jobs=num_parallel)(
+                        joblib.delayed(self._do_row_indices_pass_parallel)(file_data.data_file_path, "", coords, parse_function, chunk_row_indices)
+                        for chunk_row_indices in generate_range_chunks(num_rows, 1000001)))
+                    )
             else:
-                return set(chain.from_iterable(joblib.Parallel(n_jobs=num_parallel)(
-                    joblib.delayed(self._do_row_indices_pass_parallel)(file_data.data_file_path, "", coords, parse_function, chunk_row_indices)
-                    for chunk_row_indices in split_list_into_chunks(row_indices, 1000001)))
-                )
+                if len(row_indices) <= 100 or num_parallel == 1:
+                    return self._do_row_indices_pass(file_data, coords, parse_function, row_indices)
+                else:
+                    return set(chain.from_iterable(joblib.Parallel(n_jobs=num_parallel)(
+                        joblib.delayed(self._do_row_indices_pass_parallel)(file_data.data_file_path, "", coords, parse_function, chunk_row_indices)
+                        for chunk_row_indices in split_list_into_chunks(row_indices, 1000001)))
+                    )
         else:
-            return self.get_matching_row_indices_indexed(file_data, index_number, 0, 1, 0, file_data.cache_dict["num_rows"], True, num_parallel)
+            matching_row_indices = self.get_matching_row_indices_indexed(file_data, index_number, 0, 1, 0, file_data.cache_dict["num_rows"], True, num_parallel)
+
+            if row_indices is None:
+                return matching_row_indices
+
+            return matching_row_indices & row_indices
 
     def _get_index_number(self, file_data):
         if "i" in file_data.cache_dict:
@@ -242,12 +257,20 @@ class HeadFilter(_BaseFilter):
         self.n = n
 
     def get_matching_row_indices(self, file_data, row_indices, num_parallel):
-        return set(range(min(file_data.cache_dict["num_rows"], self.n))) & row_indices
+        if row_indices is None:
+            return set(range(min(file_data.cache_dict["num_rows"], self.n)))
+        else:
+            return set(range(min(file_data.cache_dict["num_rows"], self.n))) & row_indices
 
 class TailFilter(HeadFilter):
     def get_matching_row_indices(self, file_data, row_indices, num_parallel):
         num_rows = file_data.cache_dict["num_rows"]
-        return set(range(num_rows - self.n, num_rows)) & row_indices
+        matching_row_indices = set(range(num_rows - self.n, num_rows))
+
+        if row_indices is None:
+            return matching_row_indices
+        else:
+            return matching_row_indices & row_indices
 
 class StartsWithFilter(_SimpleBaseFilter):
     def __init__(self, column_name, value):
@@ -301,8 +324,7 @@ class AndFilter(_CompositeFilter):
 
         if index_number < 0:
             for f in self.filters:
-                row_indices_f = f.get_matching_row_indices(file_data, row_indices, num_parallel)
-                row_indices = row_indices & row_indices_f
+                row_indices = f.get_matching_row_indices(file_data, row_indices, num_parallel)
 
             return row_indices
         else:
@@ -350,11 +372,33 @@ class OrFilter(_CompositeFilter):
         super().__init__(filters)
 
     def get_matching_row_indices(self, file_data, row_indices, num_parallel):
-        row_indices_out = self.filters[0].get_matching_row_indices(file_data, row_indices, num_parallel)
+        if row_indices is None:
+            row_indices = set(range(file_data.cache_dict["num_rows"]))
 
-        for f in self.filters[1:]:
-            row_indices_f = f.get_matching_row_indices(file_data, row_indices, num_parallel)
-            row_indices_out = row_indices_out | row_indices_f
+        are_all_operator_filters = True
+        for f in self.filters:
+            if f is not _OperatorFilter:
+                are_all_operator_filters = False
+                break
+
+        row_indices_out = set()
+
+        if are_all_operator_filters:
+            column_indices = [get_column_index_from_name(file_data, f.column_name) for f in self.filters]
+            coords = [parse_data_coord(file_data, "", column_index) for column_index in column_indices]
+            parse_function = get_parse_row_value_function(file_data)
+
+            # This is a special case where we can make it more efficient.
+            # We always check the first filter. If that equates to False, we continue checking subsequent filters.
+            for row_index in row_indices:
+                for i, f in enumerate(self.filters):
+                    if self._passes(parse_function(file_data, "", row_index, coords[i])):
+                        row_indices_out.add(row_index)
+                        break
+        else:
+            for f in self.filters:
+                row_indices_f = f.get_matching_row_indices(file_data, row_indices, num_parallel)
+                row_indices_out = row_indices_out | row_indices_f
 
         return row_indices_out
 
@@ -401,7 +445,59 @@ def query(data_file_path, fltr=NoFilter(), select_columns=[], out_file_path=None
         fltr._check_types(file_data)
 
         # Filter rows based on the data
-        keep_row_indices = sorted(fltr.get_matching_row_indices(file_data, set(range(file_data.cache_dict["num_rows"])), num_parallel))
+
+        # import numpy as np
+        # my_range = np.arange(file_data.cache_dict["num_rows"])
+        # my_list = [1, 2, 3]
+        # x = np.intersect1d(my_range, my_list)
+        # y = set(x)
+        # print(y)
+        # from ClusterShell.RangeSet import RangeSet
+        # from ClusterShell.NodeSet import NodeSet
+        # my_range = range(file_data.cache_dict["num_rows"])
+        # num_rows = file_data.cache_dict['num_rows']
+        # num_rows = 10
+        # from intervaltree import Interval, IntervalTree
+        # t1 = IntervalTree()
+        # t1.add(Interval(0, num_rows))
+        # my_set = [Interval(0, 2), Interval(3, 7)]
+        # t2 = IntervalTree()
+        # t2.add(Interval(0, 5))
+        # t3 = t1.symmetric_difference(t2)
+        # # t1.intersection_update(my_set)
+        # # t2 = t.intersection(my_set)
+        # print(t1.begin(), t1.end())
+        # print(t2.begin(), t2.end())
+        # print(t3.begin(), t3.end())
+        # intersection_intervals = [(iv.begin, iv.end) for iv in t2]
+        # print(intersection_intervals)
+        # from ncls import NCLS
+        # import numpy as np
+        #https: // github.com / pyranges / ncls / blob / master / examples / test_fncls.py
+        #Try interlap?
+
+        # starts = np.array(list(reversed([3, 5, 8])), dtype=np.int64)
+        # ends = np.array(list(reversed([6, 7, 9])), dtype=np.int64)
+        # indexes = np.array(list(reversed([0, 1, 2])), dtype=np.int64)
+
+        # starts = np.array([3, 5, 8], dtype=np.int)
+        # ends = np.array([6, 7, 9], dtype=np.int)
+        # indexes = np.array([0, 1, 2], dtype=np.int)
+
+        # ncls = NCLS(starts, ends, indexes)
+        #
+        # starts2 = np.array([1, 6])
+        # ends2 = np.array([10, 7])
+        # indexes2 = np.array([0, 1])
+
+        # print(ncls.all_overlaps_both(starts2, ends2, indexes2))
+        # https://stackoverflow.com/questions/58535825/combine-overlapping-ranges-of-numbers
+
+        # keep_row_indices = sorted(fltr.get_matching_row_indices(file_data, set(range(file_data.cache_dict["num_rows"])), num_parallel))
+        keep_row_indices = fltr.get_matching_row_indices(file_data, None, num_parallel)
+
+        if keep_row_indices is None:
+            keep_row_indices = range(file_data.cache_dict["num_rows"])
 
         # Parse information about columns to be selected.
         if select_columns:

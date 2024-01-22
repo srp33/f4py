@@ -42,7 +42,6 @@
 # Rust conversion:
 #####################################################
 
-Use SQLite rather than shelve()?
 Modify class structure for Filters so inheritance is not used.
 
 #####################################################
