@@ -2,37 +2,34 @@
 
 set -o errexit
 
-if [[ "$OSTYPE" == "darwin"* ]]; then
-    echo "Running on macOS"
-elif [[ "$OSTYPE" == "linux-gnu" ]]; then
-    echo "Running on Linux"
-else
-    echo "Unsupported operating system"
-fi
-exit
+#######################################################
+# Variables
+#######################################################
 
-#local_dev=no
-local_dev=yes
 run_in_background=no
 #run_in_background=yes
 
+#######################################################
+# Prep 
+#######################################################
+
+# Check whether we are developing (on a Mac) or testing the code (on Linux).
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    local_dev=yes
+elif [[ "$OSTYPE" == "linux-gnu" ]]; then
+    local_dev=no
+else
+    echo "Unsupported operating system"
+    exit 1
+fi
+
 rm -rf f4
 cp -r ../src/f4 .
-
-#######################################################
-# Build the Docker image
-#######################################################
 
 if [[ "${local_dev}" == "no" ]]
 then
   docker build -t srp33/f4_test .
 fi
-
-#######################################################
-# Run preparatory steps
-#######################################################
-
-mkdir -p data
 
 if [[ "${run_in_background}" == "no" ]]
 then
@@ -40,6 +37,12 @@ then
 else
   dockerCommand="docker run -d --rm --platform linux/x86_64 --user $(id -u):$(id -g) -v $(pwd):/sandbox -v $(pwd)/data:/data -v /tmp:/tmp --workdir=/sandbox srp33/f4_test"
 fi
+
+#######################################################
+# Create test files
+#######################################################
+
+mkdir -p data
 
 #$dockerCommand bash -c "time python3 build_tsv.py 10 10 10 8 10000 data/medium.tsv"
 
