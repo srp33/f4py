@@ -2,6 +2,15 @@
 
 set -o errexit
 
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    echo "Running on macOS"
+elif [[ "$OSTYPE" == "linux-gnu" ]]; then
+    echo "Running on Linux"
+else
+    echo "Unsupported operating system"
+fi
+exit
+
 #local_dev=no
 local_dev=yes
 run_in_background=no
