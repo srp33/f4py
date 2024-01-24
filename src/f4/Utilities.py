@@ -135,25 +135,6 @@ def remove_tmp_dir(tmp_dir_path, verbose):
             print_message(f"Warning: {tmp_dir_path} directory could not be removed", verbose)
             pass
 
-# def split_list_into_chunks(my_list, max_items_per_chunk):
-#     return_list = list()
-#
-#     for x in my_list:
-#         return_list.append(x)
-#
-#         if len(return_list) == max_items_per_chunk:
-#             yield return_list
-#             return_list = list()
-#
-#     if len(return_list) > 0:
-#         yield return_list
-
-# from itertools import zip_longest
-#
-# def split_list_into_chunks(my_list, max_items_per_chunk):
-#     args = [iter(my_list)] * max_items_per_chunk
-#     yield from ([x for x in chunk if x is not None] for chunk in zip_longest(*args, fillvalue=None))
-
 def split_list_into_chunks(my_list, max_items_per_chunk):
     cursor = 0
     total_elements = len(my_list)
