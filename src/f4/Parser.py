@@ -70,7 +70,7 @@ class _SimpleBaseFilter(_BaseFilter):
                 else:
                     return set(chain.from_iterable(joblib.Parallel(n_jobs=num_parallel)(
                         joblib.delayed(self._do_row_indices_pass_parallel)(file_data.data_file_path, "", coords, parse_function, chunk_row_indices)
-                        for chunk_row_indices in split_list_into_chunks(row_indices, 1000001)))
+                        for chunk_row_indices in split_list_into_chunks(list(row_indices), 1000001)))
                     )
         else:
             matching_row_indices = self.get_matching_row_indices_indexed(file_data, index_number, 0, 1, 0, file_data.cache_dict["num_rows"], True, num_parallel)
@@ -436,63 +436,11 @@ def query(data_file_path, fltr=NoFilter(), select_columns=[], out_file_path=None
         global joblib
         joblib = __import__('joblib', globals(), locals())
 
-    # write_obj = sys.stdout.buffer
-    # if out_file_path:
-    #     write_obj = open(out_file_path, 'wb')
-
     with initialize(data_file_path) as file_data:
         # Make sure the filters match the column types.
         fltr._check_types(file_data)
 
         # Filter rows based on the data
-
-        # import numpy as np
-        # my_range = np.arange(file_data.cache_dict["num_rows"])
-        # my_list = [1, 2, 3]
-        # x = np.intersect1d(my_range, my_list)
-        # y = set(x)
-        # print(y)
-        # from ClusterShell.RangeSet import RangeSet
-        # from ClusterShell.NodeSet import NodeSet
-        # my_range = range(file_data.cache_dict["num_rows"])
-        # num_rows = file_data.cache_dict['num_rows']
-        # num_rows = 10
-        # from intervaltree import Interval, IntervalTree
-        # t1 = IntervalTree()
-        # t1.add(Interval(0, num_rows))
-        # my_set = [Interval(0, 2), Interval(3, 7)]
-        # t2 = IntervalTree()
-        # t2.add(Interval(0, 5))
-        # t3 = t1.symmetric_difference(t2)
-        # # t1.intersection_update(my_set)
-        # # t2 = t.intersection(my_set)
-        # print(t1.begin(), t1.end())
-        # print(t2.begin(), t2.end())
-        # print(t3.begin(), t3.end())
-        # intersection_intervals = [(iv.begin, iv.end) for iv in t2]
-        # print(intersection_intervals)
-        # from ncls import NCLS
-        # import numpy as np
-        #https: // github.com / pyranges / ncls / blob / master / examples / test_fncls.py
-        #Try interlap?
-
-        # starts = np.array(list(reversed([3, 5, 8])), dtype=np.int64)
-        # ends = np.array(list(reversed([6, 7, 9])), dtype=np.int64)
-        # indexes = np.array(list(reversed([0, 1, 2])), dtype=np.int64)
-
-        # starts = np.array([3, 5, 8], dtype=np.int)
-        # ends = np.array([6, 7, 9], dtype=np.int)
-        # indexes = np.array([0, 1, 2], dtype=np.int)
-
-        # ncls = NCLS(starts, ends, indexes)
-        #
-        # starts2 = np.array([1, 6])
-        # ends2 = np.array([10, 7])
-        # indexes2 = np.array([0, 1])
-
-        # print(ncls.all_overlaps_both(starts2, ends2, indexes2))
-        # https://stackoverflow.com/questions/58535825/combine-overlapping-ranges-of-numbers
-
         keep_row_indices = fltr.get_matching_row_indices(file_data, None, num_parallel)
 
         if keep_row_indices is None:
@@ -512,13 +460,13 @@ def query(data_file_path, fltr=NoFilter(), select_columns=[], out_file_path=None
 
             # Get select column indices
             if len(select_columns) <= 100:
-                select_column_index_chunks = iterate_single_value([get_column_index_from_name(file_data, c) for c in select_columns])
+                select_column_index_chunks = [[get_column_index_from_name(file_data, c) for c in select_columns]]
                 num_select_column_chunks = 1
             else:
                 max_columns_per_chunk = 1000001
 
                 select_column_name_chunks = split_list_into_chunks(select_columns, max_columns_per_chunk)
-                select_column_index_chunks = get_column_index_chunks_from_names(file_data, select_column_name_chunks)
+                select_column_index_chunks = list(get_column_index_chunks_from_names(file_data, select_column_name_chunks))
 
                 num_select_column_chunks = ceil(len(select_columns) / max_columns_per_chunk)
         else:
@@ -537,59 +485,74 @@ def query(data_file_path, fltr=NoFilter(), select_columns=[], out_file_path=None
             # Get select column indices
             max_columns_per_chunk = 1000001
             num_cols = file_data.cache_dict["num_cols"]
-            select_column_index_chunks = generate_range_chunks(num_cols, max_columns_per_chunk)
+            select_column_index_chunks = list(generate_range_chunks(num_cols, max_columns_per_chunk))
             num_select_column_chunks = ceil(num_cols / max_columns_per_chunk)
 
-        if num_select_column_chunks == 1:
-            save_output_rows(data_file_path, out_file_path, keep_row_indices, next(select_column_index_chunks))
+        if len(keep_row_indices) == 0:
+            return
+
+        num_keep_rows = len(keep_row_indices)
+        max_rows_per_chunk = ceil(num_keep_rows / num_parallel)
+        num_row_index_chunks = ceil(num_keep_rows / max_rows_per_chunk)
+
+        if num_row_index_chunks == 1:
+            keep_row_indices = [keep_row_indices]
+        else:
+            keep_row_indices = list(split_list_into_chunks(keep_row_indices, max_rows_per_chunk))
+
+        if num_select_column_chunks == 1 and num_row_index_chunks == 1:
+            save_output_rows(data_file_path, out_file_path, keep_row_indices[0], select_column_index_chunks[0])
         else:
             if tmp_dir_path:
                 makedirs(tmp_dir_path, exist_ok=True)
             else:
                 tmp_dir_path = mkdtemp()
+
             tmp_dir_path = fix_dir_path_ending(tmp_dir_path)
 
             if num_parallel == 1:
-                for chunk_number, select_column_indices in enumerate(select_column_index_chunks):
-                    save_output_rows(data_file_path, f"{tmp_dir_path}{chunk_number}", keep_row_indices, select_column_indices)
+                for row_chunk_number, row_chunk_indices in enumerate(keep_row_indices):
+                    for column_chunk_number, column_chunk_indices in enumerate(select_column_index_chunks):
+                        save_output_rows(data_file_path, f"{tmp_dir_path}{row_chunk_number}_{column_chunk_number}", row_chunk_indices, column_chunk_indices)
             else:
-                chain.from_iterable(joblib.Parallel(n_jobs=num_parallel)(
-                    joblib.delayed(save_output_rows)(data_file_path, f"{tmp_dir_path}{chunk_number}", keep_row_indices, select_column_indices)
-                    for chunk_number, select_column_indices in enumerate(select_column_index_chunks))
+                joblib.Parallel(n_jobs=num_parallel)(
+                    joblib.delayed(save_output_rows)(data_file_path, f"{tmp_dir_path}{row_chunk_number}_{column_chunk_number}", row_chunk_indices, column_chunk_indices)
+                        for row_chunk_number, row_chunk_indices in enumerate(keep_row_indices)
+                            for column_chunk_number, column_chunk_indices in enumerate(select_column_index_chunks)
                 )
 
-            chunk_file_dict = {}
-            for chunk_number in range(num_select_column_chunks):
-                chunk_file_dict[chunk_number] = open(f"{tmp_dir_path}{chunk_number}", "rb")
-
             with get_write_object(out_file_path, "ab") as write_obj:
-                for row_index in keep_row_indices:
-                    for chunk_number, chunk_file in chunk_file_dict.items():
-                        if chunk_number + 1 == num_select_column_chunks:
-                            write_obj.write(chunk_file.readline())
-                        else:
-                            write_obj.write(chunk_file.readline().rstrip(b"\n") + b"\t")
+                for row_chunk_number, row_indices in enumerate(keep_row_indices):
+                    chunk_file_dict = {}
+                    for column_chunk_number in range(num_select_column_chunks):
+                        chunk_file_dict[column_chunk_number] = open(f"{tmp_dir_path}{row_chunk_number}_{column_chunk_number}", "rb")
 
-            for chunk_number, chunk_file in chunk_file_dict.items():
-                chunk_file.close()
-                remove(f"{tmp_dir_path}{chunk_number}")
+                    for row_index in range(len(row_indices)):
+                        for column_chunk_number in range(num_select_column_chunks):
+                            chunk_file = chunk_file_dict[column_chunk_number]
 
-    # TODO: Add logic for parallelizing across column chunks.
-    # TODO: Parallelize across rows so you can handle billions of rows?
-    #         And/or Use the RangeSet or intervaltree packages to store discrete
-    #         indices more compactly (and quickly)? ChatGPT can provide examples
-    #         of how to do this.
+                            if column_chunk_number + 1 == num_select_column_chunks:
+                                write_obj.write(chunk_file.readline())
+                            else:
+                                write_obj.write(chunk_file.readline().rstrip(b"\n") + b"\t")
 
-    # if out_file_path:
-    #     write_obj.close()
+                    for chunk_file in chunk_file_dict.values():
+                        chunk_file.close()
 
-def head(data_file_path, n = 10, select_columns=None, out_file_path=None, out_file_type="tsv"):
+            for row_chunk_number in range(num_row_index_chunks):
+                for column_chunk_number in range(num_select_column_chunks):
+                    remove(f"{tmp_dir_path}{row_chunk_number}_{column_chunk_number}")
+
+    # TODO: Use the RangeSet or intervaltree packages to store discrete
+    #         indices more compactly (and quickly)?
+
+def head(data_file_path, n=10, select_columns=None, out_file_path=None, out_file_type="tsv"):
     if not select_columns:
         select_columns = []
 
     query(data_file_path, HeadFilter(n), select_columns, out_file_path=out_file_path, out_file_type=out_file_type)
 
-def tail(data_file_path, n = 10, select_columns=None, out_file_path=None, out_file_type="tsv"):
+def tail(data_file_path, n=10, select_columns=None, out_file_path=None, out_file_type="tsv"):
     if not select_columns:
         select_columns = []
 
@@ -711,21 +674,6 @@ def get_column_type_from_index(file_data, column_index):
 def get_value_from_single_column_file(file_handle, content_start_index, segment_length, row_index):
     start_search_position = content_start_index + row_index * segment_length
     return file_handle[start_search_position:(start_search_position + segment_length)].rstrip(b" ")
-
-# def generate_query_row_chunks(num_rows, num_parallel):
-#     rows_per_chunk = ceil(num_rows / num_parallel)
-#
-#     row_indices = set()
-#
-#     for row_index in range(num_rows):
-#         row_indices.add(row_index)
-#
-#         if len(row_indices) == rows_per_chunk:
-#             yield row_indices
-#             row_indices = set()
-#
-#     if len(row_indices) > 0:
-#         yield row_indices
 
 def parse_data_coord(file_data, data_file_key, index):
     ccml = file_data.cache_dict[data_file_key + "ccml"]
