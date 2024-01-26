@@ -839,7 +839,7 @@ def run_super_tests(num_parallel, size, extension, compression_type, verbose, tm
 
     select_columns = ["X1", "X2", "X3", "X4"]
 
-    fltr = f4.AndFilter(f4.StringFilter("X3", operator.eq, "A"), f4.StringFilter("X3", operator.eq, "A"))
+    fltr = f4.AndFilter(f4.StringFilter("X3", operator.eq, "A"), f4.StringFilter("X4", operator.eq, "A"))
     run_super_test("Querying fewer rows (AndFilter), four columns, no index", fltr, select_columns, num_parallel, tmp_dir_path, f4_file_path, out_file_path)
 
     fltr = f4.AndFilter(f4.StringFilter("X1", operator.eq, "A"), f4.StringFilter("X2", operator.eq, "A"))
@@ -908,10 +908,10 @@ for compression_type in [None]:
     #run_super_tests(num_parallel=num_parallel, size="test_wide", extension=".gz", compression_type=compression_type, verbose=verbose, tmp_dir_path="/tmp/test_wide")
     #run_super_tests(num_parallel=num_parallel, size="kinda_tall", extension=".gz", compression_type=compression_type, verbose=verbose, tmp_dir_path="/tmp/kinda_tall")
     #run_super_tests(num_parallel=num_parallel, size="kinda_wide", extension=".gz", compression_type=compression_type, verbose=verbose, tmp_dir_path="/tmp/kinda_wide")
-    run_super_tests(num_parallel=num_parallel, size="super_tall", extension=".gz", compression_type=compression_type, verbose=verbose, tmp_dir_path="/tmp/super_tall")
+    #run_super_tests(num_parallel=num_parallel, size="super_tall", extension=".gz", compression_type=compression_type, verbose=verbose, tmp_dir_path="/tmp/super_tall")
     #run_super_tests(num_parallel=num_parallel, size="super_wide", extension=".gz", compression_type=compression_type, verbose=verbose, tmp_dir_path="/tmp/super_wide")
-    #run_super_tests(num_parallel=num_parallel, size="hyper_tall", extension=".gz", compression_type=compression_type, verbose=verbose, tmp_dir_path="/tmp/hyper_tall")
-    #run_super_tests(num_parallel=num_parallel, size="hyper_wide", extension=".gz", compression_type=compression_type, verbose=verbose, tmp_dir_path="/tmp/hyper_wide")
+    run_super_tests(num_parallel=num_parallel, size="hyper_tall", extension=".gz", compression_type=compression_type, verbose=verbose, tmp_dir_path="/tmp/hyper_tall")
+    run_super_tests(num_parallel=num_parallel, size="hyper_wide", extension=".gz", compression_type=compression_type, verbose=verbose, tmp_dir_path="/tmp/hyper_wide")
 
     #Try this? https://community.hpe.com/t5/servers-systems-the-right/cray-graph-engine-takes-on-a-trillion-triples/ba-p/7096770
 
