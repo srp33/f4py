@@ -6,8 +6,8 @@ set -o errexit
 # Variables
 #######################################################
 
-#run_in_background=no
-run_in_background=yes
+run_in_background=no
+#run_in_background=yes
 
 #######################################################
 # Prep 

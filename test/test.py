@@ -778,6 +778,14 @@ def run_all_small_tests():
     run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, index_columns = index_columns)
     run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2, index_columns = index_columns)
 
+    # Small tests with z-standard compression
+    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, compression_type = "zstd")
+    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2, compression_type = "zstd")
+
+    # Small tests with z-standard compression (and indexing)
+    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, compression_type = "zstd", index_columns = index_columns)
+    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2, compression_type = "zstd", index_columns = index_columns)
+
     ## Small tests with dictionary-based compression
     ##run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, compression_type = "dictionary")
     ##run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2, compression_type = "dictionary")
@@ -786,21 +794,11 @@ def run_all_small_tests():
     ##run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, compression_type = "dictionary", index_columns = index_columns)
     ##run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2, compression_type = "dictionary", index_columns = index_columns)
 
-    # Small tests with z-standard compression
-    print("line 785 - z-standard compression")
-    sys.exit()
-    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, compression_type = "zstd")
-    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2, compression_type = "zstd")
-
-    # Small tests with z-standard compression (and indexing)
-    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, compression_type = "zstd", index_columns = index_columns)
-    run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2, compression_type = "zstd", index_columns = index_columns)
-
-     # Transpose without compression
+    # Transpose without compression
     #test_transpose("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, compression_type = None)
     #test_transpose("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2, compression_type = None)
 
-     # Transpose with zstd compression
+    # Transpose with zstd compression
     #test_transpose("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, compression_type = "zstd")
     #test_transpose("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2, compression_type = "zstd")
 
@@ -811,8 +809,8 @@ def run_all_small_tests():
     #test_inner_join(num_parallel = 1, compression_type = "zstd")
 
     # Clean up data files
-    #for file_path in glob.glob(f"{f4_file_path}*"):
-    #    os.unlink(file_path)
+    for file_path in glob.glob(f"{f4_file_path}*"):
+        os.unlink(file_path)
 
 def run_super_tests(num_parallel, size, extension, compression_type, verbose, tmp_dir_path=None):
     in_file_path = f"data/{size}.tsv{extension}"
@@ -870,16 +868,15 @@ def run_super_test(description, fltr, select_columns, num_parallel, tmp_dir_path
 
     print(f"  {elapsed_time:.2f} seconds, {num_lines} lines in output file")
 
-#run_all_small_tests()
+run_all_small_tests()
 
-#for compression_type in [None, "dictionary", "zstd"]:
 #for compression_type in [None, "zstd"]:
 for compression_type in [None]:
-#for compression_type in ["dictionary"]:
 #for compression_type in ["zstd"]:
+#for compression_type in ["dictionary"]:
     # Medium tests
-    #run_larger_tests(num_parallel=1, size="medium", extension="", discrete1_index=11, numeric1_index=21, build_outputs=True, compression_type=compression_type)
-    #run_larger_tests(num_parallel=2, size="medium", extension="", discrete1_index=11, numeric1_index=21, build_outputs=True, compression_type=compression_type)
+    run_larger_tests(num_parallel=1, size="medium", extension="", discrete1_index=11, numeric1_index=21, build_outputs=True, compression_type=compression_type)
+    run_larger_tests(num_parallel=2, size="medium", extension="", discrete1_index=11, numeric1_index=21, build_outputs=True, compression_type=compression_type)
 
     # Large tests
     #num_parallel = 1
@@ -910,8 +907,8 @@ for compression_type in [None]:
     #run_super_tests(num_parallel=num_parallel, size="kinda_wide", extension=".gz", compression_type=compression_type, verbose=verbose, tmp_dir_path="/tmp/kinda_wide")
     #run_super_tests(num_parallel=num_parallel, size="super_tall", extension=".gz", compression_type=compression_type, verbose=verbose, tmp_dir_path="/tmp/super_tall")
     #run_super_tests(num_parallel=num_parallel, size="super_wide", extension=".gz", compression_type=compression_type, verbose=verbose, tmp_dir_path="/tmp/super_wide")
-    run_super_tests(num_parallel=num_parallel, size="hyper_tall", extension=".gz", compression_type=compression_type, verbose=verbose, tmp_dir_path="/tmp/hyper_tall")
-    run_super_tests(num_parallel=num_parallel, size="hyper_wide", extension=".gz", compression_type=compression_type, verbose=verbose, tmp_dir_path="/tmp/hyper_wide")
+#    run_super_tests(num_parallel=num_parallel, size="hyper_tall", extension=".gz", compression_type=compression_type, verbose=verbose, tmp_dir_path="/tmp/hyper_tall")
+#    run_super_tests(num_parallel=num_parallel, size="hyper_wide", extension=".gz", compression_type=compression_type, verbose=verbose, tmp_dir_path="/tmp/hyper_wide")
 
     #Try this? https://community.hpe.com/t5/servers-systems-the-right/cray-graph-engine-takes-on-a-trillion-triples/ba-p/7096770
 

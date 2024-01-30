@@ -592,28 +592,29 @@ def initialize(data_file_path):
             file_map_dict = deserialize(mmap_handle[len(file_map_length_string):(len(file_map_length_string) + file_map_length)])
 
             cache_dict = {}
-
             cache_dict["ccml"] = fast_int(mmap_handle[file_map_dict["ccml"][0]:file_map_dict["ccml"][1]])
-            last_cc = file_map_dict["cc"][1]
-            cache_dict["ll"] = fast_int(mmap_handle[(last_cc - cache_dict["ccml"]):last_cc])
-            cache_dict["num_rows"] = fast_int((file_map_dict[""][1] - file_map_dict[""][0]) / cache_dict["ll"])
-
             cache_dict["num_cols"] = fast_int((file_map_dict["cc"][1] - file_map_dict["cc"][0]) / cache_dict["ccml"]) - 1
 
             decompression_type = None
             decompressor = None
 
-            # if "cmpr" in other_dict:
-            #     decompression_text = other_dict["cmpr"]
-            #
-            #     if decompression_text == b"z":
-            #         decompression_type = "zstd"
-            #         decompressor = ZstdDecompressor()
-            #         cache_dict["num_rows"] = fast_int((file_map_dict2["ll"][1] - file_map_dict2["ll"][0]) / cache_dict["mlll"] - 1)
-            #     # else:
-            #     #     decompression_type = "dictionary"
-            #     #     decompressor = deserialize(decompression_text)
-            # else:
+            if "cmpr" in file_map_dict:
+                decompression_text = mmap_handle[file_map_dict["cmpr"][0]:file_map_dict["cmpr"][1]]
+
+                if decompression_text == b"z":
+                    decompression_type = "zstd"
+                    decompressor = ZstdDecompressor()
+
+                    cache_dict["rl"] = deserialize(mmap_handle[file_map_dict["rl"][0]:file_map_dict["rl"][1]])
+                    cache_dict["ll"] = fast_int(mmap_handle[file_map_dict["ll"][0]:file_map_dict["ll"][1]])
+                    cache_dict["num_rows"] = fast_int(mmap_handle[file_map_dict["nrow"][0]:file_map_dict["nrow"][1]])
+                # else:
+                #     decompression_type = "dictionary"
+                #     decompressor = deserialize(decompression_text)
+            else:
+                last_cc = file_map_dict["cc"][1]
+                cache_dict["ll"] = fast_int(mmap_handle[(last_cc - cache_dict["ccml"]):last_cc])
+                cache_dict["num_rows"] = fast_int((file_map_dict[""][1] - file_map_dict[""][0]) / cache_dict["ll"])
 
             # Calculate line length based on last "cnicc" value.
             cache_dict["cniccml"] = fast_int(mmap_handle[file_map_dict["cniccml"][0]:file_map_dict["cniccml"][1]])
@@ -725,6 +726,9 @@ def parse_data_value_from_file(file_data, data_file_key, start_element, segment_
     start_pos = start_element * segment_length + file_data.file_map_dict[data_file_key][0]
     return file_data.file_handle[(start_pos + coords[0]):(start_pos + coords[1])]
 
+def parse_data_value_from_string(coords, string):
+    return string[(coords[0]):(coords[1])].rstrip(b" ")
+
 def parse_data_values_from_string(data_coords, string):
     for coords in data_coords:
         yield string[(coords[0]):(coords[1])].rstrip(b" ")
@@ -748,19 +752,34 @@ def parse_row_value(file_data, data_file_key, row_index, column_coords):
     return parse_data_value_from_file(file_data, data_file_key, row_index, file_data.cache_dict[data_file_key + "ll"], column_coords).rstrip(b" ")
 
 def parse_zstd_compressed_row_value(file_data, data_file_key, row_index, column_coords):
-    data_start_search_position = file_data.file_map_dict[""][0]
-    line_start_search_position = data_start_search_position + fast_int(get_value_from_single_column_file(file_data.file_handle, file_data.file_map_dict["ll"][0], file_data.cache_dict["mlll"], row_index))
-    next_line_start_search_position = data_start_search_position + fast_int(get_value_from_single_column_file(file_data.file_handle, file_data.file_map_dict["ll"][0], file_data.cache_dict["mlll"], row_index + 1))
+    line = get_zstd_compressed_row(data_file_key, file_data, row_index)
 
-    chunk_size = 1000001
-    all_text = b""
-    # TODO: all_text could get really large. Find a way to use a generator.
-    for i in range(line_start_search_position, next_line_start_search_position, chunk_size):
-        line_end_search_position = min(i + chunk_size, next_line_start_search_position)
-        text = file_data.decompressor.decompress(file_data.file_handle[i:line_end_search_position])
-        all_text += text
+    return parse_data_value_from_string(column_coords, line)
 
-    return all_text[column_coords[0]:column_coords[1]].rstrip(b" ")
+    # data_start_search_position = file_data.file_map_dict[""][0]
+    # line_start_search_position = data_start_search_position + fast_int(get_value_from_single_column_file(file_data.file_handle, file_data.file_map_dict["ll"][0], file_data.cache_dict["mlll"], row_index))
+    # next_line_start_search_position = data_start_search_position + fast_int(get_value_from_single_column_file(file_data.file_handle, file_data.file_map_dict["ll"][0], file_data.cache_dict["mlll"], row_index + 1))
+    #
+    # chunk_size = 1000001
+    # all_text = b""
+    # # TODO: all_text could get really large. Find a way to use a generator.
+    # for i in range(line_start_search_position, next_line_start_search_position, chunk_size):
+    #     line_end_search_position = min(i + chunk_size, next_line_start_search_position)
+    #     text = file_data.decompressor.decompress(file_data.file_handle[i:line_end_search_position])
+    #     all_text += text
+    #
+    # return all_text[column_coords[0]:column_coords[1]].rstrip(b" ")
+
+def get_zstd_compressed_row(data_file_key, file_data, row_index):
+    line_start = file_data.file_map_dict[data_file_key][0]
+    line_start += sum(file_data.cache_dict["rl"][:row_index])
+    # for i in range(row_index):
+    #     line_start += file_data.cache_dict["cll"][i]
+
+    # line_end = line_start + file_data.cache_dict["cll"][row_index]
+    line_end = line_start + file_data.cache_dict["rl"][row_index]
+
+    return file_data.decompressor.decompress(file_data.file_handle[line_start:line_end])
 
 # def parse_dictionary_compressed_row_value(file_data, data_file_key, row_index, column_coords, bigram_size_dict=None, column_name=None):
 #     value = parse_data_value_from_file(file_data, data_file_key, row_index, file_data.cache_dict["ll"], column_coords).rstrip(b" ")
@@ -779,19 +798,23 @@ def parse_row_values(file_data, data_file_key, row_index, column_coords):
     return list(parse_data_values_from_file(file_data, data_file_key, row_index, file_data.cache_dict[data_file_key + "ll"], column_coords))
 
 def parse_zstd_compressed_row_values(file_data, data_file_key, row_index, column_coords):
-    data_start_search_position = file_data.file_map_dict[""][0]
-    line_start_search_position = data_start_search_position + fast_int(get_value_from_single_column_file(file_data.file_handle, file_data.file_map_dict["ll"][0], file_data.cache_dict["mlll"], row_index))
-    next_line_start_search_position = data_start_search_position + fast_int(get_value_from_single_column_file(file_data.file_handle, file_data.file_map_dict["ll"][0], file_data.cache_dict["mlll"], row_index + 1))
+    line = get_zstd_compressed_row(data_file_key, file_data, row_index)
 
-    chunk_size = 1000001
-    all_text = b""
-    #TODO: all_text could get really large. Find a way to use a generator.
-    for i in range(line_start_search_position, next_line_start_search_position, chunk_size):
-        line_end_search_position = min(i + chunk_size, next_line_start_search_position)
-        text = file_data.decompressor.decompress(file_data.file_handle[i:line_end_search_position])
-        all_text += text
+    return list(parse_data_values_from_string(column_coords, line))
 
-    return list(parse_data_values_from_string(column_coords, all_text))
+    # data_start_search_position = file_data.file_map_dict[""][0]
+    # line_start_search_position = data_start_search_position + fast_int(get_value_from_single_column_file(file_data.file_handle, file_data.file_map_dict["ll"][0], file_data.cache_dict["mlll"], row_index))
+    # next_line_start_search_position = data_start_search_position + fast_int(get_value_from_single_column_file(file_data.file_handle, file_data.file_map_dict["ll"][0], file_data.cache_dict["mlll"], row_index + 1))
+    #
+    # chunk_size = 1000001
+    # all_text_list = []
+    #
+    # for i in range(line_start_search_position, next_line_start_search_position, chunk_size):
+    #     line_end_search_position = min(i + chunk_size, next_line_start_search_position)
+    #     text = file_data.decompressor.decompress(file_data.file_handle[i:line_end_search_position])
+    #     all_text_list.append(text)
+    #
+    # return list(parse_data_values_from_string(column_coords, b"".join(all_text_list)))
 
 # def parse_dictionary_compressed_row_values(file_data, data_file_key, row_index, column_coords, bigram_size_dict=None, column_names=None):
 #         values = list(parse_data_values_from_file(file_data, data_file_key, row_index, file_data.cache_dict["ll"], column_coords))

@@ -56,18 +56,19 @@ def convert_delimited_file(delimited_file_path, f4_file_path, index_columns=[], 
     save_column_coordinates(delimited_file_path, f4_file_path, out_items_chunk_size, tmp_dir_path2, verbose)
 
     # Merge the saved/formatted data across the column chunks.
-    # Compress as needed. Get number of rows.
+    # Get number of rows.
     num_rows, line_length = combine_data_for_column_chunks(delimited_file_path, f4_file_path, column_chunk_indices, tmp_dir_path2, verbose)
 
     if num_rows == 0:
         raise Exception(f"A header row but no data rows were detected in {delimited_file_path}.")
 
-    write_compression_info(tmp_dir_path2, compression_type)
-
     if index_columns:
         build_indexes(f4_file_path, tmp_dir_path2, index_columns, num_rows, line_length, num_parallel, verbose)
 
     remove(get_columns_database_path(tmp_dir_path2))
+
+    #TODO: Parallelize this by row chunks.
+    compress_data(tmp_dir_path2, compression_type, num_rows, line_length)
 
     combine_into_single_file(delimited_file_path, f4_file_path, tmp_dir_path2, file_read_chunk_size, verbose)
 
@@ -630,10 +631,56 @@ def combine_data_for_column_chunks(delimited_file_path, f4_file_path, column_chu
 
     return num_rows, line_length_total
 
-def write_compression_info(tmp_dir_path, compression_type):
+def compress_data(tmp_dir_path, compression_type, num_rows, line_length):
     if not compression_type:
         return
 
+    # For now, we assume z-standard compression.
+    compressor = ZstdCompressor(level=1)
+
+    # Compress the data.
+    # If necessary, chunk the compression so we can handle extremely wide files.
+    row_lengths = []
+    compressed_lines_to_save = []
+    compressed_chars_not_saved = 0
+
+    # Save the non-compressed num_rows and line length for later reference.
+    # line_lengths_dict["num_rows"] = num_rows
+    # line_lengths_dict["ll"] = line_length
+
+    with open(get_data_path(tmp_dir_path, "data"), 'rb') as file_handle:
+        with mmap(file_handle.fileno(), 0, prot=PROT_READ) as mmap_handle:
+            with open(get_data_path(tmp_dir_path, "cmpr"), "wb") as cmpr_file:
+                for row_i in range(num_rows):
+                    row_start = row_i * line_length
+                    row_end = (row_i + 1) * line_length
+
+                    compressed_line = compressor.compress(mmap_handle[row_start:row_end])
+
+                    row_lengths.append(len(compressed_line))
+                    compressed_lines_to_save.append(compressed_line)
+                    compressed_chars_not_saved += len(compressed_line)
+
+                    if compressed_chars_not_saved >= 1000000:
+                        cmpr_file.write(b"".join(compressed_lines_to_save))
+                        compressed_lines_to_save = []
+                        compressed_chars_not_saved = 0
+
+                if compressed_chars_not_saved > 0:
+                    cmpr_file.write(b"".join(compressed_lines_to_save))
+
+    rename(get_data_path(tmp_dir_path, "cmpr"), get_data_path(tmp_dir_path, "data"))
+
+    with open(get_data_path(tmp_dir_path, "rl"), "wb") as rl_file:
+        rl_file.write(serialize(row_lengths))
+
+    with open(get_data_path(tmp_dir_path, "ll"), "wb") as ll_file:
+        ll_file.write(str(line_length).encode())
+
+    with open(get_data_path(tmp_dir_path, "nrow"), "wb") as nrow_file:
+        nrow_file.write(str(num_rows).encode())
+
+    # Indicate the compression type.
     with open(get_data_path(tmp_dir_path, "cmpr"), "wb") as cmpr_file:
         # if compression_type == "dictionary":
         #     column_decompression_dicts = {}
@@ -651,7 +698,7 @@ def write_compression_info(tmp_dir_path, compression_type):
         #
         #     cmpr_file.write(serialize(column_decompression_dicts))
         # else:
-            cmpr_file.write(b"z")
+        cmpr_file.write(b"z")
 
 def build_indexes(f4_file_path, tmp_dir_path, index_columns, num_rows, line_length, num_parallel, verbose=False):
     index_info_dict = {}
