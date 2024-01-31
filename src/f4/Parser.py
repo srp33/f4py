@@ -773,10 +773,7 @@ def parse_zstd_compressed_row_value(file_data, data_file_key, row_index, column_
 def get_zstd_compressed_row(data_file_key, file_data, row_index):
     line_start = file_data.file_map_dict[data_file_key][0]
     line_start += sum(file_data.cache_dict["rl"][:row_index])
-    # for i in range(row_index):
-    #     line_start += file_data.cache_dict["cll"][i]
 
-    # line_end = line_start + file_data.cache_dict["cll"][row_index]
     line_end = line_start + file_data.cache_dict["rl"][row_index]
 
     return file_data.decompressor.decompress(file_data.file_handle[line_start:line_end])
