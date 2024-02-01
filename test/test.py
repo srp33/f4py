@@ -676,12 +676,12 @@ def run_larger_tests(num_parallel, size, extension, discrete1_index, numeric1_in
     print(f"Running tests for {in_file_path} - with indexing (cmpr: {compression_type})")
     print("---------------------------------------------------------------------")
 
-    if build_outputs:
-        # Clean up data files
-        for file_path in glob.glob(f"{f4_file_path}*"):
-            os.unlink(file_path)
-
-        f4.convert_delimited_file(in_file_path, f4_file_path, index_columns=["ID", "Categorical1", "Discrete1", "Numeric1"], compression_type=compression_type, num_parallel=num_parallel, verbose=verbose, tmp_dir_path=tmp_dir_path)
+#    if build_outputs:
+#        # Clean up data files
+#        for file_path in glob.glob(f"{f4_file_path}*"):
+#            os.unlink(file_path)
+#
+#        f4.convert_delimited_file(in_file_path, f4_file_path, index_columns=["ID", "Categorical1", "Discrete1", "Numeric1"], compression_type=compression_type, num_parallel=num_parallel, verbose=verbose, tmp_dir_path=tmp_dir_path)
 
     run_larger_tests2(f4_file_path, out_file_path, larger_ID, larger_Categorical1, larger_Discrete1, larger_Numeric1, num_parallel, check_outputs, tmp_dir_path)
 
@@ -690,8 +690,6 @@ def run_larger_tests2(f4_file_path, out_file_path, larger_ID, larger_Categorical
     if check_outputs:
         check_results("Filter ID = Row1", read_file_into_lists(out_file_path), [[b"Discrete1"], larger_Discrete1[1]])
     os.unlink(out_file_path)
-    print("got to line 690")
-    return
 
     f4.query(f4_file_path, f4.StringFilter("ID", operator.eq, "Row33"), ["Discrete1"], out_file_path, num_parallel=num_parallel, tmp_dir_path=tmp_dir_path)
     if check_outputs:
