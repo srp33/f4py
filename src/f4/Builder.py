@@ -640,7 +640,9 @@ def compress_data(tmp_dir_path, compression_type, num_rows, line_length):
 
     # Compress the data.
     # If necessary, chunk the compression so we can handle extremely wide files.
-    row_lengths = []
+    # row_lengths = []
+    compressed_row_ends = []
+    current_compressed_row_end = 0
     compressed_lines_to_save = []
     compressed_chars_not_saved = 0
 
@@ -657,7 +659,9 @@ def compress_data(tmp_dir_path, compression_type, num_rows, line_length):
 
                     compressed_line = compressor.compress(mmap_handle[row_start:row_end])
 
-                    row_lengths.append(len(compressed_line))
+                    current_compressed_row_end += len(compressed_line)
+                    # row_lengths.append(len(compressed_line))
+                    compressed_row_ends.append(current_compressed_row_end)
                     compressed_lines_to_save.append(compressed_line)
                     compressed_chars_not_saved += len(compressed_line)
 
@@ -671,8 +675,8 @@ def compress_data(tmp_dir_path, compression_type, num_rows, line_length):
 
     rename(get_data_path(tmp_dir_path, "cmpr"), get_data_path(tmp_dir_path, "data"))
 
-    with open(get_data_path(tmp_dir_path, "rl"), "wb") as rl_file:
-        rl_file.write(serialize(row_lengths))
+    with open(get_data_path(tmp_dir_path, "re"), "wb") as re_file:
+        re_file.write(serialize(compressed_row_ends))
 
     with open(get_data_path(tmp_dir_path, "ll"), "wb") as ll_file:
         ll_file.write(str(line_length).encode())

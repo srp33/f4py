@@ -605,7 +605,7 @@ def initialize(data_file_path):
                     decompression_type = "zstd"
                     decompressor = ZstdDecompressor()
 
-                    cache_dict["rl"] = deserialize(mmap_handle[file_map_dict["rl"][0]:file_map_dict["rl"][1]])
+                    cache_dict["re"] = deserialize(mmap_handle[file_map_dict["re"][0]:file_map_dict["re"][1]])
                     cache_dict["ll"] = fast_int(mmap_handle[file_map_dict["ll"][0]:file_map_dict["ll"][1]])
                     cache_dict["num_rows"] = fast_int(mmap_handle[file_map_dict["nrow"][0]:file_map_dict["nrow"][1]])
                 # else:
@@ -771,12 +771,21 @@ def parse_zstd_compressed_row_value(file_data, data_file_key, row_index, column_
     # return all_text[column_coords[0]:column_coords[1]].rstrip(b" ")
 
 def get_zstd_compressed_row(data_file_key, file_data, row_index):
-    line_start = file_data.file_map_dict[data_file_key][0]
-    line_start += sum(file_data.cache_dict["rl"][:row_index])
+    row_start = file_data.file_map_dict[data_file_key][0]
 
-    line_end = line_start + file_data.cache_dict["rl"][row_index]
+    if row_index > 0:
+        row_start += file_data.cache_dict["re"][row_index - 1]
 
-    return file_data.decompressor.decompress(file_data.file_handle[line_start:line_end])
+    row_end = row_start + file_data.cache_dict["re"][row_index]
+
+    # line_start = file_data.file_map_dict[data_file_key][0]
+    # line_start += sum(file_data.cache_dict["rl"][:row_index])
+
+    # line_end = line_start + file_data.cache_dict["rl"][row_index]
+    # print(file_data.cache_dict["re"])
+    # print(row_index, row_start, row_end)
+
+    return file_data.decompressor.decompress(file_data.file_handle[row_start:row_end])
 
 # def parse_dictionary_compressed_row_value(file_data, data_file_key, row_index, column_coords, bigram_size_dict=None, column_name=None):
 #     value = parse_data_value_from_file(file_data, data_file_key, row_index, file_data.cache_dict["ll"], column_coords).rstrip(b" ")
@@ -847,6 +856,7 @@ def save_output_rows(in_file_path, out_file_path, row_indices, column_indices):
             parse_row_values_function = get_parse_row_values_function(file_data)
 
             for row_index in row_indices:
+                # print(row_index)
                 write_obj.write(b"\t".join(parse_row_values_function(file_data, "", row_index, select_column_coords)) + b"\n")
 
 # def _get_decompression_dict(self, file_path, column_index_name_dict):
