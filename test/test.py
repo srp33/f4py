@@ -814,7 +814,7 @@ def run_all_small_tests():
 
 def run_super_tests(num_parallel, size, extension, compression_type, verbose, tmp_dir_path=None):
     in_file_path = f"data/{size}.tsv{extension}"
-    f4_file_path = f"data/{size}.f4"
+    f4_file_path = f"data/{size}.f4.zstd" if compression_type else f"data/{size}.f4"
     out_file_path = "/tmp/f4_out.tsv"
 
     print("-------------------------------------------------------------------")
@@ -868,15 +868,15 @@ def run_super_test(description, fltr, select_columns, num_parallel, tmp_dir_path
 
     print(f"  {elapsed_time:.2f} seconds, {num_lines} lines in output file")
 
-#run_all_small_tests()
+run_all_small_tests()
 
 #for compression_type in [None]:
-for compression_type in ["zstd"]:
-#for compression_type in [None, "zstd"]:
+#for compression_type in ["zstd"]:
+for compression_type in [None, "zstd"]:
 #for compression_type in ["dictionary"]:
     # Medium tests
-#    run_larger_tests(num_parallel=1, size="medium", extension="", discrete1_index=11, numeric1_index=21, build_outputs=True, compression_type=compression_type)
-#    run_larger_tests(num_parallel=2, size="medium", extension="", discrete1_index=11, numeric1_index=21, build_outputs=True, compression_type=compression_type)
+    run_larger_tests(num_parallel=1, size="medium", extension="", discrete1_index=11, numeric1_index=21, build_outputs=True, compression_type=compression_type)
+    run_larger_tests(num_parallel=2, size="medium", extension="", discrete1_index=11, numeric1_index=21, build_outputs=True, compression_type=compression_type)
 
     # Large tests
     #num_parallel = 1
@@ -890,26 +890,28 @@ for compression_type in ["zstd"]:
     #check_outputs = False
 
     run_larger_tests(num_parallel=num_parallel, size="large_tall", extension="", discrete1_index=251, numeric1_index=501, build_outputs=build_outputs, compression_type=compression_type, verbose=verbose, check_outputs=check_outputs, tmp_dir_path="/tmp/large_tall")
-#    run_larger_tests(num_parallel=num_parallel, size="large_wide", extension="", discrete1_index=250001, numeric1_index=500001, build_outputs=build_outputs, compression_type=compression_type, verbose=verbose, check_outputs=check_outputs, tmp_dir_path="/tmp/large_wide")
+    run_larger_tests(num_parallel=num_parallel, size="large_wide", extension="", discrete1_index=250001, numeric1_index=500001, build_outputs=build_outputs, compression_type=compression_type, verbose=verbose, check_outputs=check_outputs, tmp_dir_path="/tmp/large_wide")
 
-#    run_larger_tests(num_parallel=num_parallel, size="large_tall", extension=".gz", discrete1_index=251, numeric1_index=501, build_outputs=build_outputs, compression_type=compression_type, verbose=verbose, check_outputs=check_outputs, tmp_dir_path="/tmp/large_tall_gz")
-#    run_larger_tests(num_parallel=num_parallel, size="large_wide", extension=".gz", discrete1_index=250001, numeric1_index=500001, build_outputs=build_outputs, compression_type=compression_type, verbose=verbose, check_outputs=check_outputs, tmp_dir_path="/tmp/large_wide_gz")
+    run_larger_tests(num_parallel=num_parallel, size="large_tall", extension=".gz", discrete1_index=251, numeric1_index=501, build_outputs=build_outputs, compression_type=compression_type, verbose=verbose, check_outputs=check_outputs, tmp_dir_path="/tmp/large_tall_gz")
+    run_larger_tests(num_parallel=num_parallel, size="large_wide", extension=".gz", discrete1_index=250001, numeric1_index=500001, build_outputs=build_outputs, compression_type=compression_type, verbose=verbose, check_outputs=check_outputs, tmp_dir_path="/tmp/large_wide_gz")
+
+    run_super_tests(num_parallel=num_parallel, size="test_tall", extension=".gz", compression_type=compression_type, verbose=verbose, tmp_dir_path="/tmp/test_tall")
+    run_super_tests(num_parallel=num_parallel, size="test_wide", extension=".gz", compression_type=compression_type, verbose=verbose, tmp_dir_path="/tmp/test_wide")
+    run_super_tests(num_parallel=num_parallel, size="kinda_tall", extension=".gz", compression_type=compression_type, verbose=verbose, tmp_dir_path="/tmp/kinda_tall")
+    run_super_tests(num_parallel=num_parallel, size="kinda_wide", extension=".gz", compression_type=compression_type, verbose=verbose, tmp_dir_path="/tmp/kinda_wide")
+# FYI: The following tests do not work when zstd is used.
+#      Implementing custom compression will fix this approach.
+#    run_super_tests(num_parallel=num_parallel, size="super_tall", extension=".gz", compression_type=compression_type, verbose=verbose, tmp_dir_path="/tmp/super_tall")
+#    run_super_tests(num_parallel=num_parallel, size="super_wide", extension=".gz", compression_type=compression_type, verbose=verbose, tmp_dir_path="/tmp/super_wide")
+#    run_super_tests(num_parallel=num_parallel, size="hyper_tall", extension=".gz", compression_type=compression_type, verbose=verbose, tmp_dir_path="/tmp/hyper_tall")
+#    run_super_tests(num_parallel=num_parallel, size="hyper_wide", extension=".gz", compression_type=compression_type, verbose=verbose, tmp_dir_path="/tmp/hyper_wide")
+
+    #Attempt this? https://community.hpe.com/t5/servers-systems-the-right/cray-graph-engine-takes-on-a-trillion-triples/ba-p/7096770
 
     ##f4.transpose("data/medium.f4", "/tmp/medium_transposed.f4", num_parallel=num_parallel, verbose=verbose)
     ##f4.transpose("data/large_tall.f4", "/tmp/large_tall_transposed.f4", num_parallel=num_parallel, verbose=verbose)
 
     ##f4.inner_join("data/medium.f4", "data/medium.f4", "ID", "/tmp/medium_joined.f4", num_parallel=num_parallel, verbose=verbose)
     ##f4.inner_join("data/large_tall.f4", "data/large_wide.f4", "ID", "/tmp/large_joined.f4", num_parallel=num_parallel, verbose=verbose)
-
-    #run_super_tests(num_parallel=num_parallel, size="test_tall", extension=".gz", compression_type=compression_type, verbose=verbose, tmp_dir_path="/tmp/test_tall")
-    #run_super_tests(num_parallel=num_parallel, size="test_wide", extension=".gz", compression_type=compression_type, verbose=verbose, tmp_dir_path="/tmp/test_wide")
-    #run_super_tests(num_parallel=num_parallel, size="kinda_tall", extension=".gz", compression_type=compression_type, verbose=verbose, tmp_dir_path="/tmp/kinda_tall")
-    #run_super_tests(num_parallel=num_parallel, size="kinda_wide", extension=".gz", compression_type=compression_type, verbose=verbose, tmp_dir_path="/tmp/kinda_wide")
-    #run_super_tests(num_parallel=num_parallel, size="super_tall", extension=".gz", compression_type=compression_type, verbose=verbose, tmp_dir_path="/tmp/super_tall")
-    #run_super_tests(num_parallel=num_parallel, size="super_wide", extension=".gz", compression_type=compression_type, verbose=verbose, tmp_dir_path="/tmp/super_wide")
-#    run_super_tests(num_parallel=num_parallel, size="hyper_tall", extension=".gz", compression_type=compression_type, verbose=verbose, tmp_dir_path="/tmp/hyper_tall")
-#    run_super_tests(num_parallel=num_parallel, size="hyper_wide", extension=".gz", compression_type=compression_type, verbose=verbose, tmp_dir_path="/tmp/hyper_wide")
-
-    #Try this? https://community.hpe.com/t5/servers-systems-the-right/cray-graph-engine-takes-on-a-trillion-triples/ba-p/7096770
 
 print("All tests passed!!")
