@@ -758,7 +758,7 @@ def parse_row_value(file_data, data_file_key, row_index, column_coords):
     return parse_data_value_from_file(file_data, data_file_key, row_index, file_data.cache_dict[data_file_key + "ll"], column_coords).rstrip(b" ")
 
 def parse_zstd_compressed_row_value(file_data, data_file_key, row_index, column_coords):
-    line = get_zstd_compressed_row(data_file_key, file_data, row_index)
+    line = get_zstd_compressed_row(file_data, row_index)
 
     return parse_data_value_from_string(column_coords, line)
 
@@ -776,28 +776,9 @@ def parse_zstd_compressed_row_value(file_data, data_file_key, row_index, column_
     #
     # return all_text[column_coords[0]:column_coords[1]].rstrip(b" ")
 
-def get_zstd_compressed_row(data_file_key, file_data, row_index):
-    # row_start = file_data.file_map_dict[data_file_key][0]
-
-    # if row_index > 0:
-    #     row_start += file_data.cache_dict["re"][row_index - 1]
-
-    # row_end = row_start + file_data.cache_dict["re"][row_index]
-    # print(row_index, row_start, row_end)
-
-    # row_start = 38295
-    # row_end = 44203
+def get_zstd_compressed_row(file_data, row_index):
     row_start = file_data.cache_dict["row_starts"][row_index]
     row_end = file_data.cache_dict["row_starts"][row_index + 1]
-
-    # print("0:")
-    # print(file_data.file_map_dict[data_file_key][0], file_data.file_map_dict[data_file_key][0] + file_data.cache_dict["re"][row_index])
-
-    # line_start = file_data.file_map_dict[data_file_key][0]
-    # line_start += sum(file_data.cache_dict["rl"][:row_index])
-
-    # line_end = line_start + file_data.cache_dict["rl"][row_index]
-    # print(file_data.cache_dict["re"])
 
     return file_data.decompressor.decompress(file_data.file_handle[row_start:row_end])
 
@@ -818,7 +799,7 @@ def parse_row_values(file_data, data_file_key, row_index, column_coords):
     return list(parse_data_values_from_file(file_data, data_file_key, row_index, file_data.cache_dict[data_file_key + "ll"], column_coords))
 
 def parse_zstd_compressed_row_values(file_data, data_file_key, row_index, column_coords):
-    line = get_zstd_compressed_row(data_file_key, file_data, row_index)
+    line = get_zstd_compressed_row(file_data, row_index)
 
     return list(parse_data_values_from_string(column_coords, line))
 
