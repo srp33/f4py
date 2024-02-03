@@ -605,7 +605,13 @@ def initialize(data_file_path):
                     decompression_type = "zstd"
                     decompressor = ZstdDecompressor()
 
-                    cache_dict["re"] = deserialize(mmap_handle[file_map_dict["re"][0]:file_map_dict["re"][1]])
+                    row_lengths = deserialize(mmap_handle[file_map_dict["rl"][0]:file_map_dict["rl"][1]])
+                    cache_dict["row_starts"] = [file_map_dict[""][0]]
+                    for i, row_length in enumerate(row_lengths):
+                        cache_dict["row_starts"].append(cache_dict["row_starts"][-1] + row_length)
+                    # print(row_lengths[:10])
+                    # print(cache_dict["row_starts"][:10])
+
                     cache_dict["ll"] = fast_int(mmap_handle[file_map_dict["ll"][0]:file_map_dict["ll"][1]])
                     cache_dict["num_rows"] = fast_int(mmap_handle[file_map_dict["nrow"][0]:file_map_dict["nrow"][1]])
                 # else:
@@ -771,19 +777,27 @@ def parse_zstd_compressed_row_value(file_data, data_file_key, row_index, column_
     # return all_text[column_coords[0]:column_coords[1]].rstrip(b" ")
 
 def get_zstd_compressed_row(data_file_key, file_data, row_index):
-    row_start = file_data.file_map_dict[data_file_key][0]
+    # row_start = file_data.file_map_dict[data_file_key][0]
 
-    if row_index > 0:
-        row_start += file_data.cache_dict["re"][row_index - 1]
+    # if row_index > 0:
+    #     row_start += file_data.cache_dict["re"][row_index - 1]
 
-    row_end = row_start + file_data.cache_dict["re"][row_index]
+    # row_end = row_start + file_data.cache_dict["re"][row_index]
+    # print(row_index, row_start, row_end)
+
+    # row_start = 38295
+    # row_end = 44203
+    row_start = file_data.cache_dict["row_starts"][row_index]
+    row_end = file_data.cache_dict["row_starts"][row_index + 1]
+
+    # print("0:")
+    # print(file_data.file_map_dict[data_file_key][0], file_data.file_map_dict[data_file_key][0] + file_data.cache_dict["re"][row_index])
 
     # line_start = file_data.file_map_dict[data_file_key][0]
     # line_start += sum(file_data.cache_dict["rl"][:row_index])
 
     # line_end = line_start + file_data.cache_dict["rl"][row_index]
     # print(file_data.cache_dict["re"])
-    # print(row_index, row_start, row_end)
 
     return file_data.decompressor.decompress(file_data.file_handle[row_start:row_end])
 
