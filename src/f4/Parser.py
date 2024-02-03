@@ -605,12 +605,15 @@ def initialize(data_file_path):
                     decompression_type = "zstd"
                     decompressor = ZstdDecompressor()
 
+                    # TODO: For super tall files, this gets too large to fit in memory.
+                    #       If we continue to support zstd compression, you may need to incorporate
+                    #       the idea of row chunks when building the file and then retrieve
+                    #       the row_starts just for those.
+                    #       However, the custom compression approach would avoid this problem.
                     row_lengths = deserialize(mmap_handle[file_map_dict["rl"][0]:file_map_dict["rl"][1]])
                     cache_dict["row_starts"] = [file_map_dict[""][0]]
                     for i, row_length in enumerate(row_lengths):
                         cache_dict["row_starts"].append(cache_dict["row_starts"][-1] + row_length)
-                    # print(row_lengths[:10])
-                    # print(cache_dict["row_starts"][:10])
 
                     cache_dict["ll"] = fast_int(mmap_handle[file_map_dict["ll"][0]:file_map_dict["ll"][1]])
                     cache_dict["num_rows"] = fast_int(mmap_handle[file_map_dict["nrow"][0]:file_map_dict["nrow"][1]])
@@ -762,13 +765,16 @@ def parse_zstd_compressed_row_value(file_data, data_file_key, row_index, column_
 
     return parse_data_value_from_string(column_coords, line)
 
+    # TODO: This will not work well when files are super wide. If we continue
+    #       to support zstd compression, you will need to compress column chunks.
+    #       However, the custom compression scheme would avoid this problem.
+
     # data_start_search_position = file_data.file_map_dict[""][0]
     # line_start_search_position = data_start_search_position + fast_int(get_value_from_single_column_file(file_data.file_handle, file_data.file_map_dict["ll"][0], file_data.cache_dict["mlll"], row_index))
     # next_line_start_search_position = data_start_search_position + fast_int(get_value_from_single_column_file(file_data.file_handle, file_data.file_map_dict["ll"][0], file_data.cache_dict["mlll"], row_index + 1))
     #
     # chunk_size = 1000001
     # all_text = b""
-    # # TODO: all_text could get really large. Find a way to use a generator.
     # for i in range(line_start_search_position, next_line_start_search_position, chunk_size):
     #     line_end_search_position = min(i + chunk_size, next_line_start_search_position)
     #     text = file_data.decompressor.decompress(file_data.file_handle[i:line_end_search_position])
