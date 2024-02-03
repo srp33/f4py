@@ -638,39 +638,39 @@ def run_larger_tests(num_parallel, size, extension, discrete1_index, numeric1_in
     larger_Discrete1 = []
     larger_Numeric1 = []
 
-#    if check_outputs:
-#        print("------------------------------------------------------------------")
-#        print(f"Parsing {in_file_path} - cmpr: {compression_type} - for master outputs")
-#        print("------------------------------------------------------------------")
-#
-#        with get_delimited_file_handle(in_file_path) as larger_file:
-#            for line in larger_file:
-#                line_items = line.rstrip(b"\n").split(b"\t")
-#                larger_ID.append([line_items[0]])
-#                larger_Categorical1.append([line_items[1]])
-#                larger_Discrete1.append([line_items[discrete1_index]])
-#
-#                number = line_items[numeric1_index]
-#                if number != b"Numeric1":
-#                    number = float(number)
-#                larger_Numeric1.append([number])
+    if check_outputs:
+        print("------------------------------------------------------------------")
+        print(f"Parsing {in_file_path} - cmpr: {compression_type} - for master outputs")
+        print("------------------------------------------------------------------")
 
-#    print("-------------------------------------------------------------------")
-#    print(f"Running tests for {in_file_path} - no indexing (cmpr: {compression_type})")
-#    print("-------------------------------------------------------------------")
-#
-#    if build_outputs or not os.path.exists(f4_file_path):
-#        print("-------------------------------------------------------------------")
-#        print(f"Converting {in_file_path} to {f4_file_path} (cmpr: {compression_type})")
-#        print("-------------------------------------------------------------------")
-#
-#        # Clean up data files if they already exist
-#        for file_path in glob.glob(f"{f4_file_path}*"):
-#            os.unlink(file_path)
-#
-#        f4.convert_delimited_file(in_file_path, f4_file_path, compression_type=compression_type, num_parallel=num_parallel, verbose=verbose, tmp_dir_path=tmp_dir_path)
-#
-#    run_larger_tests2(f4_file_path, out_file_path, larger_ID, larger_Categorical1, larger_Discrete1, larger_Numeric1, num_parallel, check_outputs, tmp_dir_path)
+        with get_delimited_file_handle(in_file_path) as larger_file:
+            for line in larger_file:
+                line_items = line.rstrip(b"\n").split(b"\t")
+                larger_ID.append([line_items[0]])
+                larger_Categorical1.append([line_items[1]])
+                larger_Discrete1.append([line_items[discrete1_index]])
+
+                number = line_items[numeric1_index]
+                if number != b"Numeric1":
+                    number = float(number)
+                larger_Numeric1.append([number])
+
+    print("-------------------------------------------------------------------")
+    print(f"Running tests for {in_file_path} - no indexing (cmpr: {compression_type})")
+    print("-------------------------------------------------------------------")
+
+    if build_outputs or not os.path.exists(f4_file_path):
+        print("-------------------------------------------------------------------")
+        print(f"Converting {in_file_path} to {f4_file_path} (cmpr: {compression_type})")
+        print("-------------------------------------------------------------------")
+
+        # Clean up data files if they already exist
+        for file_path in glob.glob(f"{f4_file_path}*"):
+            os.unlink(file_path)
+
+        f4.convert_delimited_file(in_file_path, f4_file_path, compression_type=compression_type, num_parallel=num_parallel, verbose=verbose, tmp_dir_path=tmp_dir_path)
+
+    run_larger_tests2(f4_file_path, out_file_path, larger_ID, larger_Categorical1, larger_Discrete1, larger_Numeric1, num_parallel, check_outputs, tmp_dir_path)
 
     print("---------------------------------------------------------------------")
     print(f"Running tests for {in_file_path} - with indexing (cmpr: {compression_type})")
@@ -686,29 +686,27 @@ def run_larger_tests(num_parallel, size, extension, discrete1_index, numeric1_in
     run_larger_tests2(f4_file_path, out_file_path, larger_ID, larger_Categorical1, larger_Discrete1, larger_Numeric1, num_parallel, check_outputs, tmp_dir_path)
 
 def run_larger_tests2(f4_file_path, out_file_path, larger_ID, larger_Categorical1, larger_Discrete1, larger_Numeric1, num_parallel, check_outputs, tmp_dir_path):
-    #f4.query(f4_file_path, f4.StringFilter("ID", operator.eq, "Row1"), ["Discrete1"], out_file_path, num_parallel=num_parallel, tmp_dir_path=tmp_dir_path)
-    #if check_outputs:
-    #    check_results("Filter ID = Row1", read_file_into_lists(out_file_path), [[b"Discrete1"], larger_Discrete1[1]])
-    #os.unlink(out_file_path)
+    f4.query(f4_file_path, f4.StringFilter("ID", operator.eq, "Row1"), ["Discrete1"], out_file_path, num_parallel=num_parallel, tmp_dir_path=tmp_dir_path)
+    if check_outputs:
+        check_results("Filter ID = Row1", read_file_into_lists(out_file_path), [[b"Discrete1"], larger_Discrete1[1]])
+    os.unlink(out_file_path)
 
-    #f4.query(f4_file_path, f4.StringFilter("ID", operator.eq, "Row33"), ["Discrete1"], out_file_path, num_parallel=num_parallel, tmp_dir_path=tmp_dir_path)
-    #if check_outputs:
-    #    check_results("Filter ID = Row33", read_file_into_lists(out_file_path), [[b"Discrete1"], larger_Discrete1[33]])
-    #os.unlink(out_file_path)
+    f4.query(f4_file_path, f4.StringFilter("ID", operator.eq, "Row33"), ["Discrete1"], out_file_path, num_parallel=num_parallel, tmp_dir_path=tmp_dir_path)
+    if check_outputs:
+        check_results("Filter ID = Row33", read_file_into_lists(out_file_path), [[b"Discrete1"], larger_Discrete1[33]])
+    os.unlink(out_file_path)
 
-    #f4.query(f4_file_path, f4.StringFilter("ID", operator.eq, "Row91"), ["Discrete1"], out_file_path, num_parallel=num_parallel, tmp_dir_path=tmp_dir_path)
-    #if check_outputs:
-    #    check_results("Filter ID = Row91", read_file_into_lists(out_file_path), [[b"Discrete1"], larger_Discrete1[91]])
-    #os.unlink(out_file_path)
+    f4.query(f4_file_path, f4.StringFilter("ID", operator.eq, "Row91"), ["Discrete1"], out_file_path, num_parallel=num_parallel, tmp_dir_path=tmp_dir_path)
+    if check_outputs:
+        check_results("Filter ID = Row91", read_file_into_lists(out_file_path), [[b"Discrete1"], larger_Discrete1[91]])
+    os.unlink(out_file_path)
 
-    #f4.query(f4_file_path, f4.StringFilter("ID", operator.eq, "Row100"), ["Discrete1"], out_file_path, num_parallel=num_parallel, tmp_dir_path=tmp_dir_path)
-    #if check_outputs:
-    #    check_results("Filter ID = Row100", read_file_into_lists(out_file_path), [[b"Discrete1"], larger_Discrete1[100]])
-    #os.unlink(out_file_path)
+    f4.query(f4_file_path, f4.StringFilter("ID", operator.eq, "Row100"), ["Discrete1"], out_file_path, num_parallel=num_parallel, tmp_dir_path=tmp_dir_path)
+    if check_outputs:
+        check_results("Filter ID = Row100", read_file_into_lists(out_file_path), [[b"Discrete1"], larger_Discrete1[100]])
+    os.unlink(out_file_path)
 
-    check_outputs = False
     run_string_test("Categorical1", "A", "A", f4_file_path, larger_ID, larger_Categorical1, out_file_path, num_parallel, check_outputs, tmp_dir_path)
-    return
     run_string_test("Categorical1", "D", "D", f4_file_path, larger_ID, larger_Categorical1, out_file_path, num_parallel, check_outputs, tmp_dir_path)
     run_string_test("Categorical1", "A", "D", f4_file_path, larger_ID, larger_Categorical1, out_file_path, num_parallel, check_outputs, tmp_dir_path)
     run_string_test("Categorical1", "B", "B", f4_file_path, larger_ID, larger_Categorical1, out_file_path, num_parallel, check_outputs, tmp_dir_path)
@@ -877,13 +875,13 @@ for compression_type in ["zstd"]:
 #for compression_type in [None, "zstd"]:
 #for compression_type in ["dictionary"]:
     # Medium tests
-    run_larger_tests(num_parallel=1, size="medium", extension="", discrete1_index=11, numeric1_index=21, build_outputs=True, compression_type=compression_type)
-    run_larger_tests(num_parallel=2, size="medium", extension="", discrete1_index=11, numeric1_index=21, build_outputs=True, compression_type=compression_type)
+#    run_larger_tests(num_parallel=1, size="medium", extension="", discrete1_index=11, numeric1_index=21, build_outputs=True, compression_type=compression_type)
+#    run_larger_tests(num_parallel=2, size="medium", extension="", discrete1_index=11, numeric1_index=21, build_outputs=True, compression_type=compression_type)
 
     # Large tests
     #num_parallel = 1
-    num_parallel = 4
-    #num_parallel = 16
+    #num_parallel = 4
+    num_parallel = 16
     build_outputs = True
     #build_outputs = False
     verbose = True
@@ -891,7 +889,7 @@ for compression_type in ["zstd"]:
     check_outputs = True
     #check_outputs = False
 
-#    run_larger_tests(num_parallel=num_parallel, size="large_tall", extension="", discrete1_index=251, numeric1_index=501, build_outputs=build_outputs, compression_type=compression_type, verbose=verbose, check_outputs=check_outputs, tmp_dir_path="/tmp/large_tall")
+    run_larger_tests(num_parallel=num_parallel, size="large_tall", extension="", discrete1_index=251, numeric1_index=501, build_outputs=build_outputs, compression_type=compression_type, verbose=verbose, check_outputs=check_outputs, tmp_dir_path="/tmp/large_tall")
 #    run_larger_tests(num_parallel=num_parallel, size="large_wide", extension="", discrete1_index=250001, numeric1_index=500001, build_outputs=build_outputs, compression_type=compression_type, verbose=verbose, check_outputs=check_outputs, tmp_dir_path="/tmp/large_wide")
 
 #    run_larger_tests(num_parallel=num_parallel, size="large_tall", extension=".gz", discrete1_index=251, numeric1_index=501, build_outputs=build_outputs, compression_type=compression_type, verbose=verbose, check_outputs=check_outputs, tmp_dir_path="/tmp/large_tall_gz")
