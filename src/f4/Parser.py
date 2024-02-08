@@ -579,6 +579,38 @@ def get_column_type_from_name(data_file_path, column_name):
     except:
         raise Exception(f"A column with the name {column_name} does not exist.")
 
+def get_indexes(data_file_path):
+    indexes = []
+
+    with initialize(data_file_path) as file_data:
+        if "i" in file_data.cache_dict:
+            for key, number in file_data.cache_dict["i"].items():
+                if len(key) == 1:
+                    column_name = key[0][0]
+                    reverse_status = key[0][1]
+
+                    if reverse_status:
+                        column_name += "_endswith"
+
+                    indexes.append([column_name, number])
+                else:
+                    column_names = []
+                    for x in key:
+                        column_name = x[0]
+                        reverse_status = x[1]
+
+                        if reverse_status:
+                            column_name += "_endswith"
+
+                        column_names.append(column_name)
+
+                    indexes.append([column_names, number])
+
+            indexes = sorted(indexes, key=lambda x: x[1])
+            indexes = [x[0] for x in indexes]
+
+    return indexes
+
 ##############################################
 # Non-public functions
 ##############################################

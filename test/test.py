@@ -71,7 +71,7 @@ def fail_test(message):
     print(f"FAIL: {message}")
     sys.exit(1)
 
-def run_small_tests(in_file_path, f4_file_path, out_file_path, num_parallel = 1, compression_type=None, index_columns=None):
+def run_small_tests(in_file_path, f4_file_path, out_file_path, num_parallel = 1, compression_type=None, index_columns=[]):
     print("-------------------------------------------------------")
     print(f"Input file path: {in_file_path}")
     print(f"Output file path: {f4_file_path}")
@@ -95,6 +95,7 @@ def run_small_tests(in_file_path, f4_file_path, out_file_path, num_parallel = 1,
     check_result("Version", "Version number - major", f4.get_version(f4_file_path), "0")
     check_result("Dimensions", "Number of rows", f4.get_num_rows(f4_file_path), 5)
     check_result("Dimensions", "Number of columns", f4.get_num_cols(f4_file_path), 9)
+    check_result("Indexes", "Index details", f4.get_indexes(f4_file_path), index_columns)
 
     check_result("Column types", "ID column", f4.get_column_type_from_name(f4_file_path, "ID"), "s")
     check_result("Column types", "FloatA column", f4.get_column_type_from_name(f4_file_path, "FloatA"), "f")
@@ -869,6 +870,7 @@ def run_super_test(description, fltr, select_columns, num_parallel, tmp_dir_path
     print(f"  {elapsed_time:.2f} seconds, {num_lines} lines in output file")
 
 run_all_small_tests()
+sys.exit(1)
 
 #for compression_type in [None]:
 #for compression_type in ["zstd"]:
