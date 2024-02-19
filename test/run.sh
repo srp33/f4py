@@ -67,6 +67,7 @@ mkdir -p data
 if [[ "${local_dev}" == "yes" ]]
 then
   python3 test.py
+  #scalene test.py
 else
   if [[ "${run_in_background}" == "no" ]]
   then

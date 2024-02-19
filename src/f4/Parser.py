@@ -61,7 +61,7 @@ class _SimpleBaseFilter(_BaseFilter):
                     return self._do_row_indices_pass(file_data, coords, parse_function, range(num_rows))
                 else:
                     return set(chain.from_iterable(joblib.Parallel(n_jobs=num_parallel)(
-                        joblib.delayed(self._do_row_indices_pass_parallel)(file_data.data_file_path, "", coords, parse_function, chunk_row_indices)
+                        joblib.delayed(self._do_row_indices_pass_parallel)(file_data.data_file_path, coords, parse_function, chunk_row_indices)
                         for chunk_row_indices in generate_range_chunks(num_rows, 1000001)))
                     )
             else:
@@ -69,7 +69,7 @@ class _SimpleBaseFilter(_BaseFilter):
                     return self._do_row_indices_pass(file_data, coords, parse_function, row_indices)
                 else:
                     return set(chain.from_iterable(joblib.Parallel(n_jobs=num_parallel)(
-                        joblib.delayed(self._do_row_indices_pass_parallel)(file_data.data_file_path, "", coords, parse_function, chunk_row_indices)
+                        joblib.delayed(self._do_row_indices_pass_parallel)(file_data.data_file_path, coords, parse_function, chunk_row_indices)
                         for chunk_row_indices in split_list_into_chunks(list(row_indices), 1000001)))
                     )
         else:
@@ -98,12 +98,12 @@ class _SimpleBaseFilter(_BaseFilter):
 
         return passing_row_indices
 
-    def _do_row_indices_pass_parallel(self, data_file_path, data_file_key, coords, parse_function, row_indices_to_check):
+    def _do_row_indices_pass_parallel(self, data_file_path, coords, parse_function, row_indices_to_check):
         passing_row_indices = set()
 
         with initialize(data_file_path) as file_data:
             for i in row_indices_to_check:
-                if self._passes(parse_function(file_data, data_file_key, i, coords)):
+                if self._passes(parse_function(file_data, "", i, coords)):
                     passing_row_indices.add(i)
 
         return passing_row_indices
@@ -642,10 +642,11 @@ def initialize(data_file_path):
                     #       the idea of row chunks when building the file and then retrieve
                     #       the row_starts just for those.
                     #       However, the custom compression approach would avoid this problem.
-                    row_lengths = deserialize(mmap_handle[file_map_dict["rl"][0]:file_map_dict["rl"][1]])
-                    cache_dict["row_starts"] = [file_map_dict[""][0]]
-                    for i, row_length in enumerate(row_lengths):
-                        cache_dict["row_starts"].append(cache_dict["row_starts"][-1] + row_length)
+                    # row_lengths = deserialize(mmap_handle[file_map_dict["rl"][0]:file_map_dict["rl"][1]])
+                    # cache_dict["row_starts"] = [file_map_dict[""][0]]
+                    # for i, row_length in enumerate(row_lengths):
+                    #     cache_dict["row_starts"].append(cache_dict["row_starts"][-1] + row_length)
+                    cache_dict["mrel"] = fast_int(mmap_handle[file_map_dict["mrel"][0]:file_map_dict["mrel"][1]])
 
                     cache_dict["ll"] = fast_int(mmap_handle[file_map_dict["ll"][0]:file_map_dict["ll"][1]])
                     cache_dict["num_rows"] = fast_int(mmap_handle[file_map_dict["nrow"][0]:file_map_dict["nrow"][1]])
@@ -815,10 +816,22 @@ def parse_zstd_compressed_row_value(file_data, data_file_key, row_index, column_
     # return all_text[column_coords[0]:column_coords[1]].rstrip(b" ")
 
 def get_zstd_compressed_row(file_data, row_index):
-    row_start = file_data.cache_dict["row_starts"][row_index]
-    row_end = file_data.cache_dict["row_starts"][row_index + 1]
+    mrel = file_data.cache_dict["mrel"]
+    re_overall_start = file_data.file_map_dict["re"][0]
 
-    return file_data.decompressor.decompress(file_data.file_handle[row_start:row_end])
+    if row_index == 0:
+        row_start = 0
+    else:
+        row_start_start = re_overall_start + (row_index - 1) * mrel
+        row_start_end = row_start_start + mrel
+        row_start = int(file_data.file_handle[row_start_start:row_start_end].rstrip(b' '))
+
+    row_end_start = re_overall_start + row_index * mrel
+    row_end_end = row_end_start + mrel
+    row_end = int(file_data.file_handle[row_end_start:row_end_end].rstrip(b' '))
+
+    data_start = file_data.file_map_dict[""][0]
+    return file_data.decompressor.decompress(file_data.file_handle[(data_start + row_start):(data_start + row_end)])
 
 # def parse_dictionary_compressed_row_value(file_data, data_file_key, row_index, column_coords, bigram_size_dict=None, column_name=None):
 #     value = parse_data_value_from_file(file_data, data_file_key, row_index, file_data.cache_dict["ll"], column_coords).rstrip(b" ")
@@ -860,15 +873,15 @@ def parse_zstd_compressed_row_values(file_data, data_file_key, row_index, column
 #
 #         return [decompress(values.pop(0), file_data.decompressor[column_name], bigram_size_dict[column_name]) for column_name in column_names]
 
-def parse_values_in_column(file_data, data_file_key, column_name, column_coords, bigram_size_dict):
-    num_rows = file_data.cache_dict["num_rows"]
-    parse_function = get_parse_row_value_function(file_data)
-
-    values = []
-    for row_index in range(num_rows):
-        values.append(parse_function(file_data, data_file_key, row_index, column_coords))
-
-    return values
+# def parse_values_in_column(file_data, data_file_key, column_name, column_coords, bigram_size_dict):
+#     num_rows = file_data.cache_dict["num_rows"]
+#     parse_function = get_parse_row_value_function(file_data)
+#
+#     values = []
+#     for row_index in range(num_rows):
+#         values.append(parse_function(file_data, data_file_key, row_index, column_coords))
+#
+#     return values
 
 @contextmanager
 def get_write_object(out_file_path, mode="wb"):

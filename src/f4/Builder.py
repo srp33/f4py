@@ -640,9 +640,10 @@ def compress_data(tmp_dir_path, compression_type, num_rows, line_length):
 
     # Compress the data.
     # If necessary, chunk the compression so we can handle extremely wide files.
-    compressed_row_lengths = []
-    # compressed_row_ends = []
-    # current_compressed_row_end = 0
+    # compressed_row_lengths = []
+    # max_compressed_row_length = 0
+    compressed_row_ends = []
+    current_compressed_row_end = 0
     compressed_lines_to_save = []
     compressed_chars_not_saved = 0
 
@@ -653,30 +654,51 @@ def compress_data(tmp_dir_path, compression_type, num_rows, line_length):
     with open(get_data_path(tmp_dir_path, "data"), 'rb') as file_handle:
         with mmap(file_handle.fileno(), 0, prot=PROT_READ) as mmap_handle:
             with open(get_data_path(tmp_dir_path, "cmpr"), "wb") as cmpr_file:
-                for row_i in range(num_rows):
-                    row_start = row_i * line_length
-                    row_end = (row_i + 1) * line_length
+                with open(get_data_path(tmp_dir_path, "re_tmp"), "wb") as re_file:
+                    for row_i in range(num_rows):
+                        row_start = row_i * line_length
+                        row_end = (row_i + 1) * line_length
 
-                    compressed_line = compressor.compress(mmap_handle[row_start:row_end])
+                        compressed_line = compressor.compress(mmap_handle[row_start:row_end])
+                        compressed_row_length = len(compressed_line)
+                        # max_compressed_row_length = max(max_compressed_row_length, compressed_row_length)
 
-                    # current_compressed_row_end += len(compressed_line)
-                    compressed_row_lengths.append(len(compressed_line))
-                    # compressed_row_ends.append(current_compressed_row_end)
-                    compressed_lines_to_save.append(compressed_line)
-                    compressed_chars_not_saved += len(compressed_line)
+                        current_compressed_row_end += compressed_row_length
+                        # compressed_row_lengths.append(compressed_row_length)
+                        compressed_row_ends.append(current_compressed_row_end)
+                        compressed_lines_to_save.append(compressed_line)
+                        compressed_chars_not_saved += compressed_row_length
 
-                    if compressed_chars_not_saved >= 1000000:
+                        if compressed_chars_not_saved >= 1000000:
+                            cmpr_file.write(b"".join(compressed_lines_to_save))
+
+                            re_file.write(b"\n".join([str(rl).encode() for rl in compressed_row_ends]))
+                            if row_i != (num_rows - 1):
+                                re_file.write(b"\n")
+
+                            # compressed_row_lengths = []
+                            # print(compressed_row_ends)
+                            compressed_row_ends = []
+                            compressed_lines_to_save = []
+                            compressed_chars_not_saved = 0
+
+                    if compressed_chars_not_saved > 0:
                         cmpr_file.write(b"".join(compressed_lines_to_save))
-                        compressed_lines_to_save = []
-                        compressed_chars_not_saved = 0
-
-                if compressed_chars_not_saved > 0:
-                    cmpr_file.write(b"".join(compressed_lines_to_save))
+                        re_file.write(b"\n".join([str(rl).encode() for rl in compressed_row_ends]))
 
     rename(get_data_path(tmp_dir_path, "cmpr"), get_data_path(tmp_dir_path, "data"))
 
-    with open(get_data_path(tmp_dir_path, "rl"), "wb") as re_file:
-        re_file.write(serialize(compressed_row_lengths))
+    mrel = len(str(compressed_row_ends[-1]))
+    write_str_to_file(get_data_path(tmp_dir_path, "mrel"), str(mrel).encode())
+
+    with get_delimited_file_handle(get_data_path(tmp_dir_path, "re_tmp")) as re_tmp_file:
+        with open(get_data_path(tmp_dir_path, "re"), "wb") as re_file:
+            for line in re_tmp_file:
+                row_end = line.rstrip(b"\n")
+                re_file.write(format_string_as_fixed_width(row_end, mrel))
+
+    # with open(get_data_path(tmp_dir_path, "mcrl"), "wb") as mcrl_file:
+    #     mcrl_file.write(str(max_compressed_row_length).encode())
 
     with open(get_data_path(tmp_dir_path, "ll"), "wb") as ll_file:
         ll_file.write(str(line_length).encode())
