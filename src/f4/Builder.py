@@ -639,17 +639,11 @@ def compress_data(tmp_dir_path, compression_type, num_rows, line_length):
     compressor = ZstdCompressor(level=1)
 
     # Compress the data.
-    # If necessary, chunk the compression so we can handle extremely wide files.
-    # compressed_row_lengths = []
-    # max_compressed_row_length = 0
+    # TODO: If necessary, chunk the compression so we can handle extremely wide files.
     compressed_row_ends = []
     current_compressed_row_end = 0
     compressed_lines_to_save = []
     compressed_chars_not_saved = 0
-
-    # Save the non-compressed num_rows and line length for later reference.
-    # line_lengths_dict["num_rows"] = num_rows
-    # line_lengths_dict["ll"] = line_length
 
     with open(get_data_path(tmp_dir_path, "data"), 'rb') as file_handle:
         with mmap(file_handle.fileno(), 0, prot=PROT_READ) as mmap_handle:
@@ -661,10 +655,8 @@ def compress_data(tmp_dir_path, compression_type, num_rows, line_length):
 
                         compressed_line = compressor.compress(mmap_handle[row_start:row_end])
                         compressed_row_length = len(compressed_line)
-                        # max_compressed_row_length = max(max_compressed_row_length, compressed_row_length)
 
                         current_compressed_row_end += compressed_row_length
-                        # compressed_row_lengths.append(compressed_row_length)
                         compressed_row_ends.append(current_compressed_row_end)
                         compressed_lines_to_save.append(compressed_line)
                         compressed_chars_not_saved += compressed_row_length
@@ -676,8 +668,7 @@ def compress_data(tmp_dir_path, compression_type, num_rows, line_length):
                             if row_i != (num_rows - 1):
                                 re_file.write(b"\n")
 
-                            # compressed_row_lengths = []
-                            # print(compressed_row_ends)
+                            mrel = len(str(compressed_row_ends[-1]))
                             compressed_row_ends = []
                             compressed_lines_to_save = []
                             compressed_chars_not_saved = 0
@@ -688,7 +679,9 @@ def compress_data(tmp_dir_path, compression_type, num_rows, line_length):
 
     rename(get_data_path(tmp_dir_path, "cmpr"), get_data_path(tmp_dir_path, "data"))
 
-    mrel = len(str(compressed_row_ends[-1]))
+    if len(compressed_row_ends) > 0:
+        mrel = len(str(compressed_row_ends[-1]))
+
     write_str_to_file(get_data_path(tmp_dir_path, "mrel"), str(mrel).encode())
 
     with get_delimited_file_handle(get_data_path(tmp_dir_path, "re_tmp")) as re_tmp_file:
