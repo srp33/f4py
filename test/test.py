@@ -869,26 +869,34 @@ def run_super_test(description, fltr, select_columns, num_parallel, tmp_dir_path
 
     print(f"  {elapsed_time:.2f} seconds, {num_lines} lines in output file")
 
-run_all_small_tests()
+#run_all_small_tests()
+#sys.exit()
 
 #for compression_type in [None]:
-for compression_type in ["zstd"]:
-#for compression_type in [None, "zstd"]:
-#for compression_type in ["dictionary"]:
+#for compression_type in ["zstd"]:
+for compression_type in [None, "zstd"]:
     # Medium tests
-    run_larger_tests(num_parallel=1, size="medium", extension="", discrete1_index=11, numeric1_index=21, build_outputs=True, compression_type=compression_type)
-#    run_larger_tests(num_parallel=2, size="medium", extension="", discrete1_index=11, numeric1_index=21, build_outputs=True, compression_type=compression_type)
+#    run_larger_tests(num_parallel=1, size="medium", extension="", discrete1_index=11, numeric1_index=21, build_outputs=True, compression_type=compression_type)
+    run_larger_tests(num_parallel=2, size="medium", extension="", discrete1_index=11, numeric1_index=21, build_outputs=True, compression_type=compression_type)
 
     # Large tests
-    #num_parallel = 1
+    num_parallel = 1
     #num_parallel = 4
-    num_parallel = 16
+    #num_parallel = 16
     build_outputs = True
     #build_outputs = False
     verbose = True
     #verbose = False
     check_outputs = True
     #check_outputs = False
+
+#    num_fltr = f4.FloatFilter("Numeric2", operator.ge, 0.1)
+#    disc_fltr1 = f4.StringFilter("Discrete2", operator.eq, "AM")
+#    disc_fltr2 = f4.StringFilter("Discrete2", operator.eq, "NZ")
+#    disc_fltr = f4.OrFilter(disc_fltr1, disc_fltr2)
+#    fltr = f4.AndFilter(disc_fltr, num_fltr)
+#    #print(f4.get_indexes("data/100000_900000_1000_zstd.f4"))
+#    f4.query("data/100000_900000_1000_zstd.f4", fltr, select_columns=["Discrete1", "Numeric1"], out_file_path = "/tmp/test.tsv", num_parallel = num_parallel)
 
 #    run_larger_tests(num_parallel=num_parallel, size="large_tall", extension="", discrete1_index=251, numeric1_index=501, build_outputs=build_outputs, compression_type=compression_type, verbose=verbose, check_outputs=check_outputs, tmp_dir_path="/tmp/large_tall")
 #    run_larger_tests(num_parallel=num_parallel, size="large_wide", extension="", discrete1_index=250001, numeric1_index=500001, build_outputs=build_outputs, compression_type=compression_type, verbose=verbose, check_outputs=check_outputs, tmp_dir_path="/tmp/large_wide")

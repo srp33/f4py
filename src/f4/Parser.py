@@ -344,7 +344,8 @@ class AndFilter(_CompositeFilter):
                 if not isinstance(f, _SimpleBaseFilter):
                     return -1
 
-            # All but the last filter must use oper.eq.
+            # All but the last filter must use oper.eq. Otherwise, multi-column indexing
+            # will not work.
             for f in self.filters[:-1]:
                 if not isinstance(f, _OperatorFilter) or f.oper != operator.eq:
                     return -1
@@ -372,35 +373,72 @@ class OrFilter(_CompositeFilter):
         super().__init__(filters)
 
     def get_matching_row_indices(self, file_data, row_indices, num_parallel):
-        if row_indices is None:
-            row_indices = set(range(file_data.cache_dict["num_rows"]))
-
-        are_all_operator_filters = True
-        for f in self.filters:
-            if f is not _OperatorFilter:
-                are_all_operator_filters = False
-                break
+        # FYI: Multi-column indices don't make sense to use with Or logic.
 
         row_indices_out = set()
 
-        if are_all_operator_filters:
+        index_numbers = self._get_index_numbers(file_data)
+        has_no_indices = sum([1 for i in index_numbers if i > -1]) == 0
+
+        if self._has_all_operator_filters() and has_no_indices:
+            # This is a special case where we can make it more efficient.
+            # We always check the first filter. If that equates to False, we continue checking subsequent filters.
             column_indices = [get_column_index_from_name(file_data, f.column_name) for f in self.filters]
             coords = [parse_data_coord(file_data, "", column_index) for column_index in column_indices]
             parse_function = get_parse_row_value_function(file_data)
 
-            # This is a special case where we can make it more efficient.
-            # We always check the first filter. If that equates to False, we continue checking subsequent filters.
+            if row_indices is None:
+                row_indices = set(range(file_data.cache_dict["num_rows"]))
+
             for row_index in row_indices:
                 for i, f in enumerate(self.filters):
-                    if self._passes(parse_function(file_data, "", row_index, coords[i])):
+                    if f._passes(parse_function(file_data, "", row_index, coords[i])):
                         row_indices_out.add(row_index)
                         break
         else:
-            for f in self.filters:
-                row_indices_f = f.get_matching_row_indices(file_data, row_indices, num_parallel)
+            for fltr_index, fltr in enumerate(self.filters):
+                if index_numbers[fltr_index] < 0:
+                    if row_indices is None:
+                        row_indices = set(range(file_data.cache_dict["num_rows"]))
+
+                    row_indices_f = fltr.get_matching_row_indices(file_data, row_indices, num_parallel)
+                else:
+                    # When using the index, we have to search all rows because the row_indices will not be in the same order for all indices.
+                    row_indices_f = fltr.get_matching_row_indices_indexed(file_data, index_numbers[fltr_index], 0, 1, 0, file_data.cache_dict["num_rows"], True, num_parallel)
+
+                    # If there were previous row_indices identified, we first make sure the ones we found overlap with those.
+                    if row_indices is not None:
+                        row_indices_f = row_indices_f & row_indices
+
                 row_indices_out = row_indices_out | row_indices_f
 
         return row_indices_out
+
+    def _has_all_operator_filters(self):
+        for f in self.filters:
+            if not isinstance(f, _OperatorFilter):
+                return False
+
+        return True
+
+    def _get_index_numbers(self, file_data):
+        index_numbers = []
+
+        for f in self.filters:
+            index_numbers.append(self._get_index_number(file_data, f))
+
+        return index_numbers
+
+    def _get_index_number(self, file_data, fltr):
+        if "i" in file_data.cache_dict:
+            if isinstance(fltr, _CompositeFilter):
+                return -1
+
+            dict_key = ((fltr.column_name.decode(), isinstance(fltr, EndsWithFilter)), )
+
+            return file_data.cache_dict["i"].get(dict_key, -1)
+
+        return -1
 
 #####################################################
 # Public function(s)

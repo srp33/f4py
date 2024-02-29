@@ -21,7 +21,7 @@ from uuid import uuid4
 from zstandard import ZstdCompressor, ZstdDecompressor
 
 def get_current_version():
-    return "0.6.2"
+    return "0.7.1"
 
 #####################################################
 # Constants
