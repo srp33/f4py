@@ -890,14 +890,6 @@ for compression_type in [None, "zstd"]:
     check_outputs = True
     #check_outputs = False
 
-#    num_fltr = f4.FloatFilter("Numeric2", operator.ge, 0.1)
-#    disc_fltr1 = f4.StringFilter("Discrete2", operator.eq, "AM")
-#    disc_fltr2 = f4.StringFilter("Discrete2", operator.eq, "NZ")
-#    disc_fltr = f4.OrFilter(disc_fltr1, disc_fltr2)
-#    fltr = f4.AndFilter(disc_fltr, num_fltr)
-#    #print(f4.get_indexes("data/100000_900000_1000_zstd.f4"))
-#    f4.query("data/100000_900000_1000_zstd.f4", fltr, select_columns=["Discrete1", "Numeric1"], out_file_path = "/tmp/test.tsv", num_parallel = num_parallel)
-
 #    run_larger_tests(num_parallel=num_parallel, size="large_tall", extension="", discrete1_index=251, numeric1_index=501, build_outputs=build_outputs, compression_type=compression_type, verbose=verbose, check_outputs=check_outputs, tmp_dir_path="/tmp/large_tall")
 #    run_larger_tests(num_parallel=num_parallel, size="large_wide", extension="", discrete1_index=250001, numeric1_index=500001, build_outputs=build_outputs, compression_type=compression_type, verbose=verbose, check_outputs=check_outputs, tmp_dir_path="/tmp/large_wide")
 #
