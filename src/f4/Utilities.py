@@ -21,7 +21,7 @@ from uuid import uuid4
 from zstandard import ZstdCompressor, ZstdDecompressor
 
 def get_current_version():
-    return "0.7.1"
+    return "0.7.3"
 
 #####################################################
 # Constants
@@ -59,11 +59,23 @@ def reverse_string(s):
 def get_delimited_file_handle(file_path):
     if file_path.endswith(".gz"):
         return gzip.open(file_path)
-    elif file_path.endswith(".zstd"):
-        with open(file_path, "rb") as fh:
-            return ZstdCompressor(level=1).stream_reader(fh)
+    # elif file_path.endswith(".zstd"):
+    #     with open(file_path, "rb") as fh:
+    #         return ZstdCompressor(level=1).stream_reader(fh)
     else:
         return open(file_path, "rb")
+
+def get_temp_file_handle(file_path, mode, compress):
+    if compress:
+        # return gzip.open(file_path, mode, compresslevel=1)
+        fh = open(file_path, mode)
+
+        if mode == "rb":
+            return ZstdDecompressor().stream_reader(fh)
+        else:
+            return ZstdCompressor(level=1).stream_writer(fh)
+    else:
+        return open(file_path, mode)
 
 def format_string_as_fixed_width(x, size):
     return x + b" " * (size - len(x))

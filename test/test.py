@@ -84,7 +84,7 @@ def run_small_tests(in_file_path, f4_file_path, out_file_path, num_parallel = 1,
     for file_path in glob.glob(f"{f4_file_path}*"):
         os.unlink(file_path)
 
-    f4.convert_delimited_file(in_file_path, f4_file_path, compression_type=compression_type, num_parallel=num_parallel, index_columns=index_columns)
+    f4.convert_delimited_file(in_file_path, f4_file_path, compression_type=compression_type, num_parallel=num_parallel, index_columns=index_columns, compress_intermediate_data_files=(compression_type is not None))
 
     try:
         f4.query("bogus_file_path")
@@ -544,7 +544,7 @@ def run_small_tests(in_file_path, f4_file_path, out_file_path, num_parallel = 1,
         os.unlink(file_path)
 
 def test_transpose(tsv_file_path, f4_file_path, out_file_path, num_parallel, compression_type):
-    f4.convert_delimited_file(tsv_file_path, f4_file_path, num_parallel=num_parallel, compression_type=compression_type)
+    f4.convert_delimited_file(tsv_file_path, f4_file_path, num_parallel=num_parallel, compression_type=compression_type, compress_intermediate_data_files=(compression_type is not None))
     f4.transpose(f4_file_path, out_file_path, num_parallel=num_parallel)
 
     check_result("Dimensions", "Number of rows", f4.get_num_rows(out_file_path), 8)
@@ -607,8 +607,8 @@ def test_inner_join(num_parallel, compression_type):
         for row in data2:
             file2.write(b"\t".join(row) + b"\n")
 
-    f4.convert_delimited_file("/tmp/small1.tsv", "/tmp/small1.f4", num_parallel=num_parallel, compression_type=compression_type)
-    f4.convert_delimited_file("/tmp/small2.tsv", "/tmp/small2.f4", num_parallel=num_parallel, compression_type=compression_type)
+    f4.convert_delimited_file("/tmp/small1.tsv", "/tmp/small1.f4", num_parallel=num_parallel, compression_type=compression_type, compress_intermediate_data_files=(compression_type is not None))
+    f4.convert_delimited_file("/tmp/small2.tsv", "/tmp/small2.f4", num_parallel=num_parallel, compression_type=compression_type, compress_intermediate_data_files=(compression_type is not None))
 
     out_file_path = "/tmp/small_joined.f4"
     f4.inner_join("/tmp/small1.f4", "/tmp/small2.f4", "ID", "/tmp/small_joined.f4", num_parallel=num_parallel)
@@ -669,7 +669,7 @@ def run_larger_tests(num_parallel, size, extension, discrete1_index, numeric1_in
         for file_path in glob.glob(f"{f4_file_path}*"):
             os.unlink(file_path)
 
-        f4.convert_delimited_file(in_file_path, f4_file_path, compression_type=compression_type, num_parallel=num_parallel, verbose=verbose, tmp_dir_path=tmp_dir_path)
+        f4.convert_delimited_file(in_file_path, f4_file_path, compression_type=compression_type, num_parallel=num_parallel, verbose=verbose, tmp_dir_path=tmp_dir_path, compress_intermediate_data_files=(compression_type is not None))
 
     run_larger_tests2(f4_file_path, out_file_path, larger_ID, larger_Categorical1, larger_Discrete1, larger_Numeric1, num_parallel, check_outputs, tmp_dir_path)
 
@@ -682,7 +682,7 @@ def run_larger_tests(num_parallel, size, extension, discrete1_index, numeric1_in
         for file_path in glob.glob(f"{f4_file_path}*"):
             os.unlink(file_path)
 
-        f4.convert_delimited_file(in_file_path, f4_file_path, index_columns=["ID", "Categorical1", "Discrete1", "Numeric1"], compression_type=compression_type, num_parallel=num_parallel, verbose=verbose, tmp_dir_path=tmp_dir_path)
+        f4.convert_delimited_file(in_file_path, f4_file_path, index_columns=["ID", "Categorical1", "Discrete1", "Numeric1"], compression_type=compression_type, num_parallel=num_parallel, verbose=verbose, tmp_dir_path=tmp_dir_path, compress_intermediate_data_files=(compression_type is not None))
 
     run_larger_tests2(f4_file_path, out_file_path, larger_ID, larger_Categorical1, larger_Discrete1, larger_Numeric1, num_parallel, check_outputs, tmp_dir_path)
 
@@ -828,7 +828,7 @@ def run_super_tests(num_parallel, size, extension, compression_type, verbose, tm
     if os.path.exists(out_file_path):
         os.unlink(out_file_path)
 
-    f4.convert_delimited_file(in_file_path, f4_file_path, compression_type=compression_type, num_parallel=num_parallel, index_columns=["X1", "X2", ["X1", "X2"]], verbose=verbose, tmp_dir_path=tmp_dir_path)
+    f4.convert_delimited_file(in_file_path, f4_file_path, compression_type=compression_type, num_parallel=num_parallel, index_columns=["X1", "X2", ["X1", "X2"]], verbose=verbose, tmp_dir_path=tmp_dir_path, compress_intermediate_data_files=(compression_type is not None))
 
     run_super_test("[Ignore] Just priming the timer...", f4.HeadFilter(n = 1), ["X1"], num_parallel, tmp_dir_path, f4_file_path, out_file_path)
     run_super_test("Querying all rows, one column", f4.NoFilter(), ["X2"], num_parallel, tmp_dir_path, f4_file_path, out_file_path)
@@ -873,16 +873,16 @@ def run_super_test(description, fltr, select_columns, num_parallel, tmp_dir_path
 #sys.exit()
 
 #for compression_type in [None]:
-#for compression_type in ["zstd"]:
-for compression_type in [None, "zstd"]:
+for compression_type in ["zstd"]:
+#for compression_type in [None, "zstd"]:
     # Medium tests
 #    run_larger_tests(num_parallel=1, size="medium", extension="", discrete1_index=11, numeric1_index=21, build_outputs=True, compression_type=compression_type)
     run_larger_tests(num_parallel=2, size="medium", extension="", discrete1_index=11, numeric1_index=21, build_outputs=True, compression_type=compression_type)
 
     # Large tests
-    num_parallel = 1
-    #num_parallel = 4
-    #num_parallel = 16
+#    num_parallel = 1
+#    num_parallel = 4
+    num_parallel = 16
     build_outputs = True
     #build_outputs = False
     verbose = True

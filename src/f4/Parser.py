@@ -940,7 +940,6 @@ def save_output_rows(in_file_path, out_file_path, row_indices, column_indices):
             parse_row_values_function = get_parse_row_values_function(file_data)
 
             for row_index in row_indices:
-                # print(row_index)
                 write_obj.write(b"\t".join(parse_row_values_function(file_data, "", row_index, select_column_coords)) + b"\n")
 
 # def _get_decompression_dict(self, file_path, column_index_name_dict):

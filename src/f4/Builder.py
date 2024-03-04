@@ -6,7 +6,7 @@ joblib = __import__('joblib', globals(), locals())
 # Public function(s)
 #####################################################
 
-def convert_delimited_file(delimited_file_path, f4_file_path, index_columns=[], delimiter="\t", comment_prefix="#", compression_type=None, num_parallel=1, tmp_dir_path=None, verbose=False):
+def convert_delimited_file(delimited_file_path, f4_file_path, index_columns=[], delimiter="\t", comment_prefix="#", compression_type=None, num_parallel=1, tmp_dir_path=None, compress_intermediate_data_files=False, verbose=False):
     print_message(f"Converting from {delimited_file_path} to {f4_file_path}.", verbose)
 
     if type(delimiter) != str:
@@ -45,7 +45,7 @@ def convert_delimited_file(delimited_file_path, f4_file_path, index_columns=[], 
     joblib.Parallel(n_jobs=num_parallel)(joblib.delayed(parse_column_info)(delimited_file_path, f4_file_path, comment_prefix, delimiter, file_read_chunk_size, chunk_number, chunk_indices[0], chunk_indices[1], tmp_dir_path2, out_items_chunk_size, verbose) for chunk_number, chunk_indices in enumerate(column_chunk_indices))
 
     # Save and format data to a temp file for each column chunk.
-    joblib.Parallel(n_jobs=num_parallel)(joblib.delayed(save_formatted_data)(delimited_file_path, f4_file_path, comment_prefix, delimiter, file_read_chunk_size, chunk_number, chunk_indices[0], chunk_indices[1], tmp_dir_path2, out_items_chunk_size, verbose) for chunk_number, chunk_indices in enumerate(column_chunk_indices))
+    joblib.Parallel(n_jobs=num_parallel)(joblib.delayed(save_formatted_data)(delimited_file_path, f4_file_path, comment_prefix, delimiter, file_read_chunk_size, chunk_number, chunk_indices[0], chunk_indices[1], tmp_dir_path2, out_items_chunk_size, compress_intermediate_data_files, verbose) for chunk_number, chunk_indices in enumerate(column_chunk_indices))
 
     # Combine column databases across the chunks.
     combine_column_databases(delimited_file_path, f4_file_path, column_chunk_indices, tmp_dir_path2, verbose)
@@ -57,7 +57,7 @@ def convert_delimited_file(delimited_file_path, f4_file_path, index_columns=[], 
 
     # Merge the saved/formatted data across the column chunks.
     # Get number of rows.
-    num_rows, line_length = combine_data_for_column_chunks(delimited_file_path, f4_file_path, column_chunk_indices, tmp_dir_path2, verbose)
+    num_rows, line_length = combine_data_for_column_chunks(delimited_file_path, f4_file_path, column_chunk_indices, tmp_dir_path2, compress_intermediate_data_files, verbose)
 
     if num_rows == 0:
         raise Exception(f"A header row but no data rows were detected in {delimited_file_path}.")
@@ -378,7 +378,7 @@ def parse_column_info(delimited_file_path, f4_file_path, comment_prefix, delimit
     print_message(f"Done parsing column names, sizes, and types when converting {delimited_file_path} to {f4_file_path} for columns {start_column_index} - {end_column_index - 1}.", verbose)
 
 # This function is executed in parallel.
-def save_formatted_data(delimited_file_path, f4_file_path, comment_prefix, delimiter, file_read_chunk_size, chunk_number, start_column_index, end_column_index, tmp_dir_path, out_items_chunk_size, verbose):
+def save_formatted_data(delimited_file_path, f4_file_path, comment_prefix, delimiter, file_read_chunk_size, chunk_number, start_column_index, end_column_index, tmp_dir_path, out_items_chunk_size, compress_intermediate_data_files, verbose):
     data_file_path = get_data_path(tmp_dir_path, "data", chunk_number)
     ll_file_path = get_data_path(tmp_dir_path, "ll", chunk_number)
 
@@ -400,7 +400,7 @@ def save_formatted_data(delimited_file_path, f4_file_path, comment_prefix, delim
         skip_line(in_file)  # Header line
 
         # Save data.
-        with open(data_file_path, 'wb') as data_file:
+        with get_temp_file_handle(data_file_path, "wb", compress_intermediate_data_files) as data_file:
             out_list = []
             num_columns_to_parse = end_column_index - start_column_index
 
@@ -601,12 +601,12 @@ def save_column_coordinates(delimited_file_path, f4_file_path, out_items_chunk_s
 
     write_str_to_file(get_data_path(tmp_dir_path, f"ccml"), str(max_coord_length).encode())
 
-def combine_data_for_column_chunks(delimited_file_path, f4_file_path, column_chunk_indices, tmp_dir_path, verbose):
+def combine_data_for_column_chunks(delimited_file_path, f4_file_path, column_chunk_indices, tmp_dir_path, compress_intermediate_data_files, verbose):
     print_message(f"Combining data for column chunks when converting {delimited_file_path} to {f4_file_path}.", verbose)
 
     file_handles = {}
     for chunk_number in range(len(column_chunk_indices)):
-        file_handles[chunk_number] = open(get_data_path(tmp_dir_path, "data", chunk_number), "rb")
+        file_handles[chunk_number] = get_temp_file_handle(get_data_path(tmp_dir_path, "data", chunk_number), "rb", compress_intermediate_data_files)
 
     line_lengths = {}
     for chunk_number in range(len(column_chunk_indices)):
@@ -775,9 +775,9 @@ def build_index(f4_file_path, tmp_dir_path, index_number, index_columns, num_row
         start_coords.append(start_coord)
         end_coords.append(end_coord)
 
-    sql_create_table = f'CREATE TABLE index_data ({index_columns[0]} TEXT NOT NULL'
+    sql_create_table = 'CREATE TABLE index_data (index_column0 TEXT NOT NULL'
     for i in range(1, len(index_columns)):
-        sql_create_table += f", {index_columns[i]} TEXT NOT NULL"
+        sql_create_table += f", index_column{i} TEXT NOT NULL"
     sql_create_table += ")"
 
     index_database_file_path = f"{out_index_file_path_prefix}.db"
@@ -789,7 +789,7 @@ def build_index(f4_file_path, tmp_dir_path, index_number, index_columns, num_row
     cursor = conn.cursor()
     cursor.execute('BEGIN TRANSACTION')
 
-    sql_insert = f'''INSERT INTO index_data ({', '.join(index_columns)})
+    sql_insert = f'''INSERT INTO index_data ({', '.join([f"index_column{i}" for i in range(len(index_columns))])})
                      VALUES ({', '.join(['?' for x in index_columns])})'''
 
     with open(get_data_path(tmp_dir_path, "data"), 'rb') as file_handle:
@@ -825,17 +825,17 @@ def build_index(f4_file_path, tmp_dir_path, index_number, index_columns, num_row
     max_row_index_length = len(str(num_rows - 1))
 
     with open(f"{out_index_file_path_prefix}", "wb") as index_data_file:
-        sql_query = f'''SELECT rowid - 1 AS rowid, {', '.join(index_columns)}
+        sql_query = f'''SELECT rowid - 1 AS rowid, {', '.join([f"index_column{i}" for i in range(len(index_columns))])}
                         FROM index_data
-                        ORDER BY {index_columns[0]}'''
+                        ORDER BY index_column0'''
 
         for i in range(1, len(column_types)):
             if column_types[i] == "s":
-                sql_query += f", {index_columns[i]}"
+                sql_query += f", index_column{i}"
             elif column_types[i] == "i":
-                sql_query += f", CAST({index_columns[i]} AS INTEGER)"
+                sql_query += f", CAST(index_column{i} AS INTEGER)"
             else:
-                sql_query += f", CAST({index_columns[i]} AS REAL)"
+                sql_query += f", CAST(index_column{i} AS REAL)"
 
         cursor = conn.cursor()
         cursor.execute(sql_query)
@@ -855,7 +855,7 @@ def build_index(f4_file_path, tmp_dir_path, index_number, index_columns, num_row
                 out_row = b""
 
                 for i, index_column in enumerate(index_columns):
-                    out_row += format_string_as_fixed_width(row[index_column], max_value_lengths[i])
+                    out_row += format_string_as_fixed_width(row[f"index_column{i}"], max_value_lengths[i])
 
                 batch_out.append(out_row + format_string_as_fixed_width(str(row["rowid"]).encode(), max_row_index_length))
                 row_index += 1
