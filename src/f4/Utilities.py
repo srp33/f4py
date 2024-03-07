@@ -21,7 +21,7 @@ from uuid import uuid4
 from zstandard import ZstdCompressor, ZstdDecompressor
 
 def get_current_version():
-    return "0.8.0"
+    return "0.8.3"
 
 #####################################################
 # Constants
@@ -206,6 +206,14 @@ def execute_sql(conn, sql, params=(), commit=True):
         conn.commit()
 
     return lastrowid
+
+def query_sql(conn, sql, params=()):
+    cursor = conn.cursor()
+    cursor.execute(sql, params)
+    result = cursor.fetchall()
+    cursor.close()
+
+    return result
 
 # def convert_to_sql_type(type_abbreviation):
 #     if type_abbreviation == "i":

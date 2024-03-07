@@ -1,3 +1,5 @@
+import shutil
+
 from .Utilities import *
 global joblib
 joblib = __import__('joblib', globals(), locals())
@@ -6,7 +8,7 @@ joblib = __import__('joblib', globals(), locals())
 # Public function(s)
 #####################################################
 
-def convert_delimited_file(delimited_file_path, f4_file_path, index_columns=[], delimiter="\t", comment_prefix="#", compression_type=None, num_parallel=1, tmp_dir_path=None, compress_intermediate_data_files=False, verbose=False):
+def convert_delimited_file(delimited_file_path, f4_file_path, index_columns=[], delimiter="\t", comment_prefix="#", compression_type=None, num_parallel=1, tmp_dir_path=None, compress_intermediate_data_files=True, verbose=False):
     print_message(f"Converting from {delimited_file_path} to {f4_file_path}.", verbose)
 
     if type(delimiter) != str:
@@ -63,14 +65,32 @@ def convert_delimited_file(delimited_file_path, f4_file_path, index_columns=[], 
         raise Exception(f"A header row but no data rows were detected in {delimited_file_path}.")
 
     if index_columns:
-        build_indexes(f4_file_path, tmp_dir_path2, index_columns, num_rows, line_length, num_parallel, verbose)
+        build_indexes(f4_file_path, tmp_dir_path2, index_columns, num_rows, line_length, num_parallel, compress_intermediate_data_files, get_columns_database_file_path(tmp_dir_path2), verbose)
 
-    remove(get_columns_database_path(tmp_dir_path2))
+    remove(get_columns_database_file_path(tmp_dir_path2))
 
     #TODO: Parallelize this by row chunks.
-    compress_data(tmp_dir_path2, compression_type, num_rows, line_length)
+    if compression_type:
+        compress_data(tmp_dir_path2, compression_type, compress_intermediate_data_files, num_rows, line_length)
+    else:
+        if compress_intermediate_data_files:
+            # The combined file will be compressed, so we need to decompress it.
+            rename(get_data_path(tmp_dir_path2, "data"), get_data_path(tmp_dir_path2, "datacmpr"))
+
+            with get_temp_file_handle(get_data_path(tmp_dir_path2, "datacmpr"), "rb", True) as cmpr_file:
+                with open(get_data_path(tmp_dir_path2, "data"), "wb") as data_file:
+                    chunk_size = 1000000
+                    while True:
+                        content = cmpr_file.read(chunk_size)
+                        # If the content is empty, end of file has been reached
+                        if not content:
+                            break
+
+                        data_file.write(content)
 
     combine_into_single_file(delimited_file_path, f4_file_path, tmp_dir_path2, file_read_chunk_size, verbose)
+
+    shutil.rmtree(tmp_dir_path2)
 
     print_message(f"Done converting {delimited_file_path} to {f4_file_path}.", verbose)
 
@@ -252,7 +272,7 @@ def preview_column_names(delimited_file_path, f4_file_path, comment_prefix, deli
 
     return num_cols, max_column_name_length
 
-def get_columns_database_path(tmp_dir_path, chunk_number=-1):
+def get_columns_database_file_path(tmp_dir_path, chunk_number=-1):
     return f"{tmp_dir_path}{chunk_number}.columns.db" if chunk_number >= 0 else f"{tmp_dir_path}columns.db"
 
 def get_sizes_dict_path(tmp_dir_path, chunk_number):
@@ -322,7 +342,7 @@ def populate_database_with_column_names(delimited_file_path, comment_prefix, del
 def parse_column_info(delimited_file_path, f4_file_path, comment_prefix, delimiter, file_read_chunk_size, chunk_number, start_column_index, end_column_index, tmp_dir_path, out_items_chunk_size, verbose):
     print_message(f"Parsing column names, sizes, and types when converting {delimited_file_path} to {f4_file_path} for columns {start_column_index} - {end_column_index - 1}.", verbose)
 
-    columns_file_path = get_columns_database_path(tmp_dir_path, chunk_number)
+    columns_file_path = get_columns_database_file_path(tmp_dir_path, chunk_number)
     conn = connect_sql(columns_file_path)
     cursor = conn.cursor()
     cursor.execute('BEGIN TRANSACTION')
@@ -384,7 +404,7 @@ def save_formatted_data(delimited_file_path, f4_file_path, comment_prefix, delim
 
     print_message(f"Saving formatted data when converting {delimited_file_path} to {f4_file_path} for columns {start_column_index} - {end_column_index - 1}.", verbose)
 
-    columns_file_path = get_columns_database_path(tmp_dir_path, chunk_number)
+    columns_file_path = get_columns_database_file_path(tmp_dir_path, chunk_number)
     conn = connect_sql(columns_file_path)
     cursor = conn.cursor()
 
@@ -445,11 +465,11 @@ def combine_column_databases(delimited_file_path, f4_file_path, column_chunk_ind
     # We won't add the num_* columns to the combined file because they are no longer necessary.
     print_message(f"Combining column databases when converting {delimited_file_path} to {f4_file_path}.", verbose)
 
-    conn_0 = connect_sql(get_columns_database_path(tmp_dir_path, 0))
+    conn_0 = connect_sql(get_columns_database_file_path(tmp_dir_path, 0))
     cursor_0 = conn_0.cursor()
 
     for chunk_number in range(1, len(column_chunk_indices)):
-        chunk_file_path = get_columns_database_path(tmp_dir_path, chunk_number)
+        chunk_file_path = get_columns_database_file_path(tmp_dir_path, chunk_number)
         cursor_0.execute(f"ATTACH DATABASE '{chunk_file_path}' AS db_chunk")
         cursor_0.execute(f"INSERT INTO columns (column_index, column_name, size, inferred_type) SELECT column_index, column_name, size, inferred_type FROM db_chunk.columns")
         cursor_0.execute(f"DETACH DATABASE db_chunk")
@@ -458,7 +478,7 @@ def combine_column_databases(delimited_file_path, f4_file_path, column_chunk_ind
     cursor_0.close()
     conn_0.close()
 
-    rename(get_columns_database_path(tmp_dir_path, 0), get_columns_database_path(tmp_dir_path))
+    rename(get_columns_database_file_path(tmp_dir_path, 0), get_columns_database_file_path(tmp_dir_path))
 
 def get_max_column_length(cursor, column_name):
     sql = f'''SELECT MAX(LENGTH(CAST({column_name} AS TEXT))) AS max_length
@@ -470,7 +490,7 @@ def get_max_column_length(cursor, column_name):
 def save_column_name_info(delimited_file_path, f4_file_path, out_items_chunk_size, tmp_dir_path, verbose):
     print_message(f"Saving column name info when converting {delimited_file_path} to {f4_file_path}.", verbose)
 
-    conn = connect_sql(get_columns_database_path(tmp_dir_path))
+    conn = connect_sql(get_columns_database_file_path(tmp_dir_path))
     cursor = conn.cursor()
 
     max_column_name_length = get_max_column_length(cursor, "column_name")
@@ -537,7 +557,7 @@ def save_column_name_info(delimited_file_path, f4_file_path, out_items_chunk_siz
 def save_column_types(delimited_file_path, f4_file_path, out_items_chunk_size, tmp_dir_path, verbose):
     print_message(f"Saving column type and size info when converting {delimited_file_path} to {f4_file_path}.", verbose)
 
-    conn = connect_sql(get_columns_database_path(tmp_dir_path))
+    conn = connect_sql(get_columns_database_file_path(tmp_dir_path))
     cursor = conn.cursor()
 
     max_type_length = 1 # This should always be 1 unless we add a bunch of types.
@@ -566,7 +586,7 @@ def save_column_types(delimited_file_path, f4_file_path, out_items_chunk_size, t
 def save_column_coordinates(delimited_file_path, f4_file_path, out_items_chunk_size, tmp_dir_path, verbose):
     print_message(f"Saving column coordinates when converting {delimited_file_path} to {f4_file_path}.", verbose)
 
-    conn = connect_sql(get_columns_database_path(tmp_dir_path))
+    conn = connect_sql(get_columns_database_file_path(tmp_dir_path))
     cursor = conn.cursor()
 
     sql = f'''SELECT SUM(size) AS size
@@ -616,7 +636,7 @@ def combine_data_for_column_chunks(delimited_file_path, f4_file_path, column_chu
 
     line_length_total = sum(line_lengths.values())
 
-    with open(get_data_path(tmp_dir_path, "data"), "wb") as out_file:
+    with get_temp_file_handle(get_data_path(tmp_dir_path, "data"), "wb", compress_intermediate_data_files) as out_file:
         num_rows = 0
         while line_0 := file_handles[0].read(line_lengths[0]):
             num_rows += 1
@@ -631,10 +651,7 @@ def combine_data_for_column_chunks(delimited_file_path, f4_file_path, column_chu
 
     return num_rows, line_length_total
 
-def compress_data(tmp_dir_path, compression_type, num_rows, line_length):
-    if not compression_type:
-        return
-
+def compress_data(tmp_dir_path, compression_type, compress_intermediate_data_files, num_rows, line_length):
     # For now, we assume z-standard compression.
     compressor = ZstdCompressor(level=1)
 
@@ -645,37 +662,38 @@ def compress_data(tmp_dir_path, compression_type, num_rows, line_length):
     compressed_lines_to_save = []
     compressed_chars_not_saved = 0
 
-    with open(get_data_path(tmp_dir_path, "data"), 'rb') as file_handle:
-        with mmap(file_handle.fileno(), 0, prot=PROT_READ) as mmap_handle:
-            with open(get_data_path(tmp_dir_path, "cmpr"), "wb") as cmpr_file:
-                with open(get_data_path(tmp_dir_path, "re_tmp"), "wb") as re_file:
-                    for row_i in range(num_rows):
-                        row_start = row_i * line_length
-                        row_end = (row_i + 1) * line_length
+    with get_temp_file_handle(get_data_path(tmp_dir_path, "data"), "rb", compress_intermediate_data_files) as file_handle:
+        with open(get_data_path(tmp_dir_path, "cmpr"), "wb") as cmpr_file:
+            with open(get_data_path(tmp_dir_path, "re_tmp"), "wb") as re_file:
+                for row_i in range(num_rows):
+                    row_start = row_i * line_length
+                    row_end = (row_i + 1) * line_length
 
-                        compressed_line = compressor.compress(mmap_handle[row_start:row_end])
-                        compressed_row_length = len(compressed_line)
+                    file_handle.seek(row_start)
+                    row = file_handle.read(row_end - row_start)
+                    compressed_line = compressor.compress(row)
+                    compressed_row_length = len(compressed_line)
 
-                        current_compressed_row_end += compressed_row_length
-                        compressed_row_ends.append(current_compressed_row_end)
-                        compressed_lines_to_save.append(compressed_line)
-                        compressed_chars_not_saved += compressed_row_length
+                    current_compressed_row_end += compressed_row_length
+                    compressed_row_ends.append(current_compressed_row_end)
+                    compressed_lines_to_save.append(compressed_line)
+                    compressed_chars_not_saved += compressed_row_length
 
-                        if compressed_chars_not_saved >= 1000000:
-                            cmpr_file.write(b"".join(compressed_lines_to_save))
-
-                            re_file.write(b"\n".join([str(rl).encode() for rl in compressed_row_ends]))
-                            if row_i != (num_rows - 1):
-                                re_file.write(b"\n")
-
-                            mrel = len(str(compressed_row_ends[-1]))
-                            compressed_row_ends = []
-                            compressed_lines_to_save = []
-                            compressed_chars_not_saved = 0
-
-                    if compressed_chars_not_saved > 0:
+                    if compressed_chars_not_saved >= 1000000:
                         cmpr_file.write(b"".join(compressed_lines_to_save))
+
                         re_file.write(b"\n".join([str(rl).encode() for rl in compressed_row_ends]))
+                        if row_i != (num_rows - 1):
+                            re_file.write(b"\n")
+
+                        mrel = len(str(compressed_row_ends[-1]))
+                        compressed_row_ends = []
+                        compressed_lines_to_save = []
+                        compressed_chars_not_saved = 0
+
+                if compressed_chars_not_saved > 0:
+                    cmpr_file.write(b"".join(compressed_lines_to_save))
+                    re_file.write(b"\n".join([str(rl).encode() for rl in compressed_row_ends]))
 
     rename(get_data_path(tmp_dir_path, "cmpr"), get_data_path(tmp_dir_path, "data"))
 
@@ -719,19 +737,26 @@ def compress_data(tmp_dir_path, compression_type, num_rows, line_length):
         # else:
         cmpr_file.write(b"z")
 
-def build_indexes(f4_file_path, tmp_dir_path, index_columns, num_rows, line_length, num_parallel, verbose=False):
+def build_indexes(f4_file_path, tmp_dir_path, index_columns, num_rows, line_length, num_parallel, compress_intermediate_data_files, columns_database_file_path, verbose=False):
     index_info_dict = {}
 
     if isinstance(index_columns, str):
-        reverse_statuses = build_index(f4_file_path, tmp_dir_path, 0, [index_columns], num_rows, line_length, verbose)
-        index_info_dict[(index_columns, reverse_statuses[0])] = 0
+        index_columns, reverse_status_dict = check_index_column_reverse_status([index_columns])
+
+        build_index(f4_file_path, tmp_dir_path, 0, index_columns, reverse_status_dict, num_rows, line_length, compress_intermediate_data_files, columns_database_file_path, verbose)
+        index_info_dict[(index_columns, reverse_status_dict[index_columns])] = 0
     elif isinstance(index_columns, list):
+        # Verify whether the index_columns are valid.
+        # TODO: Move this logic earlier in the overall process so it fails sooner.
         for i, index_column in enumerate(index_columns):
             if not isinstance(index_column, str) and not isinstance(index_column, list):
                 raise Exception("When specifying index columns, they must either be a string or a list.")
 
+            if "|" in index_column:
+                raise Exception("You may not index a column with a vertical bar (|) in its name.")
+
         keys = joblib.Parallel(n_jobs=num_parallel)(
-            joblib.delayed(build_index_parallel)(f4_file_path, tmp_dir_path, num_rows, line_length, i, index_column, verbose)
+            joblib.delayed(build_index_parallel)(f4_file_path, tmp_dir_path, num_rows, line_length, i, index_column, compress_intermediate_data_files, columns_database_file_path, verbose)
             for i, index_column in enumerate(index_columns)
         )
 
@@ -742,78 +767,82 @@ def build_indexes(f4_file_path, tmp_dir_path, index_columns, num_rows, line_leng
 
     write_str_to_file(f"{tmp_dir_path}i", serialize(index_info_dict))
 
-def build_index(f4_file_path, tmp_dir_path, index_number, index_columns, num_rows, line_length, verbose):
-    # TODO: Add logic to verify that index_column is valid. Make sure to check for names ending with $ (reverse).
-
-    print_message(f"Saving index for {', '.join(index_columns)} column(s) in {f4_file_path}.", verbose)
-
+def build_index(f4_file_path, tmp_dir_path, index_number, index_columns, reverse_status_dict, num_rows, line_length, compress_intermediate_data_files, columns_database_file_path, verbose):
     out_index_file_path_prefix = f"{tmp_dir_path}i{index_number}"
     ccml = fast_int(read_str_from_file(get_data_path(tmp_dir_path, "ccml")))
 
-    reverse_statuses = []
-    column_indices = []
-    column_types = []
-    start_coords = []
-    end_coords = []
+    print_message(f"Saving index information for {', '.join(index_columns)} column(s) in {f4_file_path}.", verbose)
 
-    for i, index_column in enumerate(index_columns):
-        if "|" in index_column:
-            raise Exception("You may not index a column with a vertical bar (|) in its name.")
+    # Collect other information about each column.
+    conn = connect_sql(columns_database_file_path)
+    sql = f'''SELECT column_index, TRIM(column_name) AS column_name, inferred_type
+    FROM columns
+    WHERE TRIM(column_name) IN ("{'", "'.join(index_columns)}")
+    ORDER BY column_index'''
 
-        if index_column.endswith("_endswith"):
-            reverse_statuses.append(True)
-            index_columns[i] = index_columns[i].rstrip("_endswith")
-        else:
-            reverse_statuses.append(False)
+    index_columns_index_dict = {}
+    index_columns_name_dict = {}
 
-    for i, index_column in enumerate(index_columns):
-        column_index, column_type = get_column_index_and_type(tmp_dir_path, index_column)
-        column_indices.append(column_index)
-        column_types.append(column_type)
+    for row in query_sql(conn, sql):
+        column_name = row["column_name"]
+        column_index = row["column_index"]
+
+        index_columns_index_dict[column_index] = {}
+        index_columns_index_dict[column_index]["column_name"] = column_name
+        index_columns_index_dict[column_index]["reverse_status"] = reverse_status_dict[column_name]
+        index_columns_index_dict[column_index]["type"] = row["inferred_type"]
 
         start_coord, end_coord = get_column_index_coords(tmp_dir_path, column_index, ccml)
-        start_coords.append(start_coord)
-        end_coords.append(end_coord)
+        index_columns_index_dict[column_index]["start_coord"] = start_coord
+        index_columns_index_dict[column_index]["end_coord"] = end_coord
+        index_columns_index_dict[column_index]["max_value_length"] = 0
 
-    sql_create_table = 'CREATE TABLE index_data (index_column0 TEXT NOT NULL'
-    for i in range(1, len(index_columns)):
-        sql_create_table += f", index_column{i} TEXT NOT NULL"
+        index_columns_name_dict[column_name] = column_index
+
+    conn.close()
+
+    index_column_indexes_sorted = sorted(list(index_columns_index_dict.keys()))
+
+    sql_create_table = f'CREATE TABLE index_data (index_column{index_column_indexes_sorted[0]} TEXT NOT NULL'
+    for i in range(1, len(index_column_indexes_sorted)):
+        sql_create_table += f", index_column{index_column_indexes_sorted[i]} TEXT NOT NULL"
     sql_create_table += ")"
 
     index_database_file_path = f"{out_index_file_path_prefix}.db"
     conn = connect_sql(index_database_file_path)
     execute_sql(conn, sql_create_table)
 
-    max_value_lengths = [0 for x in index_columns]
     non_committed_values = []
     cursor = conn.cursor()
     cursor.execute('BEGIN TRANSACTION')
 
-    sql_insert = f'''INSERT INTO index_data ({', '.join([f"index_column{i}" for i in range(len(index_columns))])})
-                     VALUES ({', '.join(['?' for x in index_columns])})'''
+    sql_insert = f'''INSERT INTO index_data ({', '.join([f"index_column{index_column_indexes_sorted[i]}" for i in range(len(index_column_indexes_sorted))])})
+                     VALUES ({', '.join(['?' for x in index_column_indexes_sorted])})'''
 
-    with open(get_data_path(tmp_dir_path, "data"), 'rb') as file_handle:
-        with mmap(file_handle.fileno(), 0, prot=PROT_READ) as mmap_handle:
-            for row_index in range(num_rows):
-                start_pos = row_index * line_length
+    with get_temp_file_handle(get_data_path(tmp_dir_path, "data"), "rb", compress_intermediate_data_files) as file_handle:
+        for row_index in range(num_rows):
+            start_pos = row_index * line_length
 
-                values = []
-                for i, index_column in enumerate(index_columns):
-                    value = mmap_handle[(start_pos + start_coords[i]):(start_pos + end_coords[i])]
+            values = []
+            for index_column_index in index_column_indexes_sorted:
+                this_start_pos = start_pos + index_columns_index_dict[index_column_index]["start_coord"]
+                this_end_pos = start_pos + index_columns_index_dict[index_column_index]["end_coord"]
+                file_handle.seek(this_start_pos)
+                value = file_handle.read(this_end_pos - this_start_pos)
 
-                    if reverse_statuses[i]:
-                        value = reverse_string(value)
+                if index_columns_index_dict[index_column_index]["reverse_status"]:
+                    value = reverse_string(value)
 
-                    values.append(value)
-                    max_value_lengths[i] = max(max_value_lengths[i], len(value))
+                values.append(value)
+                index_columns_index_dict[index_column_index]["max_value_length"] = max(index_columns_index_dict[index_column_index]["max_value_length"], len(value))
 
-                non_committed_values.append(values)
-                if len(non_committed_values) == 10000:
-                    cursor.executemany(sql_insert, non_committed_values)
-                    non_committed_values = []
-
-            if len(non_committed_values) > 0:
+            non_committed_values.append(values)
+            if len(non_committed_values) == 10000:
                 cursor.executemany(sql_insert, non_committed_values)
+                non_committed_values = []
+
+        if len(non_committed_values) > 0:
+            cursor.executemany(sql_insert, non_committed_values)
 
     conn.commit()
     cursor.close()
@@ -825,17 +854,23 @@ def build_index(f4_file_path, tmp_dir_path, index_number, index_columns, num_row
     max_row_index_length = len(str(num_rows - 1))
 
     with open(f"{out_index_file_path_prefix}", "wb") as index_data_file:
-        sql_query = f'''SELECT rowid - 1 AS rowid, {', '.join([f"index_column{i}" for i in range(len(index_columns))])}
+        sql_query = f'''SELECT rowid - 1 AS rowid, {', '.join([f"index_column{index_columns_name_dict[x]}" for x in index_columns])}
                         FROM index_data
-                        ORDER BY index_column0'''
+                        ORDER BY '''
 
-        for i in range(1, len(column_types)):
-            if column_types[i] == "s":
-                sql_query += f", index_column{i}"
-            elif column_types[i] == "i":
-                sql_query += f", CAST(index_column{i} AS INTEGER)"
+        for i, index_column in enumerate(index_columns):
+            index_column_index = index_columns_name_dict[index_column]
+            index_column_type = index_columns_index_dict[index_column_index]["type"]
+
+            if i > 0:
+                sql_query += ", "
+
+            if index_column_type == "s":
+                sql_query += f"index_column{index_column_index}"
+            elif index_column_type == "i":
+                sql_query += f"CAST(index_column{index_column_index} AS INTEGER)"
             else:
-                sql_query += f", CAST(index_column{i} AS REAL)"
+                sql_query += f"CAST(index_column{index_column_index} AS REAL)"
 
         cursor = conn.cursor()
         cursor.execute(sql_query)
@@ -854,8 +889,9 @@ def build_index(f4_file_path, tmp_dir_path, index_number, index_columns, num_row
             for row in batch:
                 out_row = b""
 
-                for i, index_column in enumerate(index_columns):
-                    out_row += format_string_as_fixed_width(row[f"index_column{i}"], max_value_lengths[i])
+                for index_column in index_columns:
+                    index_column_index = index_columns_name_dict[index_column]
+                    out_row += format_string_as_fixed_width(row[f"index_column{index_column_index}"], index_columns_index_dict[index_column_index]["max_value_length"])
 
                 batch_out.append(out_row + format_string_as_fixed_width(str(row["rowid"]).encode(), max_row_index_length))
                 row_index += 1
@@ -868,8 +904,9 @@ def build_index(f4_file_path, tmp_dir_path, index_number, index_columns, num_row
     print_message(f"Done querying temporary database when indexing the {', '.join(index_columns)} column(s) in {f4_file_path}.", verbose)
 
     coords = [0]
-    for mvl in max_value_lengths:
-        coords.append(coords[-1] + mvl)
+    for index_column in index_columns:
+        index_column_index = index_columns_name_dict[index_column]
+        coords.append(coords[-1] + index_columns_index_dict[index_column_index]["max_value_length"])
     coords.append(coords[-1] + max_row_index_length)
     coords = [str(x).encode() for x in coords]
 
@@ -883,44 +920,56 @@ def build_index(f4_file_path, tmp_dir_path, index_number, index_columns, num_row
 
     remove(index_database_file_path)
 
-    print_message(f"Done building index file for {index_column} column in {f4_file_path}.", verbose)
+    print_message(f"Done building index for {', '.join(index_columns)} column(s) in {f4_file_path}.", verbose)
 
-    return reverse_statuses
-
-def build_index_parallel(f4_file_path, tmp_dir_path, num_rows, line_length, index_number, index_column, verbose):
+def build_index_parallel(f4_file_path, tmp_dir_path, num_rows, line_length, index_number, index_column, compress_intermediate_data_files, columns_database_file_path, verbose):
     index_column_list = [index_column] if isinstance(index_column, str) else index_column
-    reverse_statuses = build_index(f4_file_path, tmp_dir_path, index_number, index_column_list, num_rows, line_length, verbose)
+    index_column_list, reverse_status_dict = check_index_column_reverse_status(index_column_list)
+
+    build_index(f4_file_path, tmp_dir_path, index_number, index_column_list, reverse_status_dict, num_rows, line_length, compress_intermediate_data_files, columns_database_file_path, verbose)
 
     key = []
-    for j, index_column in enumerate(index_column_list):
-        key.append((index_column, reverse_statuses[j]))
+    for index_column in index_column_list:
+        key.append((index_column, reverse_status_dict[index_column]))
 
     return tuple(key)
 
-def get_column_index_and_type(tmp_dir_path, index_column_name):
-    columns_file_path = get_columns_database_path(tmp_dir_path)
+def check_index_column_reverse_status(index_columns):
+    reverse_status_dict = {}
 
-    conn = connect_sql(columns_file_path)
-    cursor = conn.cursor()
+    for i, index_column in enumerate(index_columns):
+        if index_column.endswith("_endswith"):
+            index_columns[i] = index_column.rstrip("_endswith")
+            reverse_status_dict[index_columns[i]] = True
+        else:
+            reverse_status_dict[index_column] = False
 
-    cursor.execute('''SELECT column_index, inferred_type
-                      FROM columns
-                      WHERE TRIM(column_name) = ?''', (index_column_name, ))
+    return index_columns, reverse_status_dict
 
-    row = cursor.fetchone()
-
-    if not row:
-        raise Exception(f"No column exists with the name '{index_column_name}.'")
-        cursor.close()
-        conn.close()
-
-    index_column_index = row["column_index"]
-    index_column_type = row["inferred_type"]
-
-    cursor.close()
-    conn.close()
-
-    return index_column_index, index_column_type
+# def get_column_index_and_type(tmp_dir_path, index_column_name):
+#     columns_file_path = get_columns_database_file_path(tmp_dir_path)
+#
+#     conn = connect_sql(columns_file_path)
+#     cursor = conn.cursor()
+#
+#     cursor.execute('''SELECT column_index, inferred_type
+#                       FROM columns
+#                       WHERE TRIM(column_name) = ?''', (index_column_name, ))
+#
+#     row = cursor.fetchone()
+#
+#     if not row:
+#         raise Exception(f"No column exists with the name '{index_column_name}.'")
+#         cursor.close()
+#         conn.close()
+#
+#     index_column_index = row["column_index"]
+#     index_column_type = row["inferred_type"]
+#
+#     cursor.close()
+#     conn.close()
+#
+#     return index_column_index, index_column_type
 
 def get_column_index_coords(tmp_dir_path, index_column_index, ccml):
     with open(get_data_path(tmp_dir_path, "cc"), 'rb') as file_handle:

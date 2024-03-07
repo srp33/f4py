@@ -185,6 +185,7 @@ class _RangeFilter(_SimpleBaseFilter):
 
     def get_matching_row_indices_indexed(self, file_data, index_number, cc_value_column_index, cc_position_column_index, start_search_position, end_search_position, retrieve_row_indices, num_parallel):
         data_file_key = f"i{index_number}"
+
         coords = parse_data_coords(file_data, data_file_key, [cc_value_column_index, cc_position_column_index])
 
         return find_row_indices_for_range(file_data, data_file_key, coords[0], coords[1], self._get_index_filter_1(), self._get_index_filter_2(), start_search_position, end_search_position, retrieve_row_indices, num_parallel)
@@ -333,6 +334,10 @@ class AndFilter(_CompositeFilter):
 
             for i, f in enumerate(self.filters[:-1]):
                 rows_start_end = f.get_matching_row_indices_indexed(file_data, index_number, i, num_filters, rows_start_end[0], rows_start_end[1], False, num_parallel)
+
+                # If there are no matches, stop looking.
+                if rows_start_end[0] == rows_start_end[1]:
+                    return set()
 
             return self.filters[-1].get_matching_row_indices_indexed(file_data, index_number, num_filters - 1, num_filters, rows_start_end[0], rows_start_end[1], True, num_parallel)
 
@@ -1070,6 +1075,7 @@ def filter_using_operator(file_data, data_file_key, fltr, cc_value_column_index,
 
 def find_positions_g(file_data, data_file_key, value_coords, fltr, start_search_position, end_search_position, all_false_operator):
     smallest_value = parse_row_value(file_data, data_file_key, start_search_position, value_coords)
+
     if smallest_value == b"":
         return start_search_position, end_search_position
 

@@ -873,11 +873,11 @@ def run_super_test(description, fltr, select_columns, num_parallel, tmp_dir_path
 #sys.exit()
 
 #for compression_type in [None]:
-for compression_type in ["zstd"]:
-#for compression_type in [None, "zstd"]:
+#for compression_type in ["zstd"]:
+for compression_type in [None, "zstd"]:
     # Medium tests
-#    run_larger_tests(num_parallel=1, size="medium", extension="", discrete1_index=11, numeric1_index=21, build_outputs=True, compression_type=compression_type)
-    run_larger_tests(num_parallel=2, size="medium", extension="", discrete1_index=11, numeric1_index=21, build_outputs=True, compression_type=compression_type)
+    run_larger_tests(num_parallel=1, size="medium", extension="", discrete1_index=11, numeric1_index=21, build_outputs=True, verbose=True, compression_type=compression_type, tmp_dir_path="/tmp/medium")
+#    run_larger_tests(num_parallel=2, size="medium", extension="", discrete1_index=11, numeric1_index=21, build_outputs=True, verbose=True, compression_type=compression_type, tmp_dir_path="/tmp/medium")
 
     # Large tests
 #    num_parallel = 1
