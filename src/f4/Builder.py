@@ -8,7 +8,7 @@ joblib = __import__('joblib', globals(), locals())
 # Public function(s)
 #####################################################
 
-def convert_delimited_file(delimited_file_path, f4_file_path, index_columns=[], delimiter="\t", comment_prefix="#", compression_type=None, num_parallel=1, tmp_dir_path=None, compress_intermediate_data_files=True, verbose=False):
+def convert_delimited_file(delimited_file_path, f4_file_path, index_columns=[], delimiter="\t", comment_prefix="#", compression_type=None, num_parallel=1, tmp_dir_path=None, verbose=False):
     print_message(f"Converting from {delimited_file_path} to {f4_file_path}.", verbose)
 
     if type(delimiter) != str:
@@ -47,7 +47,7 @@ def convert_delimited_file(delimited_file_path, f4_file_path, index_columns=[], 
     joblib.Parallel(n_jobs=num_parallel)(joblib.delayed(parse_column_info)(delimited_file_path, f4_file_path, comment_prefix, delimiter, file_read_chunk_size, chunk_number, chunk_indices[0], chunk_indices[1], tmp_dir_path2, out_items_chunk_size, verbose) for chunk_number, chunk_indices in enumerate(column_chunk_indices))
 
     # Save and format data to a temp file for each column chunk.
-    joblib.Parallel(n_jobs=num_parallel)(joblib.delayed(save_formatted_data)(delimited_file_path, f4_file_path, comment_prefix, delimiter, file_read_chunk_size, chunk_number, chunk_indices[0], chunk_indices[1], tmp_dir_path2, out_items_chunk_size, compress_intermediate_data_files, verbose) for chunk_number, chunk_indices in enumerate(column_chunk_indices))
+    joblib.Parallel(n_jobs=num_parallel)(joblib.delayed(save_formatted_data)(delimited_file_path, f4_file_path, comment_prefix, delimiter, file_read_chunk_size, chunk_number, chunk_indices[0], chunk_indices[1], tmp_dir_path2, out_items_chunk_size, verbose) for chunk_number, chunk_indices in enumerate(column_chunk_indices))
 
     # Combine column databases across the chunks.
     combine_column_databases(delimited_file_path, f4_file_path, column_chunk_indices, tmp_dir_path2, verbose)
@@ -59,34 +59,33 @@ def convert_delimited_file(delimited_file_path, f4_file_path, index_columns=[], 
 
     # Merge the saved/formatted data across the column chunks.
     # Get number of rows.
-    num_rows, line_length = combine_data_for_column_chunks(delimited_file_path, f4_file_path, column_chunk_indices, tmp_dir_path2, compress_intermediate_data_files, verbose)
+    num_rows, line_length = combine_data_for_column_chunks(delimited_file_path, f4_file_path, column_chunk_indices, tmp_dir_path2, verbose)
 
     if num_rows == 0:
         raise Exception(f"A header row but no data rows were detected in {delimited_file_path}.")
 
     if index_columns:
-        build_indexes(f4_file_path, tmp_dir_path2, index_columns, num_rows, line_length, num_parallel, compress_intermediate_data_files, get_columns_database_file_path(tmp_dir_path2), verbose)
+        build_indexes(f4_file_path, tmp_dir_path2, index_columns, num_rows, line_length, num_parallel, get_columns_database_file_path(tmp_dir_path2), verbose)
 
     remove(get_columns_database_file_path(tmp_dir_path2))
 
     #TODO: Parallelize this by row chunks.
     if compression_type:
-        compress_data(tmp_dir_path2, compression_type, compress_intermediate_data_files, num_rows, line_length)
+        compress_data(tmp_dir_path2, compression_type, num_rows, line_length)
     else:
-        if compress_intermediate_data_files:
-            # The combined file will be compressed, so we need to decompress it.
-            rename(get_data_path(tmp_dir_path2, "data"), get_data_path(tmp_dir_path2, "datacmpr"))
+        # The combined file will be compressed, so we need to decompress it.
+        rename(get_data_path(tmp_dir_path2, "data"), get_data_path(tmp_dir_path2, "datacmpr"))
 
-            with get_temp_file_handle(get_data_path(tmp_dir_path2, "datacmpr"), "rb", True) as cmpr_file:
-                with open(get_data_path(tmp_dir_path2, "data"), "wb") as data_file:
-                    chunk_size = 1000000
-                    while True:
-                        content = cmpr_file.read(chunk_size)
-                        # If the content is empty, end of file has been reached
-                        if not content:
-                            break
+        with get_temp_file_handle(get_data_path(tmp_dir_path2, "datacmpr"), "rb") as cmpr_file:
+            with open(get_data_path(tmp_dir_path2, "data"), "wb") as data_file:
+                chunk_size = 1000000
+                while True:
+                    content = cmpr_file.read(chunk_size)
+                    # If the content is empty, end of file has been reached
+                    if not content:
+                        break
 
-                        data_file.write(content)
+                    data_file.write(content)
 
     combine_into_single_file(delimited_file_path, f4_file_path, tmp_dir_path2, file_read_chunk_size, verbose)
 
@@ -398,7 +397,7 @@ def parse_column_info(delimited_file_path, f4_file_path, comment_prefix, delimit
     print_message(f"Done parsing column names, sizes, and types when converting {delimited_file_path} to {f4_file_path} for columns {start_column_index} - {end_column_index - 1}.", verbose)
 
 # This function is executed in parallel.
-def save_formatted_data(delimited_file_path, f4_file_path, comment_prefix, delimiter, file_read_chunk_size, chunk_number, start_column_index, end_column_index, tmp_dir_path, out_items_chunk_size, compress_intermediate_data_files, verbose):
+def save_formatted_data(delimited_file_path, f4_file_path, comment_prefix, delimiter, file_read_chunk_size, chunk_number, start_column_index, end_column_index, tmp_dir_path, out_items_chunk_size, verbose):
     data_file_path = get_data_path(tmp_dir_path, "data", chunk_number)
     ll_file_path = get_data_path(tmp_dir_path, "ll", chunk_number)
 
@@ -420,7 +419,7 @@ def save_formatted_data(delimited_file_path, f4_file_path, comment_prefix, delim
         skip_line(in_file)  # Header line
 
         # Save data.
-        with get_temp_file_handle(data_file_path, "wb", compress_intermediate_data_files) as data_file:
+        with get_temp_file_handle(data_file_path, "wb") as data_file:
             out_list = []
             num_columns_to_parse = end_column_index - start_column_index
 
@@ -621,12 +620,12 @@ def save_column_coordinates(delimited_file_path, f4_file_path, out_items_chunk_s
 
     write_str_to_file(get_data_path(tmp_dir_path, f"ccml"), str(max_coord_length).encode())
 
-def combine_data_for_column_chunks(delimited_file_path, f4_file_path, column_chunk_indices, tmp_dir_path, compress_intermediate_data_files, verbose):
+def combine_data_for_column_chunks(delimited_file_path, f4_file_path, column_chunk_indices, tmp_dir_path, verbose):
     print_message(f"Combining data for column chunks when converting {delimited_file_path} to {f4_file_path}.", verbose)
 
     file_handles = {}
     for chunk_number in range(len(column_chunk_indices)):
-        file_handles[chunk_number] = get_temp_file_handle(get_data_path(tmp_dir_path, "data", chunk_number), "rb", compress_intermediate_data_files)
+        file_handles[chunk_number] = get_temp_file_handle(get_data_path(tmp_dir_path, "data", chunk_number), "rb")
 
     line_lengths = {}
     for chunk_number in range(len(column_chunk_indices)):
@@ -636,7 +635,7 @@ def combine_data_for_column_chunks(delimited_file_path, f4_file_path, column_chu
 
     line_length_total = sum(line_lengths.values())
 
-    with get_temp_file_handle(get_data_path(tmp_dir_path, "data"), "wb", compress_intermediate_data_files) as out_file:
+    with get_temp_file_handle(get_data_path(tmp_dir_path, "data"), "wb") as out_file:
         num_rows = 0
         while line_0 := file_handles[0].read(line_lengths[0]):
             num_rows += 1
@@ -651,7 +650,7 @@ def combine_data_for_column_chunks(delimited_file_path, f4_file_path, column_chu
 
     return num_rows, line_length_total
 
-def compress_data(tmp_dir_path, compression_type, compress_intermediate_data_files, num_rows, line_length):
+def compress_data(tmp_dir_path, compression_type, num_rows, line_length):
     # For now, we assume z-standard compression.
     compressor = ZstdCompressor(level=1)
 
@@ -662,7 +661,7 @@ def compress_data(tmp_dir_path, compression_type, compress_intermediate_data_fil
     compressed_lines_to_save = []
     compressed_chars_not_saved = 0
 
-    with get_temp_file_handle(get_data_path(tmp_dir_path, "data"), "rb", compress_intermediate_data_files) as file_handle:
+    with get_temp_file_handle(get_data_path(tmp_dir_path, "data"), "rb") as file_handle:
         with open(get_data_path(tmp_dir_path, "cmpr"), "wb") as cmpr_file:
             with open(get_data_path(tmp_dir_path, "re_tmp"), "wb") as re_file:
                 for row_i in range(num_rows):
@@ -737,13 +736,13 @@ def compress_data(tmp_dir_path, compression_type, compress_intermediate_data_fil
         # else:
         cmpr_file.write(b"z")
 
-def build_indexes(f4_file_path, tmp_dir_path, index_columns, num_rows, line_length, num_parallel, compress_intermediate_data_files, columns_database_file_path, verbose=False):
+def build_indexes(f4_file_path, tmp_dir_path, index_columns, num_rows, line_length, num_parallel, columns_database_file_path, verbose=False):
     index_info_dict = {}
 
     if isinstance(index_columns, str):
         index_columns, reverse_status_dict = check_index_column_reverse_status([index_columns])
 
-        build_index(f4_file_path, tmp_dir_path, 0, index_columns, reverse_status_dict, num_rows, line_length, compress_intermediate_data_files, columns_database_file_path, verbose)
+        build_index(f4_file_path, tmp_dir_path, 0, index_columns, reverse_status_dict, num_rows, line_length, columns_database_file_path, verbose)
         index_info_dict[(index_columns, reverse_status_dict[index_columns])] = 0
     elif isinstance(index_columns, list):
         # Verify whether the index_columns are valid.
@@ -756,7 +755,7 @@ def build_indexes(f4_file_path, tmp_dir_path, index_columns, num_rows, line_leng
                 raise Exception("You may not index a column with a vertical bar (|) in its name.")
 
         keys = joblib.Parallel(n_jobs=num_parallel)(
-            joblib.delayed(build_index_parallel)(f4_file_path, tmp_dir_path, num_rows, line_length, i, index_column, compress_intermediate_data_files, columns_database_file_path, verbose)
+            joblib.delayed(build_index_parallel)(f4_file_path, tmp_dir_path, num_rows, line_length, i, index_column, columns_database_file_path, verbose)
             for i, index_column in enumerate(index_columns)
         )
 
@@ -767,7 +766,7 @@ def build_indexes(f4_file_path, tmp_dir_path, index_columns, num_rows, line_leng
 
     write_str_to_file(f"{tmp_dir_path}i", serialize(index_info_dict))
 
-def build_index(f4_file_path, tmp_dir_path, index_number, index_columns, reverse_status_dict, num_rows, line_length, compress_intermediate_data_files, columns_database_file_path, verbose):
+def build_index(f4_file_path, tmp_dir_path, index_number, index_columns, reverse_status_dict, num_rows, line_length, columns_database_file_path, verbose):
     out_index_file_path_prefix = f"{tmp_dir_path}i{index_number}"
     ccml = fast_int(read_str_from_file(get_data_path(tmp_dir_path, "ccml")))
 
@@ -819,7 +818,7 @@ def build_index(f4_file_path, tmp_dir_path, index_number, index_columns, reverse
     sql_insert = f'''INSERT INTO index_data ({', '.join([f"index_column{index_column_indexes_sorted[i]}" for i in range(len(index_column_indexes_sorted))])})
                      VALUES ({', '.join(['?' for x in index_column_indexes_sorted])})'''
 
-    with get_temp_file_handle(get_data_path(tmp_dir_path, "data"), "rb", compress_intermediate_data_files) as file_handle:
+    with get_temp_file_handle(get_data_path(tmp_dir_path, "data"), "rb") as file_handle:
         for row_index in range(num_rows):
             start_pos = row_index * line_length
 
@@ -922,11 +921,11 @@ def build_index(f4_file_path, tmp_dir_path, index_number, index_columns, reverse
 
     print_message(f"Done building index for {', '.join(index_columns)} column(s) in {f4_file_path}.", verbose)
 
-def build_index_parallel(f4_file_path, tmp_dir_path, num_rows, line_length, index_number, index_column, compress_intermediate_data_files, columns_database_file_path, verbose):
+def build_index_parallel(f4_file_path, tmp_dir_path, num_rows, line_length, index_number, index_column, columns_database_file_path, verbose):
     index_column_list = [index_column] if isinstance(index_column, str) else index_column
     index_column_list, reverse_status_dict = check_index_column_reverse_status(index_column_list)
 
-    build_index(f4_file_path, tmp_dir_path, index_number, index_column_list, reverse_status_dict, num_rows, line_length, compress_intermediate_data_files, columns_database_file_path, verbose)
+    build_index(f4_file_path, tmp_dir_path, index_number, index_column_list, reverse_status_dict, num_rows, line_length, columns_database_file_path, verbose)
 
     key = []
     for index_column in index_column_list:
