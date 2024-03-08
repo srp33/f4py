@@ -870,7 +870,7 @@ def run_super_test(description, fltr, select_columns, num_parallel, tmp_dir_path
     print(f"  {elapsed_time:.2f} seconds, {num_lines} lines in output file")
 
 run_all_small_tests()
-#sys.exit()
+sys.exit()
 
 #for compression_type in [None]:
 #for compression_type in ["zstd"]:

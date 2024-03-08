@@ -1,5 +1,3 @@
-import shutil
-
 from .Utilities import *
 global joblib
 joblib = __import__('joblib', globals(), locals())
@@ -91,7 +89,7 @@ def convert_delimited_file(delimited_file_path, f4_file_path, index_columns=[], 
 
     combine_into_single_file(delimited_file_path, f4_file_path, tmp_dir_path2, file_read_chunk_size, verbose)
 
-    shutil.rmtree(tmp_dir_path2)
+    rmtree(tmp_dir_path2)
 
     print_message(f"Done converting {delimited_file_path} to {f4_file_path}.", verbose)
 
