@@ -31,12 +31,14 @@ def get_current_version_major():
     return get_current_version().split(".")[0]
 
 def read_str_from_file(file_path, file_extension=""):
-    with open(file_path + file_extension, 'rb') as the_file:
+    with open_temp_file_compressed(file_path + file_extension) as the_file:
         return the_file.read()
 
 def write_str_to_file(file_path, the_string):
-    with open(file_path, 'wb') as the_file:
+    with open_temp_file_to_compress(file_path) as the_file:
         the_file.write(the_string)
+
+    write_temp_file_original_size(file_path, len(the_string))
 
 def print_message(message, verbose=False, count=None):
     if verbose:
@@ -62,29 +64,67 @@ def get_delimited_file_handle(file_path):
     else:
         return open(file_path, "rb")
 
-def get_temp_file_handle(file_path, mode):
-    fh = open(file_path, mode)
+def open_temp_file_to_compress(file_path):
+    fh = open(file_path, "wb")
+    return ZstdCompressor(level=1, write_content_size=True).stream_writer(fh)
 
-    if mode == "rb":
-        return ZstdDecompressor().stream_reader(fh)
-    else:
-        return ZstdCompressor(level=1).stream_writer(fh)
+def write_temp_file_original_size(file_path, num_bytes):
+    with open(get_temp_file_original_size_path(file_path), "wb") as size_file:
+        size_file.write(str(num_bytes).encode())
+
+def get_temp_file_original_size(file_path):
+    with open(get_temp_file_original_size_path(file_path), "rb") as size_file:
+        return int(size_file.read().decode())
+
+def get_temp_file_original_size_path(file_path):
+    return f"{file_path}__original_size"
+
+def open_temp_file_compressed(file_path):
+    fh = open(file_path, "rb")
+    return ZstdDecompressor().stream_reader(fh)
+
+def read_compressed_file_line_by_line(compressed_file_path):
+    # Open the compressed file
+    with open(compressed_file_path, 'rb') as compressed_file:
+        # Create a decompressor object
+        dctx = ZstdDecompressor()
+
+        # Create a stream reader to decompress data as it's read
+        with dctx.stream_reader(compressed_file) as reader:
+            # Buffer for storing decompressed data
+            buffer = bytearray()
+            while True:
+                # Read a chunk of decompressed data
+                chunk = reader.read(16384)  # Adjust chunk size as needed
+                if not chunk:
+                    break  # End of file
+
+                buffer.extend(chunk)
+
+                # Process buffer line by line
+                while b'\n' in buffer:
+                    line, buffer = buffer.split(b'\n', 1)
+                    yield line
+
+            # Yield the last line if there's no trailing newline
+            if buffer:
+                yield buffer
 
 def format_string_as_fixed_width(x, size):
     return x + b" " * (size - len(x))
 
-def compress_using_2_grams(value, compression_dict):
-    compressed_value = b""
-
-    for start_i in range(0, len(value), 2):
-        end_i = (start_i + 2)
-        gram = value[start_i:end_i]
-        compressed_value += compression_dict[gram]
-
-    return compressed_value
-
-def get_bigram_size(num_bigrams):
-    return ceil(log(num_bigrams, 2) / 8)
+# def compress_using_2_grams(value, compression_dict):
+#     compressed_value = b""
+#
+#     for start_i in range(0, len(value), 2):
+#         end_i = (start_i + 2)
+#         gram = value[start_i:end_i]
+#         compressed_value += compression_dict[gram]
+#
+#     return compressed_value
+#
+# def get_bigram_size(num_bigrams):
+#     return ceil(log(num_bigrams, 2) / 8)
 
 # def compress_file_zstd(in_file, out_file):
 #     chunk_size = 262144
