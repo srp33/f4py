@@ -84,9 +84,7 @@ def open_temp_file_compressed(file_path):
     return ZstdDecompressor().stream_reader(fh)
 
 def read_compressed_file_line_by_line(compressed_file_path):
-    # Open the compressed file
     with open(compressed_file_path, 'rb') as compressed_file:
-        # Create a decompressor object
         dctx = ZstdDecompressor()
 
         # Create a stream reader to decompress data as it's read

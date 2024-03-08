@@ -719,12 +719,6 @@ def compress_data(tmp_dir_path, compression_type, num_rows, line_length):
 
     write_str_to_file(get_data_path(tmp_dir_path, "mrel"), str(mrel).encode())
 
-    # with open_temp_file_compressed(get_data_path(tmp_dir_path, "re_tmp")) as re_tmp_file:
-    #     with open_temp_file_to_compress(get_data_path(tmp_dir_path, "re")) as re_file:
-    #         for line in re_tmp_file:
-    #             row_end = line.rstrip(b"\n")
-    #             re_file.write(format_string_as_fixed_width(row_end, mrel))
-
     re_file_original_size = 0
     with open_temp_file_to_compress(get_data_path(tmp_dir_path, "re")) as re_file:
         for line in read_compressed_file_line_by_line(get_data_path(tmp_dir_path, "re_tmp")):
