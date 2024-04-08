@@ -188,7 +188,7 @@ def preview_column_names(delimited_file_path, f4_file_path, comment_prefix, deli
             if len(column_name) > max_column_name_length:
                 max_column_name_length = len(column_name)
 
-        in_file.seek(current_index + newline_index + 1)
+        # in_file.seek(current_index + newline_index + 1)
 
     num_cols = current_column_index + 1
 

@@ -10,14 +10,14 @@ def transpose(f4_src_file_path, f4_dest_file_path, src_column_for_names, num_par
     tmp_dir_path2 = prepare_tmp_dir(tmp_dir_path)
     tsv_file_path = f"{tmp_dir_path2}data.tsv.zstd"
 
+    #######################################################
+    # Write the new column names to the temporary TSV file.
+    #######################################################
     with initialize(f4_src_file_path) as src_file_data:
         num_rows = src_file_data.cache_dict["num_rows"]
         num_cols = src_file_data.cache_dict["num_cols"]
 
         with open_temp_file_to_compress(tsv_file_path) as tsv_file:
-            ###############################
-            # Write the new column names.
-            ###############################
             src_column_for_names_index = get_column_index_from_name(src_file_data, src_column_for_names.encode())
             src_column_for_names_coords = parse_data_coord(src_file_data, "", src_column_for_names_index)
             parse_row_value_function = get_parse_row_value_function(src_file_data)
@@ -35,6 +35,8 @@ def transpose(f4_src_file_path, f4_dest_file_path, src_column_for_names, num_par
     # Read one column at a time and save to temporary TSV file.
     ###########################################################
 
+    #TODO:
+    num_parallel = 2
     if num_parallel == 1:
         transpose_chunk(f4_src_file_path, num_rows, src_column_for_names_index, range(num_cols), tsv_file_path, "ab", verbose)
     else:
