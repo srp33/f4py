@@ -258,7 +258,7 @@ def populate_database_with_column_names(delimited_file_path, comment_prefix, del
                     cursor.executemany(sql, save_tuples)
                     save_tuples = []
 
-        in_file.seek(current_index + newline_index + 1)
+        # in_file.seek(current_index + newline_index + 1)
 
     if len(save_tuples) > 0:
         cursor.executemany(sql, save_tuples)
@@ -284,7 +284,7 @@ def parse_column_info(delimited_file_path, f4_file_path, comment_prefix, delimit
     # We will find the max size for each column and count how many there are of each type.
     with get_delimited_file_handle(delimited_file_path) as in_file:
         skip_comments(in_file, comment_prefix)
-        skip_line(in_file)
+        skip_line(in_file) # Header line
 
         # Loop through the file for the specified columns and update the dictionaries.
         save_tuples = []
@@ -985,35 +985,41 @@ def skip_comments(in_file, comment_prefix):
 
     in_file.seek(in_file.tell() - len(next_text))
 
-# This function is slow when working with gzipped files because of the backwards seek(). Only use it sparingly.
 def skip_line(in_file):
-    chunk_size = 100000
-    current_index = in_file.tell()
+    while True:
+        next_char = in_file.read(1)
+        if next_char == b"\n":
+            break
 
-    while (newline_index := (next_text := in_file.read(chunk_size)).find(b"\n")) == -1:
-        current_index += len(next_text)
+# This function is slow when working with gzipped files because of the backwards seek(). Only use it sparingly.
+# def skip_line(in_file):
+#     chunk_size = 100000
+#     current_index = in_file.tell()
+#
+#     while (newline_index := (next_text := in_file.read(chunk_size)).find(b"\n")) == -1:
+#         current_index += len(next_text)
+#
+#     in_file.seek(current_index + newline_index + 1)
 
-    in_file.seek(current_index + newline_index + 1)
-
-def skip_lines(in_file, num_lines_to_skip):
-    if num_lines_to_skip <= 0:
-        return
-
-    chunk_size = 100000
-    num_lines_skipped = 0
-
-    while next_text := in_file.read(chunk_size):
-        how_far_to_reverse = len(next_text)
-
-        while (newline_index := next_text.find(b"\n")) > -1:
-            num_lines_skipped += 1
-            how_far_to_reverse -= newline_index + 1
-
-            if num_lines_skipped == num_lines_to_skip:
-                in_file.seek(in_file.tell() - how_far_to_reverse)
-                return
-            else:
-                next_text = next_text[newline_index + 1:]
+# def skip_lines(in_file, num_lines_to_skip):
+#     if num_lines_to_skip <= 0:
+#         return
+#
+#     chunk_size = 100000
+#     num_lines_skipped = 0
+#
+#     while next_text := in_file.read(chunk_size):
+#         how_far_to_reverse = len(next_text)
+#
+#         while (newline_index := next_text.find(b"\n")) > -1:
+#             num_lines_skipped += 1
+#             how_far_to_reverse -= newline_index + 1
+#
+#             if num_lines_skipped == num_lines_to_skip:
+#                 in_file.seek(in_file.tell() - how_far_to_reverse)
+#                 return
+#             else:
+#                 next_text = next_text[newline_index + 1:]
 
 def iterate_delimited_file_column_indices(in_file, delimiter, file_read_chunk_size, start_column_index, end_column_index):
     previous_text = b""
