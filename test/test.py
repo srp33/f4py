@@ -545,25 +545,25 @@ def run_small_tests(in_file_path, f4_file_path, out_file_path, num_parallel = 1,
 
 def test_transpose(tsv_file_path, f4_file_path, out_file_path, num_parallel, compression_type):
     f4.convert_delimited_file(tsv_file_path, f4_file_path, num_parallel=num_parallel, compression_type=compression_type)
-    f4.transpose(f4_file_path, out_file_path, num_parallel=num_parallel)
+    f4.transpose(f4_file_path, out_file_path, src_column_for_names="ID", num_parallel=num_parallel)
 
-    check_result("Dimensions", "Number of rows", f4.get_num_rows(out_file_path), 8)
-    check_result("Dimensions", "Number of columns", f4.get_num_cols(out_file_path), 6)
+    check_result("Transpose - Dimensions", "Number of rows", f4.get_num_rows(out_file_path), 8)
+    check_result("Transpose - Dimensions", "Number of columns", f4.get_num_cols(out_file_path), 6)
 
-    check_result("Column types", "ID column", f4.get_column_type_from_name(out_file_path, "ID"), "s")
-    check_result("Column types", "E column", f4.get_column_type_from_name(out_file_path, "E"), "s")
-    check_result("Column types", "A column", f4.get_column_type_from_name(out_file_path, "A"), "s")
-    check_result("Column types", "B column", f4.get_column_type_from_name(out_file_path, "B"), "s")
-    check_result("Column types", "C column", f4.get_column_type_from_name(out_file_path, "C"), "s")
-    check_result("Column types", "D column", f4.get_column_type_from_name(out_file_path, "D"), "s")
+    check_result("Transpose - Column types", "ID column", f4.get_column_type_from_name(out_file_path, "ID"), "s")
+    check_result("Transpose - Column types", "E column", f4.get_column_type_from_name(out_file_path, "E"), "s")
+    check_result("Transpose - Column types", "A column", f4.get_column_type_from_name(out_file_path, "A"), "s")
+    check_result("Transpose - Column types", "B column", f4.get_column_type_from_name(out_file_path, "B"), "s")
+    check_result("Transpose - Column types", "C column", f4.get_column_type_from_name(out_file_path, "C"), "s")
+    check_result("Transpose - Column types", "D column", f4.get_column_type_from_name(out_file_path, "D"), "s")
 
     out_file_path_2 = out_file_path + "2"
     f4.query(out_file_path, f4.StringFilter("ID", operator.eq, "OrdinalA"), ["A"], out_file_path_2, num_parallel=num_parallel)
-    check_results("Filter by ID", read_file_into_lists(out_file_path_2), [[b"A"], [b"Low"]])
+    check_results("Transpose - Filter by ID", read_file_into_lists(out_file_path_2), [[b"A"], [b"Low"]])
     os.unlink(out_file_path_2)
 
     f4.query(out_file_path, f4.StringFilter("B", operator.eq, "High"), ["D"], out_file_path_2, num_parallel=num_parallel)
-    check_results("Filter by B", read_file_into_lists(out_file_path_2), [[b"D"], [b"Med"]])
+    check_results("Transpose - Filter by B", read_file_into_lists(out_file_path_2), [[b"D"], [b"Med"]])
     os.unlink(out_file_path_2)
 
 def test_inner_join(num_parallel, compression_type):
@@ -787,21 +787,15 @@ def run_all_small_tests():
     run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, compression_type = "zstd", index_columns = index_columns)
     run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2, compression_type = "zstd", index_columns = index_columns)
 
-    ## Small tests with dictionary-based compression
-    ##run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, compression_type = "dictionary")
-    ##run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2, compression_type = "dictionary")
-
-    ## Small tests with dictionary-based compression (and indexing)
-    ##run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, compression_type = "dictionary", index_columns = index_columns)
-    ##run_small_tests("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2, compression_type = "dictionary", index_columns = index_columns)
-
     # Transpose without compression
-    #test_transpose("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, compression_type = None)
-    #test_transpose("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2, compression_type = None)
+    f4_transposed_file_path = "/tmp/small_transposed.f4"
+    test_transpose("data/small.tsv", f4_file_path, f4_transposed_file_path, num_parallel = 1, compression_type = None)
+    test_transpose("data/small.tsv", f4_file_path, f4_transposed_file_path, num_parallel = 2, compression_type = None)
 
     # Transpose with zstd compression
-    #test_transpose("data/small.tsv", f4_file_path, out_file_path, num_parallel = 1, compression_type = "zstd")
-    #test_transpose("data/small.tsv", f4_file_path, out_file_path, num_parallel = 2, compression_type = "zstd")
+    f4_transposed_file_path = "/tmp/small_transposed_zstd.f4"
+    test_transpose("data/small.tsv", f4_file_path, f4_transposed_file_path, num_parallel = 1, compression_type = "zstd")
+    test_transpose("data/small.tsv", f4_file_path, f4_transposed_file_path, num_parallel = 2, compression_type = "zstd")
 
     # Inner join without compression
     #test_inner_join(num_parallel = 1, compression_type = None)
@@ -869,20 +863,20 @@ def run_super_test(description, fltr, select_columns, num_parallel, tmp_dir_path
 
     print(f"  {elapsed_time:.2f} seconds, {num_lines} lines in output file")
 
-run_all_small_tests()
-sys.exit()
+#run_all_small_tests()
+#sys.exit()
 
 #for compression_type in [None]:
 #for compression_type in ["zstd"]:
 for compression_type in [None, "zstd"]:
     # Medium tests
-    run_larger_tests(num_parallel=1, size="medium", extension="", discrete1_index=11, numeric1_index=21, build_outputs=True, verbose=True, compression_type=compression_type, tmp_dir_path="/tmp/medium")
-    run_larger_tests(num_parallel=2, size="medium", extension="", discrete1_index=11, numeric1_index=21, build_outputs=True, verbose=True, compression_type=compression_type, tmp_dir_path="/tmp/medium")
+#    run_larger_tests(num_parallel=1, size="medium", extension="", discrete1_index=11, numeric1_index=21, build_outputs=True, verbose=True, compression_type=compression_type, tmp_dir_path="/tmp/medium")
+#    run_larger_tests(num_parallel=2, size="medium", extension="", discrete1_index=11, numeric1_index=21, build_outputs=True, verbose=True, compression_type=compression_type, tmp_dir_path="/tmp/medium")
 
     # Large tests
 #    num_parallel = 1
-#    num_parallel = 4
-    num_parallel = 16
+    num_parallel = 4
+#    num_parallel = 16
     build_outputs = True
     #build_outputs = False
     verbose = True
@@ -909,7 +903,7 @@ for compression_type in [None, "zstd"]:
 
     #Attempt this? https://community.hpe.com/t5/servers-systems-the-right/cray-graph-engine-takes-on-a-trillion-triples/ba-p/7096770
 
-    ##f4.transpose("data/medium.f4", "/tmp/medium_transposed.f4", num_parallel=num_parallel, verbose=verbose)
+    f4.transpose("data/medium.f4", "/tmp/medium_transposed.f4", src_column_for_names="ID", num_parallel=num_parallel, verbose=verbose)
     ##f4.transpose("data/large_tall.f4", "/tmp/large_tall_transposed.f4", num_parallel=num_parallel, verbose=verbose)
 
     ##f4.inner_join("data/medium.f4", "data/medium.f4", "ID", "/tmp/medium_joined.f4", num_parallel=num_parallel, verbose=verbose)

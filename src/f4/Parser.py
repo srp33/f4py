@@ -747,12 +747,19 @@ def _get_column_index_chunk_from_names(file_data, name_index_coords, column_name
     return column_indices
 
 # def get_column_name_from_index(file_data, column_index):
-#     position = get_identifier_row_index(file_data, "cin", column_index, file_data.cache_dict["num_cols"])
+#     cn_start = file_data.file_map_dict["cn"][0]
+#     cn_end = file_data.file_map_dict["cn"][1]
 #
-#     if position < 0:
-#         raise Exception(f"Could not retrieve name because column index {column_index.decode()} was not found.")
-#
-#     return position
+#     cn_current = cn_start
+#     column_index_current = 0
+
+
+
+    # column_name = b""
+    # while cn_current < cn_end and (next_char := src_file_data.file_handle[cn_current:(cn_current + 1)]) != b"\n":
+    #     column_name += next_char
+    #     cn_current += 1
+    # cn_current += 1
 
 def get_column_type_from_index(file_data, column_index):
     return next(parse_data_values_from_file(file_data, "ct", column_index, 1, [[0, 1]])).decode()
@@ -827,11 +834,8 @@ def parse_data_values_from_file(file_data, data_file_key, start_element, segment
 def get_parse_row_value_function(file_data):
     if not file_data.decompression_type:
         return parse_row_value
-    # elif file_data.decompression_type == "zstd":
     else:
         return parse_zstd_compressed_row_value
-    # else:
-    #     return parse_dictionary_compressed_row_value
 
 def parse_row_value(file_data, data_file_key, row_index, column_coords):
     return parse_data_value_from_file(file_data, data_file_key, row_index, file_data.cache_dict[data_file_key + "ll"], column_coords).rstrip(b" ")
@@ -883,11 +887,8 @@ def get_zstd_compressed_row(file_data, row_index):
 def get_parse_row_values_function(file_data):
     if not file_data.decompression_type:
         return parse_row_values
-    # elif file_data.decompression_type == "zstd":
     else:
         return parse_zstd_compressed_row_values
-    # else:
-    #     return parse_dictionary_compressed_row_values
 
 def parse_row_values(file_data, data_file_key, row_index, column_coords):
     return list(parse_data_values_from_file(file_data, data_file_key, row_index, file_data.cache_dict[data_file_key + "ll"], column_coords))

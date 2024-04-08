@@ -50,8 +50,6 @@ def convert_delimited_file(delimited_file_path, f4_file_path, index_columns=[], 
     # Combine column databases across the chunks.
     combine_column_databases(delimited_file_path, f4_file_path, column_chunk_indices, tmp_dir_path2, verbose)
 
-#TODO: Compress all intermediate files
-
     # Create meta files for all columns.
     save_column_name_info(delimited_file_path, f4_file_path, out_items_chunk_size, tmp_dir_path2, verbose)
     save_column_types(delimited_file_path, f4_file_path, out_items_chunk_size, tmp_dir_path2, verbose)
@@ -92,78 +90,6 @@ def convert_delimited_file(delimited_file_path, f4_file_path, index_columns=[], 
     rmtree(tmp_dir_path2)
 
     print_message(f"Done converting {delimited_file_path} to {f4_file_path}.", verbose)
-
-#TODO: Move to a different file so we don't need to import Parser?
-# def transpose(f4_src_file_path, f4_dest_file_path, num_parallel=1, tmp_dir_path=None, verbose=False):
-#     if num_parallel > 1:
-#         global joblib
-#         joblib = __import__('joblib', globals(), locals())
-#
-#     print_message(f"Transposing {f4_src_file_path} to {f4_dest_file_path}.", verbose)
-#
-#     if tmp_dir_path:
-#         makedirs(tmp_dir_path, exist_ok=True)
-#     else:
-#         tmp_dir_path = mkdtemp()
-#
-#     tmp_dir_path = fix_dir_path_ending(tmp_dir_path)
-#     makedirs(tmp_dir_path, exist_ok=True)
-#     tmp_tsv_file_path = f"{tmp_dir_path}tmp.tsv.gz"
-#
-#     with initialize(f4_src_file_path) as src_file_data:
-#         column_names, column_type_dict, column_coords_dict, bigram_size_dict = get_column_meta(src_file_data, set(), [])
-#         column_coords = [column_coords_dict[name] for name in column_names]
-#         num_rows = src_file_data.stat_dict["num_rows"]
-#
-#     if num_parallel == 1:
-#         chunk_file_path = transpose_lines_to_temp(f4_src_file_path, tmp_dir_path, 0, num_rows, column_names, column_coords, bigram_size_dict, verbose)
-#
-#         print_message(f"Extracting transposed values from {chunk_file_path} for {f4_src_file_path}.", verbose)
-#         with gzip.open(tmp_tsv_file_path, "w", compresslevel=1) as tmp_tsv_file:
-#             with open(chunk_file_path, "rb") as chunk_file:
-#                 for column_index, column_name in enumerate(column_names):
-#                     tmp_tsv_file.write(column_name)
-#
-#                     column_size = column_coords[column_index][1] - column_coords[column_index][0]
-#                     for row_index in range(num_rows):
-#                         tmp_tsv_file.write(b"\t" + chunk_file.read(column_size))
-#
-#                     tmp_tsv_file.write(b"\n")
-#
-#             remove(chunk_file_path)
-#     else:
-#         row_index_chunks = list(split_integer_list_into_chunks(list(range(num_rows)), num_parallel))
-#
-#         chunk_file_paths = joblib.Parallel(n_jobs=num_parallel)(
-#              joblib.delayed(transpose_lines_to_temp)(f4_src_file_path, tmp_dir_path, row_index_chunk[0], row_index_chunk[-1] + 1, column_names, column_coords, bigram_size_dict, verbose) for row_index_chunk in row_index_chunks)
-#
-#         chunk_file_handles = {}
-#         for row_index_chunk in row_index_chunks:
-#             chunk_file_path = f"{tmp_dir_path}{row_index_chunk[0]}"
-#             chunk_file_handles[chunk_file_path] = open(chunk_file_path, "rb")
-#
-#         try:
-#             with gzip.open(tmp_tsv_file_path, "w", compresslevel=1) as tmp_tsv_file:
-#                 for column_index, column_name in enumerate(column_names):
-#                     tmp_tsv_file.write(column_name)
-#
-#                     column_size = column_coords[column_index][1] - column_coords[column_index][0]
-#
-#                     for row_index_chunk in row_index_chunks:
-#                         chunk_file_path = f"{tmp_dir_path}{row_index_chunk[0]}"
-#
-#                         for row_index in range(row_index_chunk[0], row_index_chunk[-1] + 1):
-#                             tmp_tsv_file.write(b"\t" + chunk_file_handles[chunk_file_path].read(column_size))
-#
-#                     tmp_tsv_file.write(b"\n")
-#         finally:
-#             for chunk_file_path in chunk_file_handles:
-#                 chunk_file_handles[chunk_file_path].close()
-#                 remove(chunk_file_path)
-#
-#     print_message(f"Converting temp file at {tmp_tsv_file_path} to {f4_dest_file_path}.", verbose)
-#     convert_delimited_file(tmp_tsv_file_path, f4_dest_file_path, compression_type=src_file_data.decompression_type, num_parallel=num_parallel, verbose=verbose)
-#     remove(tmp_tsv_file_path)
 
 #TODO: Move to a different file so we don't need to import Parser?
 # def inner_join(f4_left_src_file_path, f4_right_src_file_path, join_column, f4_dest_file_path, num_parallel=1, tmp_dir_path=None, verbose=False):
@@ -494,7 +420,6 @@ def save_column_name_info(delimited_file_path, f4_file_path, out_items_chunk_siz
 
     ##########################################################
     # cni = column name first, sorted by column name
-    # cin = column index first, sorted by column index
     ##########################################################
 
     cniccml = max(len(str(max_column_name_length)), len(str(max_column_name_length + max_column_index_length)))
@@ -1049,6 +974,9 @@ def combine_into_single_file(delimited_file_path, f4_file_path, tmp_dir_path, re
             remove(file_path)
 
 def skip_comments(in_file, comment_prefix):
+    if comment_prefix is None:
+        return
+
     next_text = in_file.read(len(comment_prefix))
 
     while next_text == comment_prefix:
@@ -1155,57 +1083,3 @@ def infer_type(value):
 #
 #     for i in ints:
 #         yield i, values.pop(0)
-
-def prepare_tmp_dir(tmp_dir_path):
-    # Figure out where temp files will be stored and create directory, if needed.
-    if tmp_dir_path:
-        makedirs(tmp_dir_path, exist_ok=True)
-        tmp_dir_path = tmp_dir_path
-    else:
-        tmp_dir_path = mkdtemp()
-
-    unique_id = uuid4()
-    tmp_dir_path = fix_dir_path_ending(tmp_dir_path) + f"f4_{unique_id}/"
-    makedirs(tmp_dir_path, exist_ok=True)
-
-    return tmp_dir_path
-
-#TODO: Move to a different file so we don't need to import Parser?
-# def transpose_lines_to_temp(data_file_path, tmp_dir_path, start_row_index, end_row_index, column_names, column_coords, bigram_size_dict, verbose):
-#     with initialize(data_file_path) as file_data:
-#         tmp_file_path = f"{tmp_dir_path}{start_row_index}"
-#         print_message(f"Transposing lines to {tmp_file_path} for {data_file_path} - start row {start_row_index}, end row {end_row_index}.", verbose)
-#
-#         with open(tmp_file_path, "wb+") as tmp_file:
-#             num_rows = end_row_index - start_row_index
-#
-#             for column_index in range(len(column_names)):
-#                 # Create placeholder space for column values in temp file
-#                 column_coord = column_coords[column_index]
-#                 tmp_file.write(b" " * (column_coord[1] - column_coord[0]) * num_rows)
-#
-#             tmp_file.flush()
-#
-#             with mmap(tmp_file.fileno(), 0, prot=PROT_WRITE) as mm_handle:
-#                 # Iterate through each row and save the values in the correct locations in the temp file
-#                 parse_function = get_parse_row_values_function(file_data)
-#
-#                 # Find the start position of each row
-#                 out_line_positions = [0]
-#                 for column_index in range(1, len(column_names)):
-#                     previous_column_size = column_coords[column_index - 1][1] - column_coords[column_index - 1][0]
-#                     this_line_position = out_line_positions[-1] + previous_column_size * num_rows
-#                     out_line_positions.append(this_line_position)
-#
-#                 # Iterate through each row and store the values in the respective column
-#                 for row_index in range(start_row_index, end_row_index):
-#                     row_values = parse_function(file_data, row_index, column_coords, bigram_size_dict=bigram_size_dict)
-#
-#                     for column_index, value in enumerate(row_values):
-#                         out_position = out_line_positions[column_index]
-#                         column_size = column_coords[column_index][1] - column_coords[column_index][0]
-#                         value = format_string_as_fixed_width(value, column_size)
-#                         mm_handle[out_position:(out_position + len(value))] = value
-#                         out_line_positions[column_index] += len(value)
-#
-#         return tmp_file_path
