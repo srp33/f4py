@@ -120,7 +120,8 @@ def transpose_chunk(f4_src_file_path, num_rows, src_column_for_names_index, col_
                 cn_current += 1
 
             for column_index in col_chunk_range:
-                print_message(f"Transposing {f4_src_file_path} to temporary file {tsv_chunk_file_path} for column {column_index}.", verbose)
+                if len(col_chunk_range) < 100 or column_index % 100 == 0:
+                    print_message(f"Transposing {f4_src_file_path} to temporary file {tsv_chunk_file_path} for column {column_index}.", verbose)
 
                 # Parse the column name, one character at a time.
                 column_name = b""
