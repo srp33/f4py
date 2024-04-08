@@ -875,8 +875,8 @@ for compression_type in [None, "zstd"]:
 
     # Large tests
 #    num_parallel = 1
-    num_parallel = 4
-#    num_parallel = 16
+#    num_parallel = 4
+    num_parallel = 16
     build_outputs = True
     #build_outputs = False
     verbose = True
