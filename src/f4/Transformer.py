@@ -35,8 +35,6 @@ def transpose(f4_src_file_path, f4_dest_file_path, src_column_for_names, num_par
     # Read one column at a time and save to temporary TSV file.
     ###########################################################
 
-    #TODO:
-    num_parallel = 2
     if num_parallel == 1:
         transpose_chunk(f4_src_file_path, num_rows, src_column_for_names_index, range(num_cols), tsv_file_path, "ab", verbose)
     else:
