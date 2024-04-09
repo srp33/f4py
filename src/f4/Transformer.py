@@ -42,17 +42,27 @@ def transpose(f4_src_file_path, f4_dest_file_path, src_column_for_names, num_par
         joblib = __import__('joblib', globals(), locals())
 
         # Transpose the data in chunks.
-        joblib.Parallel(n_jobs=num_parallel)(joblib.delayed(transpose_chunk)(f4_src_file_path, f4_src_file_path, num_rows, src_column_for_names_index, col_chunk_range, f"{tmp_dir_path2}chunk_{chunk_number}.tsv", "wb", verbose) for chunk_number, col_chunk_range in enumerate(generate_range_chunks(num_cols, ceil(num_cols / num_parallel))))
+        joblib.Parallel(n_jobs=num_parallel)(joblib.delayed(transpose_chunk)(
+            f4_src_file_path,
+            f4_src_file_path,
+            num_rows,
+            src_column_for_names_index,
+            col_chunk_range,
+            f"{tmp_dir_path2}chunk_{col_chunk_number}.tsv",
+            "wb",
+            verbose)
+                for col_chunk_number, col_chunk_range in enumerate(generate_range_chunks(num_cols, ceil(num_cols / num_parallel)))
+        )
 
         print_message(f"Combining temp file chunks when transposing {f4_src_file_path} to {f4_dest_file_path}.", verbose)
 
         # Concatenate the chunks to the header line.
         with open_temp_file_to_compress(tsv_file_path, "ab") as tsv_file:
-            for chunk_number, col_chunk_range in enumerate(generate_range_chunks(num_cols, ceil(num_cols / num_parallel))):
-                for line in read_compressed_file_line_by_line(f"{tmp_dir_path2}chunk_{chunk_number}.tsv"):
+            for col_chunk_number, col_chunk_range in enumerate(generate_range_chunks(num_cols, ceil(num_cols / num_parallel))):
+                for line in read_compressed_file_line_by_line(f"{tmp_dir_path2}chunk_{col_chunk_number}.tsv"):
                     tsv_file.write(line + b"\n")
 
-                remove(f"{tmp_dir_path2}chunk_{chunk_number}.tsv")
+                remove(f"{tmp_dir_path2}chunk_{col_chunk_number}.tsv")
 
     print_message(f"Converting temp file at {tsv_file_path} to {f4_dest_file_path} when transposing {f4_src_file_path} to {f4_dest_file_path}.", verbose)
     convert_delimited_file(tsv_file_path, f4_dest_file_path, comment_prefix=None, compression_type=src_file_data.decompression_type, num_parallel=num_parallel, verbose=verbose)
