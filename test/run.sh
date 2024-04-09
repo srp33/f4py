@@ -71,7 +71,7 @@ then
 else
   if [[ "${run_in_background}" == "no" ]]
   then
-    $dockerCommand time bash -c "python3 test.py"
+    $dockerCommand bash -c "time python3 test.py"
   else
     echo Saving output to /tmp/f4.out and /tmp/f4.err
     $dockerCommand bash -c "python3 test.py > /tmp/f4.out 2> /tmp/f4.err"
