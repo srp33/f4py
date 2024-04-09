@@ -36,13 +36,15 @@ def transpose(f4_src_file_path, f4_dest_file_path, src_column_for_names, num_par
     ###########################################################
 
     if num_parallel == 1:
-        transpose_chunk(f4_src_file_path, num_rows, src_column_for_names_index, range(num_cols), tsv_file_path, "ab", verbose)
+        transpose_chunk(f4_src_file_path, f4_src_file_path, num_rows, src_column_for_names_index, range(num_cols), tsv_file_path, "ab", verbose)
     else:
         global joblib
         joblib = __import__('joblib', globals(), locals())
 
         # Transpose the data in chunks.
-        joblib.Parallel(n_jobs=num_parallel)(joblib.delayed(transpose_chunk)(f4_src_file_path, num_rows, src_column_for_names_index, col_chunk_range, f"{tmp_dir_path2}chunk_{chunk_number}.tsv", "wb", verbose) for chunk_number, col_chunk_range in enumerate(generate_range_chunks(num_cols, ceil(num_cols / num_parallel))))
+        joblib.Parallel(n_jobs=num_parallel)(joblib.delayed(transpose_chunk)(f4_src_file_path, f4_src_file_path, num_rows, src_column_for_names_index, col_chunk_range, f"{tmp_dir_path2}chunk_{chunk_number}.tsv", "wb", verbose) for chunk_number, col_chunk_range in enumerate(generate_range_chunks(num_cols, ceil(num_cols / num_parallel))))
+
+        print_message(f"Combining temp file chunks when transposing {f4_src_file_path} to {f4_dest_file_path}.", verbose)
 
         # Concatenate the chunks to the header line.
         with open_temp_file_to_compress(tsv_file_path, "ab") as tsv_file:
@@ -52,7 +54,7 @@ def transpose(f4_src_file_path, f4_dest_file_path, src_column_for_names, num_par
 
                 remove(f"{tmp_dir_path2}chunk_{chunk_number}.tsv")
 
-    print_message(f"Converting temp file at {tsv_file_path} to {f4_dest_file_path}.", verbose)
+    print_message(f"Converting temp file at {tsv_file_path} to {f4_dest_file_path} when transposing {f4_src_file_path} to {f4_dest_file_path}.", verbose)
     convert_delimited_file(tsv_file_path, f4_dest_file_path, comment_prefix=None, compression_type=src_file_data.decompression_type, num_parallel=num_parallel, verbose=verbose)
     remove(tsv_file_path)
 
@@ -107,7 +109,7 @@ def transpose(f4_src_file_path, f4_dest_file_path, src_column_for_names, num_par
     # convert_delimited_file(tmp_tsv_file_path, f4_dest_file_path, compression_type=src_file_data.decompression_type, num_parallel=num_parallel, verbose=verbose)
     # remove(tmp_tsv_file_path)
 
-def transpose_chunk(f4_src_file_path, num_rows, src_column_for_names_index, col_chunk_range, tsv_chunk_file_path, write_mode, verbose):
+def transpose_chunk(f4_src_file_path, f4_dest_file_path, num_rows, src_column_for_names_index, col_chunk_range, tsv_chunk_file_path, write_mode, verbose):
     with initialize(f4_src_file_path) as src_file_data:
         with open_temp_file_to_compress(tsv_chunk_file_path, write_mode) as tsv_file:
             cn_current = src_file_data.file_map_dict["cn"][0]
@@ -121,7 +123,7 @@ def transpose_chunk(f4_src_file_path, num_rows, src_column_for_names_index, col_
 
             for column_index in col_chunk_range:
                 if len(col_chunk_range) < 100 or column_index % 100 == 0:
-                    print_message(f"Transposing {f4_src_file_path} to temporary file {tsv_chunk_file_path} for column {column_index}.", verbose)
+                    print_message(f"Transposing {f4_src_file_path} to temporary file {tsv_chunk_file_path} for column {column_index} when transposing {f4_src_file_path} to {f4_dest_file_path}.", verbose)
 
                 # Parse the column name, one character at a time.
                 column_name = b""
