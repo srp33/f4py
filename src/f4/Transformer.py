@@ -140,8 +140,6 @@ def transpose_chunk(f4_src_file_path, num_rows, src_column_for_names_index, col_
                 for row_index in range(num_rows):
                     values.append(parse_row_value_function(src_file_data, "", row_index, column_coords))
 
-                #TODO: Narrow down what's making this relatively slow.
-                # Is it the zstd temp file? What happens if we remove certain parts?
                 tsv_file.write(b"\t".join(values) + b"\n")
 
 # def transpose_lines_to_temp(data_file_path, tmp_dir_path, start_row_index, end_row_index, column_names, column_coords, verbose):
