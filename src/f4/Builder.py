@@ -1039,7 +1039,7 @@ def iterate_delimited_file_column_indices(in_file, delimiter, file_read_chunk_si
                 current_column_index += 1
 
                 if start_column_index <= current_column_index < end_column_index:
-                    yield current_column_index, item
+                    yield current_column_index, item.strip(b" ")
 
             if line_index != (len(lines) - 1):
                 current_column_index = -1
