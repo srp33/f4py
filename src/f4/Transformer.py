@@ -1,7 +1,7 @@
 from .Builder import *
 from .Parser import *
 
-def transpose(f4_src_file_path, f4_dest_file_path, src_column_for_names, num_parallel=1, tmp_dir_path=None, verbose=False):
+def transpose(f4_src_file_path, f4_dest_file_path, src_column_for_names, index_columns=[], num_parallel=1, tmp_dir_path=None, verbose=False):
     if src_column_for_names is None or not isinstance(src_column_for_names, str) or len(src_column_for_names) == 0:
         raise Exception(f"The value specified for src_column_for_names was invalid.")
 
@@ -46,7 +46,7 @@ def transpose(f4_src_file_path, f4_dest_file_path, src_column_for_names, num_par
                 remove(chunk_file_path)
 
     print_message(f"Converting temp file at {tmp_fw_file_path} when transposing {f4_src_file_path} to {f4_dest_file_path}.", verbose)
-    convert_delimited_file(tmp_fw_file_path, f4_dest_file_path, comment_prefix=None, compression_type=src_file_data.decompression_type, num_parallel=num_parallel, verbose=verbose)
+    convert_delimited_file(tmp_fw_file_path, f4_dest_file_path, comment_prefix=None, compression_type=src_file_data.decompression_type, index_columns=index_columns, num_parallel=num_parallel, verbose=verbose)
 
     remove(tmp_fw_file_path)
     rmtree(tmp_dir_path2)
@@ -199,7 +199,7 @@ def get_next_column_name(src_file_data, cn_current, cn_end):
     return cn_current + 1, column_name
 
 #TODO: This function is not yet designed for files with 1000000+ columns.
-def inner_join(f4_left_src_file_path, f4_right_src_file_path, join_column, f4_dest_file_path, num_parallel=1, tmp_dir_path=None, verbose=False):
+def inner_join(f4_left_src_file_path, f4_right_src_file_path, join_column, f4_dest_file_path, index_columns=[], num_parallel=1, tmp_dir_path=None, verbose=False):
     #TODO: Add error checking to make sure join_column is present in left and right.
     print_message(f"Inner joining {f4_left_src_file_path} and {f4_right_src_file_path} based on the {join_column} column, saving to {f4_dest_file_path}.", verbose)
 
@@ -294,7 +294,7 @@ def inner_join(f4_left_src_file_path, f4_right_src_file_path, join_column, f4_de
                 compression_type = "zstd"
 
             print_message(f"Converting temp file at {tmp_tsv_file_path} to {f4_dest_file_path}.", verbose)
-            convert_delimited_file(tmp_tsv_file_path, f4_dest_file_path, compression_type=compression_type, num_parallel=num_parallel, comment_prefix=None, verbose=verbose)
+            convert_delimited_file(tmp_tsv_file_path, f4_dest_file_path, compression_type=compression_type, index_columns=index_columns, num_parallel=num_parallel, comment_prefix=None, verbose=verbose)
 
     remove(tmp_tsv_file_path)
     rmtree(tmp_dir_path)

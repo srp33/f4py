@@ -863,7 +863,8 @@ def run_super_test(description, fltr, select_columns, num_parallel, tmp_dir_path
 
     print(f"  {elapsed_time:.2f} seconds, {num_lines} lines in output file")
 
-#run_all_small_tests()
+run_all_small_tests()
+#sys.exit()
 
 #for compression_type in [None]:
 #for compression_type in ["zstd"]:
@@ -873,8 +874,8 @@ for compression_type in [None, "zstd"]:
 #    run_larger_tests(num_parallel=2, size="medium", extension="", discrete1_index=11, numeric1_index=21, build_outputs=True, verbose=True, compression_type=compression_type, tmp_dir_path="/tmp/medium")
 
     # Large tests
-    num_parallel = 1
-#    num_parallel = 4
+#    num_parallel = 1
+    num_parallel = 4
 #    num_parallel = 16
     build_outputs = True
     #build_outputs = False
