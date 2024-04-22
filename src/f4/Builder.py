@@ -91,67 +91,6 @@ def convert_delimited_file(delimited_file_path, f4_file_path, index_columns=[], 
 
     print_message(f"Done converting {delimited_file_path} to {f4_file_path}.", verbose)
 
-#TODO: Move to a different file so we don't need to import Parser?
-# def inner_join(f4_left_src_file_path, f4_right_src_file_path, join_column, f4_dest_file_path, num_parallel=1, tmp_dir_path=None, verbose=False):
-#     print_message(f"Inner joining {f4_left_src_file_path} and {f4_right_src_file_path} based on the {join_column} column, saving to {f4_dest_file_path}.", verbose)
-#
-#     join_column = join_column.encode()
-#
-#     if tmp_dir_path:
-#         makedirs(tmp_dir_path, exist_ok=True)
-#     else:
-#         tmp_dir_path = mkdtemp()
-#
-#     tmp_dir_path = fix_dir_path_ending(tmp_dir_path)
-#     makedirs(tmp_dir_path, exist_ok=True)
-#     tmp_tsv_file_path = tmp_dir_path + "tmp.tsv.gz"
-#
-#     with initialize(f4_left_src_file_path) as left_file_data:
-#         with initialize(f4_right_src_file_path) as right_file_data:
-#             left_column_names, left_column_type_dict, left_column_coords_dict, left_bigram_size_dict = get_column_meta(left_file_data, set(), [])
-#             right_column_names, right_column_type_dict, right_column_coords_dict, right_bigram_size_dict = get_column_meta(right_file_data, set(), [])
-#             #TODO: Add error checking to make sure join_column is present in left and right.
-#
-#             left_values = parse_values_in_column(left_file_data, join_column, left_column_coords_dict[join_column], left_bigram_size_dict)
-#             right_values = parse_values_in_column(right_file_data, join_column, right_column_coords_dict[join_column], right_bigram_size_dict)
-#             common_values = set(left_values) & set(right_values)
-#
-#             right_columns_to_save = [name for name in right_column_names if name != join_column]
-#
-#             right_index_dict = {}
-#             for i, value in enumerate(right_values):
-#                 if value in common_values:
-#                     right_index_dict.setdefault(value, []).append(i)
-#
-#             # FYI: It would be faster to save in zstandard format. But the Python package
-#             #      doesn't support reading line by line.
-#             #TODO: Parallelize this?
-#             with gzip.open(tmp_tsv_file_path, "w", compresslevel=1) as tmp_tsv_file:
-#                 tmp_tsv_file.write(b"\t".join(left_column_names + right_columns_to_save) + b"\n")
-#
-#                 left_parse_function = get_parse_row_values_function(left_file_data)
-#                 right_parse_function = get_parse_row_values_function(right_file_data)
-#                 left_column_coords = [left_column_coords_dict[name] for name in left_column_names]
-#                 right_column_coords = [right_column_coords_dict[name] for name in right_columns_to_save]
-#
-#                 for left_row_index, left_value in enumerate(left_values):
-#                     if left_value in common_values:
-#                         for right_row_index in right_index_dict[left_value]:
-#                             left_save_values = left_parse_function(left_file_data, left_row_index, left_column_coords, bigram_size_dict=left_bigram_size_dict)
-#                             right_save_values = right_parse_function(right_file_data, right_row_index, right_column_coords, bigram_size_dict=right_bigram_size_dict)
-#
-#                             tmp_tsv_file.write(b"\t".join(left_save_values + right_save_values) + b"\n")
-#
-#             # TODO: Expand this logic for all compression types. Make sure to document it.
-#             compression_type = None
-#             if left_file_data.decompression_type == "zstd" or right_file_data.decompression_type == "zstd":
-#                 compression_type = "zstd"
-#
-#             print_message(f"Converting temp file at {tmp_tsv_file_path} to {f4_dest_file_path}.", verbose)
-#             convert_delimited_file(tmp_tsv_file_path, f4_dest_file_path, compression_type=compression_type, num_parallel=num_parallel, verbose=verbose)
-#
-#             remove(tmp_tsv_file_path)
-
 #####################################################
 # Non-public function(s)
 #####################################################

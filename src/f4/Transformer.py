@@ -47,7 +47,9 @@ def transpose(f4_src_file_path, f4_dest_file_path, src_column_for_names, num_par
 
     print_message(f"Converting temp file at {tmp_fw_file_path} when transposing {f4_src_file_path} to {f4_dest_file_path}.", verbose)
     convert_delimited_file(tmp_fw_file_path, f4_dest_file_path, comment_prefix=None, compression_type=src_file_data.decompression_type, num_parallel=num_parallel, verbose=verbose)
+
     remove(tmp_fw_file_path)
+    rmtree(tmp_dir_path2)
 
 def generate_column_ranges(max_cols_per_chunk, num_cols, num_parallel):
     if num_cols > max_cols_per_chunk:
@@ -195,3 +197,104 @@ def get_next_column_name(src_file_data, cn_current, cn_end):
         cn_current += 1
 
     return cn_current + 1, column_name
+
+#TODO: This function is not yet designed for files with 1000000+ columns.
+def inner_join(f4_left_src_file_path, f4_right_src_file_path, join_column, f4_dest_file_path, num_parallel=1, tmp_dir_path=None, verbose=False):
+    #TODO: Add error checking to make sure join_column is present in left and right.
+    print_message(f"Inner joining {f4_left_src_file_path} and {f4_right_src_file_path} based on the {join_column} column, saving to {f4_dest_file_path}.", verbose)
+
+    join_column = join_column.encode()
+
+    if tmp_dir_path:
+        makedirs(tmp_dir_path, exist_ok=True)
+    else:
+        tmp_dir_path = mkdtemp()
+
+    tmp_dir_path = fix_dir_path_ending(tmp_dir_path)
+    tmp_tsv_file_path = f"{tmp_dir_path}tmp.tsv.zstd"
+
+    with initialize(f4_left_src_file_path) as left_file_data:
+        with initialize(f4_right_src_file_path) as right_file_data:
+            # Determine which functions are suitable for parsing the join column info.
+            left_parse_row_value_function = get_parse_row_value_function(left_file_data)
+            right_parse_row_value_function = get_parse_row_value_function(right_file_data)
+
+            # Find the index of the join column in each file.
+            left_join_column_index = get_column_index_from_name(left_file_data, join_column)
+            right_join_column_index = get_column_index_from_name(right_file_data, join_column)
+
+            # Find the coordinates of the join column in each file.
+            left_join_column_coord = parse_data_coord(left_file_data, "", left_join_column_index)
+            right_join_column_coord = parse_data_coord(right_file_data, "", right_join_column_index)
+
+            # Determine which column values overlap for the join column between the two files.
+            left_join_column_values = []
+            for row_index in range(left_file_data.cache_dict["num_rows"]):
+                value = left_parse_row_value_function(left_file_data, "", row_index, left_join_column_coord)
+                left_join_column_values.append(value)
+
+            right_join_column_values = []
+            for row_index in range(right_file_data.cache_dict["num_rows"]):
+                value = right_parse_row_value_function(right_file_data, "", row_index, right_join_column_coord)
+                right_join_column_values.append(value)
+
+            common_join_values = set(left_join_column_values) & set(right_join_column_values)
+
+            # Get column names from the left file.
+            left_cn_current, left_cn_end = advance_to_column_names(left_file_data, -1)
+            left_columns = []
+            for column_index in range(right_file_data.cache_dict["num_cols"]):
+                left_cn_current, column_name = get_next_column_name(left_file_data, left_cn_current, left_cn_end)
+                left_columns.append(column_name)
+
+            # Get column names from the right file (excluding the join column).
+            right_cn_current, right_cn_end = advance_to_column_names(right_file_data, -1)
+            right_columns = []
+            for column_index in range(right_file_data.cache_dict["num_cols"]):
+                right_cn_current, column_name = get_next_column_name(right_file_data, right_cn_current, right_cn_end)
+                if column_name != join_column:
+                    right_columns.append(column_name)
+
+            # Parse the column coordinates for all columns that will be saved.
+            left_column_coords = [parse_data_coord(left_file_data, "", get_column_index_from_name(left_file_data, name)) for name in left_columns]
+            right_column_coords = [parse_data_coord(right_file_data, "", get_column_index_from_name(right_file_data, name)) for name in right_columns]
+
+            # Rename columns that are duplicated between left (x) and right (y).
+            for left_i, column_name in enumerate(left_columns):
+                if column_name in right_columns:
+                    right_i = right_columns.index(column_name)
+                    left_columns[left_i] = (f"{column_name.decode()}.x").encode()
+                    right_columns[right_i] = (f"{right_columns[right_i].decode()}.y").encode()
+
+            # Create a cache of the right row index for each join value. This speeds up a later step.
+            right_index_dict = {}
+            for i, value in enumerate(right_join_column_values):
+                if value in common_join_values:
+                    right_index_dict.setdefault(value, []).append(i)
+
+            # Determine which functions are suitable for parsing all columns.
+            left_parse_row_values_function = get_parse_row_values_function(left_file_data)
+            right_parse_row_values_function = get_parse_row_values_function(right_file_data)
+
+            #TODO: Parallelize this?
+            with open_temp_file_to_compress(tmp_tsv_file_path) as tmp_tsv_file:
+                tmp_tsv_file.write(b"\t".join(left_columns + right_columns) + b"\n")
+
+                for left_row_index, left_value in enumerate(left_join_column_values):
+                    if left_value in common_join_values:
+                        for right_row_index in right_index_dict[left_value]:
+                            left_save_values = left_parse_row_values_function(left_file_data, "", left_row_index, left_column_coords)
+                            right_save_values = right_parse_row_values_function(right_file_data, "", right_row_index, right_column_coords)
+
+                            tmp_tsv_file.write(b"\t".join(left_save_values + right_save_values) + b"\n")
+
+            # TODO: Expand this logic for all compression types. Make sure to document it for users.
+            compression_type = None
+            if left_file_data.decompression_type == "zstd" or right_file_data.decompression_type == "zstd":
+                compression_type = "zstd"
+
+            print_message(f"Converting temp file at {tmp_tsv_file_path} to {f4_dest_file_path}.", verbose)
+            convert_delimited_file(tmp_tsv_file_path, f4_dest_file_path, compression_type=compression_type, num_parallel=num_parallel, comment_prefix=None, verbose=verbose)
+
+    remove(tmp_tsv_file_path)
+    rmtree(tmp_dir_path)
