@@ -5,7 +5,7 @@ def transpose(f4_src_file_path, f4_dest_file_path, src_column_for_names, index_c
     if src_column_for_names is None or not isinstance(src_column_for_names, str) or len(src_column_for_names) == 0:
         raise Exception(f"The value specified for src_column_for_names was invalid.")
 
-    print_message(f"Transposing {f4_src_file_path} to {f4_dest_file_path}.", verbose)
+    print_message(f"Finding max column width when transposing {f4_src_file_path} to {f4_dest_file_path}.", verbose)
 
     with initialize(f4_src_file_path) as src_file_data:
         num_cols = src_file_data.cache_dict["num_cols"]
@@ -33,6 +33,8 @@ def transpose(f4_src_file_path, f4_dest_file_path, src_column_for_names, index_c
             verbose)
                 for chunk_number, chunk_range in enumerate(generate_column_ranges(max_cols_per_chunk, num_cols, num_parallel))
         )
+
+        print_message(f"Assembling chunks when transposing {f4_src_file_path} to {f4_dest_file_path}.", verbose)
 
         # Put the chunks together.
         with open(tmp_fw_file_path, "wb") as tmp_fw_file:
@@ -77,6 +79,7 @@ def get_max_column_width(src_file_data):
 
 def transpose_column_chunk(f4_src_file_path, src_column_for_names, chunk_number, column_range, max_column_width, tmp_fw_file_path, verbose):
     with initialize(f4_src_file_path) as src_file_data:
+        print_message(f"Parsing column coordinates for chunk {chunk_number} when transposing {f4_src_file_path}.", verbose)
         # Get basic meta information.
         num_rows = src_file_data.cache_dict["num_rows"]
         src_column_for_names_index = get_column_index_from_name(src_file_data, src_column_for_names.encode())
@@ -86,6 +89,7 @@ def transpose_column_chunk(f4_src_file_path, src_column_for_names, chunk_number,
 
         all_column_coords = parse_data_coords(src_file_data, "", column_range)
 
+        print_message(f"Filling temp file {tmp_fw_file_path} with empty space for chunk {chunk_number} when transposing {f4_src_file_path}.", verbose)
         # We can't compress this file because we have to navigate around it later.
         with open(tmp_fw_file_path, "wb") as fw_file:
             if chunk_number == 0:
@@ -119,63 +123,40 @@ def transpose_column_chunk(f4_src_file_path, src_column_for_names, chunk_number,
 
         # We can't compress this file because we have to navigate within it.
         with open(tmp_fw_file_path, "rb+") as fw_file:
-            with mmap(fw_file.fileno(), 0, prot=PROT_WRITE) as fw_handle:
-                # Save new row names.
+            # FYI: Using memory mapping is an option, but it can consume a lot of memory
+            #      in this context.
+            # with mmap(fw_file.fileno(), 0, prot=PROT_WRITE) as fw_handle:
+            # Save new row names.
+            for chunk_column_index, overall_column_index in enumerate(column_range):
+                if overall_column_index == src_column_for_names_index:
+                    continue
+
+                cn_current, column_name = get_next_column_name(src_file_data, cn_current, cn_end)
+                row_start = chunk_column_index * new_row_width
+                # fw_handle[row_start:(row_start + len(column_name))] = column_name
+                fw_file.seek(row_start)
+                fw_file.write(column_name)
+
+            # Save values in transposed orientation.
+            for row_index in range(num_rows):
+                if row_index < 10 or (row_index < 100 and row_index % 10 == 0) or row_index % 100 == 0:
+                    print_message(f"Transposing {f4_src_file_path} to temporary file {tmp_fw_file_path} for row {row_index}.", verbose)
+
+                #FYI: Retrieving all values in a row is much faster than one at a time.
+                values = parse_row_values_function(src_file_data, "", row_index, all_column_coords)
+
                 for chunk_column_index, overall_column_index in enumerate(column_range):
                     if overall_column_index == src_column_for_names_index:
                         continue
 
-                    cn_current, column_name = get_next_column_name(src_file_data, cn_current, cn_end)
+                    value = values[chunk_column_index]
+
                     row_start = chunk_column_index * new_row_width
-                    fw_handle[row_start:(row_start + len(column_name))] = column_name
+                    value_start = row_start + (row_index + 1) * (max_column_width + 1)
 
-                # Save values in transposed orientation.
-                for row_index in range(num_rows):
-                    if row_index < 10 or (row_index < 100 and row_index % 10 == 0) or row_index % 100 == 0:
-                        print_message(f"Transposing {f4_src_file_path} to temporary file {tmp_fw_file_path} for row {row_index}.", verbose)
-
-                    #FYI: Retrieving all values in a row is much faster than one at a time.
-                    values = parse_row_values_function(src_file_data, "", row_index, all_column_coords)
-
-                    for chunk_column_index, overall_column_index in enumerate(column_range):
-                        if overall_column_index == src_column_for_names_index:
-                            continue
-
-                        value = values[chunk_column_index]
-
-                        row_start = chunk_column_index * new_row_width
-                        value_start = row_start + (row_index + 1) * (max_column_width + 1)
-
-                        fw_handle[value_start:(value_start + len(value))] = value
-
-def transpose_chunk(f4_src_file_path, f4_dest_file_path, src_column_for_names_index, row_chunk_range, col_chunk_range, tsv_chunk_file_path, write_mode, verbose):
-    with initialize(f4_src_file_path) as src_file_data:
-        # with open_temp_file_to_compress(tsv_chunk_file_path, write_mode) as tsv_file:
-        with open(tsv_chunk_file_path, write_mode) as tsv_file:
-            if row_chunk_range[0] == 0:
-                cn_current, cn_end = advance_to_column_names(src_file_data, col_chunk_range[0])
-
-            for column_index in col_chunk_range:
-                #if len(col_chunk_range) < 100 or column_index % 100 == 0:
-                #print_message(f"Transposing {f4_src_file_path} to temporary file {tsv_chunk_file_path} for column {column_index} when transposing {f4_src_file_path} to {f4_dest_file_path}.", verbose)
-
-                if row_chunk_range[0] == 0:
-                    cn_current, column_name = get_next_column_name(src_file_data, cn_current, cn_end)
-                    values = [column_name]
-                else:
-                    values = []
-
-                if column_index == src_column_for_names_index:
-                    continue
-
-                column_coords = parse_data_coord(src_file_data, "", column_index)
-                parse_row_value_function = get_parse_row_value_function(src_file_data)
-
-                # TODO: Don't allow the values list to get too large (save in chunks).
-                for row_index in row_chunk_range:
-                    values.append(parse_row_value_function(src_file_data, "", row_index, column_coords))
-
-                tsv_file.write(b"\t".join(values) + b"\n")
+                    # fw_handle[value_start:(value_start + len(value))] = value
+                    fw_file.seek(value_start)
+                    fw_file.write(value)
 
 def advance_to_column_names(src_file_data, first_col_index):
     cn_current = src_file_data.file_map_dict["cn"][0]
