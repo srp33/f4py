@@ -117,6 +117,7 @@ def transpose_column_chunk(f4_src_file_path, src_column_for_names, chunk_number,
 
         new_row_width = (num_rows + 1) * (max_column_width + 1)
 
+        print_message(f"Saving new row names to temp file {tmp_fw_file_path} for chunk {chunk_number} when transposing {f4_src_file_path}.", verbose)
         cn_current, cn_end = advance_to_column_names(src_file_data, column_range[0] - 1)
         # Skip the first column name because we already wrote it in the top-left corner.
         cn_current, column_name = get_next_column_name(src_file_data, cn_current, cn_end)
@@ -140,7 +141,7 @@ def transpose_column_chunk(f4_src_file_path, src_column_for_names, chunk_number,
             # Save values in transposed orientation.
             for row_index in range(num_rows):
                 if row_index < 10 or (row_index < 100 and row_index % 10 == 0) or row_index % 100 == 0:
-                    print_message(f"Transposing {f4_src_file_path} to temporary file {tmp_fw_file_path} for row {row_index}.", verbose)
+                    print_message(f"Saving data to temp file {tmp_fw_file_path} for chunk {chunk_number} and original row {row_index}when transposing {f4_src_file_path}.", verbose)
 
                 #FYI: Retrieving all values in a row is much faster than one at a time.
                 values = parse_row_values_function(src_file_data, "", row_index, all_column_coords)
