@@ -243,7 +243,7 @@ def inner_join(f4_left_src_file_path, f4_right_src_file_path, join_column, f4_de
             # Get column names from the left file.
             left_cn_current, left_cn_end = advance_to_column_names(left_file_data, -1)
             left_columns = []
-            for column_index in range(right_file_data.cache_dict["num_cols"]):
+            for column_index in range(left_file_data.cache_dict["num_cols"]):
                 left_cn_current, column_name = get_next_column_name(left_file_data, left_cn_current, left_cn_end)
                 left_columns.append(column_name)
             print(left_columns[:10])
