@@ -874,8 +874,8 @@ for compression_type in [None]:
 #    run_larger_tests(num_parallel=2, size="medium", extension="", discrete1_index=11, numeric1_index=21, build_outputs=True, verbose=True, compression_type=compression_type, tmp_dir_path="/tmp/medium")
 
     # Large tests
-    num_parallel = 1
-#    num_parallel = 4
+#    num_parallel = 1
+    num_parallel = 4
 #    num_parallel = 16
     build_outputs = True
     #build_outputs = False

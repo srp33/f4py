@@ -42,7 +42,7 @@ def transpose(f4_src_file_path, f4_dest_file_path, src_column_for_names, index_c
                 chunk_file_path = f"{tmp_dir_path2}transposed_chunk_{chunk_number}.tsv.zstd"
 
                 for line in read_compressed_file_line_by_line(chunk_file_path):
-                    tmp_tsv_file.write(line)
+                    tmp_tsv_file.write(line + b"\n")
 
                 remove(chunk_file_path)
 
@@ -162,6 +162,7 @@ def transpose_column_chunk(f4_src_file_path, src_column_for_names, chunk_number,
         print_message(f"Converting fixed-width temp file at {tmp_fw_file_path} to compressed TSV when transposing {f4_src_file_path}.", verbose)
         with open(tmp_fw_file_path, "rb") as fw_file:
             with open_temp_file_to_compress(tmp_tsv_file_path) as tsv_file:
+            # with open(tmp_tsv_file_path, "wb") as tsv_file:
                 for line in fw_file:
                     line_items = line.rstrip(b"\n").split(b"\t")
                     line_items = [x.rstrip(b" ") for x in line_items]
