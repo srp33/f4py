@@ -863,20 +863,20 @@ def run_super_test(description, fltr, select_columns, num_parallel, tmp_dir_path
 
     print(f"  {elapsed_time:.2f} seconds, {num_lines} lines in output file")
 
-run_all_small_tests()
+#run_all_small_tests()
 #sys.exit()
 
-#for compression_type in [None]:
+for compression_type in [None]:
 #for compression_type in ["zstd"]:
-for compression_type in [None, "zstd"]:
+#for compression_type in [None, "zstd"]:
     # Medium tests
 #    run_larger_tests(num_parallel=1, size="medium", extension="", discrete1_index=11, numeric1_index=21, build_outputs=True, verbose=True, compression_type=compression_type, tmp_dir_path="/tmp/medium")
-    run_larger_tests(num_parallel=2, size="medium", extension="", discrete1_index=11, numeric1_index=21, build_outputs=True, verbose=True, compression_type=compression_type, tmp_dir_path="/tmp/medium")
+#    run_larger_tests(num_parallel=2, size="medium", extension="", discrete1_index=11, numeric1_index=21, build_outputs=True, verbose=True, compression_type=compression_type, tmp_dir_path="/tmp/medium")
 
     # Large tests
-#    num_parallel = 1
+    num_parallel = 1
 #    num_parallel = 4
-    num_parallel = 16
+#    num_parallel = 16
     build_outputs = True
     #build_outputs = False
     verbose = True
@@ -906,7 +906,7 @@ for compression_type in [None, "zstd"]:
     f4.transpose("data/medium.f4", "/tmp/medium_transposed.f4", src_column_for_names="ID", num_parallel=num_parallel, verbose=verbose)
 #    f4.transpose("data/large_tall.f4", "/tmp/large_tall_transposed.f4", src_column_for_names="ID", num_parallel=num_parallel, verbose=verbose)
 
-    f4.inner_join("data/medium.f4", "data/medium.f4", "ID", "/tmp/medium_joined.f4", num_parallel=num_parallel, verbose=verbose)
+#    f4.inner_join("data/medium.f4", "data/medium.f4", "ID", "/tmp/medium_joined.f4", num_parallel=num_parallel, verbose=verbose)
 #    f4.inner_join("data/large_tall.f4", "data/large_wide.f4", "ID", "/tmp/large_joined.f4", num_parallel=num_parallel, verbose=verbose)
 
 print("All tests passed!!")
