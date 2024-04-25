@@ -7,9 +7,10 @@ from .Utilities import *
 #####################################################
 
 class FileData:
-    def __init__(self, data_file_path, file_handle, file_map_dict, cache_dict, version, decompression_type, decompressor):
+    def __init__(self, data_file_path, file_handle, use_memory_mapping, file_map_dict, cache_dict, version, decompression_type, decompressor):
         self.data_file_path = data_file_path
         self.file_handle = file_handle
+        self.use_memory_mapping = use_memory_mapping
         self.file_map_dict = file_map_dict
         self.cache_dict = cache_dict
         self.version = version
@@ -61,7 +62,7 @@ class _SimpleBaseFilter(_BaseFilter):
                     return self._do_row_indices_pass(file_data, coords, parse_function, range(num_rows))
                 else:
                     return set(chain.from_iterable(joblib.Parallel(n_jobs=num_parallel)(
-                        joblib.delayed(self._do_row_indices_pass_parallel)(file_data.data_file_path, coords, parse_function, chunk_row_indices)
+                        joblib.delayed(self._do_row_indices_pass_parallel)(file_data.data_file_path, file_data.use_memory_mapping, coords, parse_function, chunk_row_indices)
                         for chunk_row_indices in generate_range_chunks(num_rows, 1000001)))
                     )
             else:
@@ -69,7 +70,7 @@ class _SimpleBaseFilter(_BaseFilter):
                     return self._do_row_indices_pass(file_data, coords, parse_function, row_indices)
                 else:
                     return set(chain.from_iterable(joblib.Parallel(n_jobs=num_parallel)(
-                        joblib.delayed(self._do_row_indices_pass_parallel)(file_data.data_file_path, coords, parse_function, chunk_row_indices)
+                        joblib.delayed(self._do_row_indices_pass_parallel)(file_data.data_file_path, file_data.use_memory_mapping, coords, parse_function, chunk_row_indices)
                         for chunk_row_indices in split_list_into_chunks(list(row_indices), 1000001)))
                     )
         else:
@@ -98,10 +99,10 @@ class _SimpleBaseFilter(_BaseFilter):
 
         return passing_row_indices
 
-    def _do_row_indices_pass_parallel(self, data_file_path, coords, parse_function, row_indices_to_check):
+    def _do_row_indices_pass_parallel(self, data_file_path, use_memory_mapping, coords, parse_function, row_indices_to_check):
         passing_row_indices = set()
 
-        with initialize(data_file_path) as file_data:
+        with initialize(data_file_path, use_memory_mapping) as file_data:
             for i in row_indices_to_check:
                 if self._passes(parse_function(file_data, "", i, coords)):
                     passing_row_indices.add(i)
@@ -449,7 +450,7 @@ class OrFilter(_CompositeFilter):
 # Public function(s)
 #####################################################
 
-def query(data_file_path, fltr=NoFilter(), select_columns=[], out_file_path=None, out_file_type="tsv", num_parallel=1, tmp_dir_path=None):
+def query(data_file_path, fltr=NoFilter(), select_columns=[], out_file_path=None, out_file_type="tsv", num_parallel=1, tmp_dir_path=None, use_memory_mapping=True):
     """
     Query the data file using zero or more filters.
 
@@ -479,7 +480,7 @@ def query(data_file_path, fltr=NoFilter(), select_columns=[], out_file_path=None
         global joblib
         joblib = __import__('joblib', globals(), locals())
 
-    with initialize(data_file_path) as file_data:
+    with initialize(data_file_path, use_memory_mapping) as file_data:
         # Make sure the filters match the column types.
         fltr._check_types(file_data)
 
@@ -520,7 +521,8 @@ def query(data_file_path, fltr=NoFilter(), select_columns=[], out_file_path=None
 
             with get_write_object(out_file_path) as write_obj:
                 for chunk_start in range(cn_start, cn_end, chunk_size):
-                    chunk_text = file_data.file_handle[chunk_start:min(chunk_start + chunk_size, cn_end)]
+                    # chunk_text = file_data.file_handle[chunk_start:min(chunk_start + chunk_size, cn_end)]
+                    chunk_text = read_from_file(file_data.file_handle, chunk_start, min(chunk_start + chunk_size, cn_end), use_memory_mapping)
                     write_obj.write(chunk_text.replace(b"\n", b"\t"))
 
                 write_obj.write(b"\n")
@@ -544,7 +546,7 @@ def query(data_file_path, fltr=NoFilter(), select_columns=[], out_file_path=None
             keep_row_indices = list(split_list_into_chunks(keep_row_indices, max_rows_per_chunk))
 
         if num_select_column_chunks == 1 and num_row_index_chunks == 1:
-            save_output_rows(data_file_path, out_file_path, keep_row_indices[0], select_column_index_chunks[0])
+            save_output_rows(data_file_path, use_memory_mapping, out_file_path, keep_row_indices[0], select_column_index_chunks[0])
         else:
             if tmp_dir_path:
                 makedirs(tmp_dir_path, exist_ok=True)
@@ -556,10 +558,10 @@ def query(data_file_path, fltr=NoFilter(), select_columns=[], out_file_path=None
             if num_parallel == 1:
                 for row_chunk_number, row_chunk_indices in enumerate(keep_row_indices):
                     for column_chunk_number, column_chunk_indices in enumerate(select_column_index_chunks):
-                        save_output_rows(data_file_path, f"{tmp_dir_path}{row_chunk_number}_{column_chunk_number}", row_chunk_indices, column_chunk_indices)
+                        save_output_rows(data_file_path, use_memory_mapping, f"{tmp_dir_path}{row_chunk_number}_{column_chunk_number}", row_chunk_indices, column_chunk_indices)
             else:
                 joblib.Parallel(n_jobs=num_parallel)(
-                    joblib.delayed(save_output_rows)(data_file_path, f"{tmp_dir_path}{row_chunk_number}_{column_chunk_number}", row_chunk_indices, column_chunk_indices)
+                    joblib.delayed(save_output_rows)(data_file_path, use_memory_mapping, f"{tmp_dir_path}{row_chunk_number}_{column_chunk_number}", row_chunk_indices, column_chunk_indices)
                         for row_chunk_number, row_chunk_indices in enumerate(keep_row_indices)
                             for column_chunk_number, column_chunk_indices in enumerate(select_column_index_chunks)
                 )
@@ -602,30 +604,30 @@ def tail(data_file_path, n=10, select_columns=None, out_file_path=None, out_file
     query(data_file_path, TailFilter(n), select_columns, out_file_path=out_file_path, out_file_type=out_file_type)
 
 def get_version(data_file_path):
-    with initialize(data_file_path) as file_data:
+    with initialize(data_file_path, use_memory_mapping=True) as file_data:
         return file_data.version.decode()
 
-def get_num_rows(data_file_path):
-    with initialize(data_file_path) as file_data:
+def get_num_rows(data_file_path, use_memory_mapping=True):
+    with initialize(data_file_path, use_memory_mapping) as file_data:
         return file_data.cache_dict["num_rows"]
 
-def get_num_cols(data_file_path):
-    with initialize(data_file_path) as file_data:
+def get_num_cols(data_file_path, use_memory_mapping=True):
+    with initialize(data_file_path, use_memory_mapping) as file_data:
         return file_data.cache_dict["num_cols"]
 
-def get_column_type_from_name(data_file_path, column_name):
+def get_column_type_from_name(data_file_path, column_name, use_memory_mapping=True):
     try:
-        with initialize(data_file_path) as file_data:
+        with initialize(data_file_path, use_memory_mapping) as file_data:
             column_index = get_column_index_from_name(file_data, column_name.encode())
 
             return get_column_type_from_index(file_data, column_index)
     except:
         raise Exception(f"A column with the name {column_name} does not exist.")
 
-def get_indexes(data_file_path):
+def get_indexes(data_file_path, use_memory_mapping=True):
     indexes = []
 
-    with initialize(data_file_path) as file_data:
+    with initialize(data_file_path, use_memory_mapping) as file_data:
         if "i" in file_data.cache_dict:
             for key, number in file_data.cache_dict["i"].items():
                 if len(key) == 1:
@@ -659,65 +661,145 @@ def get_indexes(data_file_path):
 ##############################################
 
 @contextmanager
-def initialize(data_file_path):
-    with open(data_file_path, 'rb') as file_handle:
-        with mmap(file_handle.fileno(), 0, prot=PROT_READ) as mmap_handle:
-            file_map_length_string = mmap_handle.readline()
-            file_map_length = fast_int(file_map_length_string.rstrip(b"\n"))
-            file_map_dict = deserialize(mmap_handle[len(file_map_length_string):(len(file_map_length_string) + file_map_length)])
+def initialize(data_file_path, use_memory_mapping):
+    with get_file_handle(data_file_path, use_memory_mapping) as file_handle:
+        file_map_length_string = file_handle.readline()
+        file_map_length = fast_int(file_map_length_string.rstrip(b"\n"))
+        # file_map_dict = deserialize(mmap_handle[len(file_map_length_string):(len(file_map_length_string) + file_map_length)])
+        file_map_dict = deserialize(read_from_file(file_handle, len(file_map_length_string), len(file_map_length_string) + file_map_length, use_memory_mapping))
 
-            cache_dict = {}
-            cache_dict["ccml"] = fast_int(mmap_handle[file_map_dict["ccml"][0]:file_map_dict["ccml"][1]])
-            cache_dict["num_cols"] = fast_int((file_map_dict["cc"][1] - file_map_dict["cc"][0]) / cache_dict["ccml"]) - 1
+        cache_dict = {}
+        # cache_dict["ccml"] = fast_int(mmap_handle[file_map_dict["ccml"][0]:file_map_dict["ccml"][1]])
+        cache_dict["ccml"] = fast_int(read_from_file(file_handle, file_map_dict["ccml"][0], file_map_dict["ccml"][1], use_memory_mapping))
+        cache_dict["num_cols"] = fast_int((file_map_dict["cc"][1] - file_map_dict["cc"][0]) / cache_dict["ccml"]) - 1
 
-            decompression_type = None
-            decompressor = None
+        decompression_type = None
+        decompressor = None
 
-            if "cmpr" in file_map_dict:
-                decompression_text = mmap_handle[file_map_dict["cmpr"][0]:file_map_dict["cmpr"][1]]
+        if "cmpr" in file_map_dict:
+            # decompression_text = mmap_handle[file_map_dict["cmpr"][0]:file_map_dict["cmpr"][1]]
+            decompression_text = read_from_file(file_handle, file_map_dict["cmpr"][0], file_map_dict["cmpr"][1], use_memory_mapping)
 
-                if decompression_text == b"z":
-                    decompression_type = "zstd"
-                    decompressor = ZstdDecompressor()
+            if decompression_text == b"z":
+                decompression_type = "zstd"
+                decompressor = ZstdDecompressor()
 
-                    # TODO: For super tall files, this gets too large to fit in memory.
-                    #       If we continue to support zstd compression, you may need to incorporate
-                    #       the idea of row chunks when building the file and then retrieve
-                    #       the row_starts just for those.
-                    #       However, the custom compression approach would avoid this problem.
-                    # row_lengths = deserialize(mmap_handle[file_map_dict["rl"][0]:file_map_dict["rl"][1]])
-                    # cache_dict["row_starts"] = [file_map_dict[""][0]]
-                    # for i, row_length in enumerate(row_lengths):
-                    #     cache_dict["row_starts"].append(cache_dict["row_starts"][-1] + row_length)
-                    cache_dict["mrel"] = fast_int(mmap_handle[file_map_dict["mrel"][0]:file_map_dict["mrel"][1]])
+                # TODO: For super tall files, this gets too large to fit in memory.
+                #       If we continue to support zstd compression, you may need to incorporate
+                #       the idea of row chunks when building the file and then retrieve
+                #       the row_starts just for those.
+                #       However, the custom compression approach would avoid this problem.
+                # row_lengths = deserialize(mmap_handle[file_map_dict["rl"][0]:file_map_dict["rl"][1]])
+                # cache_dict["row_starts"] = [file_map_dict[""][0]]
+                # for i, row_length in enumerate(row_lengths):
+                #     cache_dict["row_starts"].append(cache_dict["row_starts"][-1] + row_length)
+                # cache_dict["mrel"] = fast_int(mmap_handle[file_map_dict["mrel"][0]:file_map_dict["mrel"][1]])
+                cache_dict["mrel"] = fast_int(read_from_file(file_handle, file_map_dict["mrel"][0], file_map_dict["mrel"][1], use_memory_mapping))
 
-                    cache_dict["ll"] = fast_int(mmap_handle[file_map_dict["ll"][0]:file_map_dict["ll"][1]])
-                    cache_dict["num_rows"] = fast_int(mmap_handle[file_map_dict["nrow"][0]:file_map_dict["nrow"][1]])
-                # else:
-                #     decompression_type = "dictionary"
-                #     decompressor = deserialize(decompression_text)
-            else:
-                last_cc = file_map_dict["cc"][1]
-                cache_dict["ll"] = fast_int(mmap_handle[(last_cc - cache_dict["ccml"]):last_cc])
-                cache_dict["num_rows"] = fast_int((file_map_dict[""][1] - file_map_dict[""][0]) / cache_dict["ll"])
+                # cache_dict["ll"] = fast_int(mmap_handle[file_map_dict["ll"][0]:file_map_dict["ll"][1]])
+                cache_dict["ll"] = fast_int(read_from_file(file_handle, file_map_dict["ll"][0], file_map_dict["ll"][1], use_memory_mapping))
 
-            # Calculate line length based on last "cnicc" value.
-            cache_dict["cniccml"] = fast_int(mmap_handle[file_map_dict["cniccml"][0]:file_map_dict["cniccml"][1]])
-            cache_dict["cnill"] = fast_int(mmap_handle[(file_map_dict["cnicc"][1] - cache_dict["cniccml"]):file_map_dict["cnicc"][1]])
+                # cache_dict["num_rows"] = fast_int(mmap_handle[file_map_dict["nrow"][0]:file_map_dict["nrow"][1]])
+                cache_dict["num_rows"] = fast_int(read_from_file(file_handle, file_map_dict["nrow"][0], file_map_dict["nrow"][1], use_memory_mapping))
+            # else:
+            #     decompression_type = "dictionary"
+            #     decompressor = deserialize(decompression_text)
+        else:
+            last_cc = file_map_dict["cc"][1]
+            # cache_dict["ll"] = fast_int(mmap_handle[(last_cc - cache_dict["ccml"]):last_cc])
+            cache_dict["ll"] = fast_int(read_from_file(file_handle, (last_cc - cache_dict["ccml"]), last_cc, use_memory_mapping))
+            cache_dict["num_rows"] = fast_int((file_map_dict[""][1] - file_map_dict[""][0]) / cache_dict["ll"])
 
-            if "i" in file_map_dict:
-                cache_dict["i"] = deserialize(mmap_handle[file_map_dict["i"][0]:file_map_dict["i"][1]])
+        # Calculate line length based on last "cnicc" value.
+        cache_dict["cniccml"] = fast_int(read_from_file(file_handle, file_map_dict["cniccml"][0], file_map_dict["cniccml"][1], use_memory_mapping))
+        cache_dict["cnill"] = fast_int(read_from_file(file_handle, (file_map_dict["cnicc"][1] - cache_dict["cniccml"]), file_map_dict["cnicc"][1], use_memory_mapping))
 
-                for key in file_map_dict:
-                    if key.endswith("ccml"):
-                        cache_dict[key] = fast_int(mmap_handle[file_map_dict[key][0]:file_map_dict[key][1]])
+        if "i" in file_map_dict:
+            # cache_dict["i"] = deserialize(mmap_handle[file_map_dict["i"][0]:file_map_dict["i"][1]])
+            cache_dict["i"] = deserialize(read_from_file(file_handle, file_map_dict["i"][0], file_map_dict["i"][1], use_memory_mapping))
 
-                        last_cc = file_map_dict[key[:-2]][1]
-                        cache_dict[key.replace("ccml", "ll")] = fast_int(mmap_handle[(last_cc - cache_dict[key]):last_cc])
+            for key in file_map_dict:
+                if key.endswith("ccml"):
+                    # cache_dict[key] = fast_int(mmap_handle[file_map_dict[key][0]:file_map_dict[key][1]])
+                    cache_dict[key] = fast_int(read_from_file(file_handle, file_map_dict[key][0], file_map_dict[key][1], use_memory_mapping))
 
-            ver = mmap_handle[file_map_dict["ver"][0]:file_map_dict["ver"][1]]
+                    last_cc = file_map_dict[key[:-2]][1]
+                    # cache_dict[key.replace("ccml", "ll")] = fast_int(mmap_handle[(last_cc - cache_dict[key]):last_cc])
+                    cache_dict[key.replace("ccml", "ll")] = fast_int(read_from_file(file_handle, (last_cc - cache_dict[key]), last_cc, use_memory_mapping))
 
-            yield FileData(data_file_path, mmap_handle, file_map_dict, cache_dict, ver, decompression_type, decompressor)
+        # ver = mmap_handle[file_map_dict["ver"][0]:file_map_dict["ver"][1]]
+        ver = read_from_file(file_handle, file_map_dict["ver"][0], file_map_dict["ver"][1], use_memory_mapping)
+
+        yield FileData(data_file_path, file_handle, use_memory_mapping, file_map_dict, cache_dict, ver, decompression_type, decompressor)
+
+# def initialize(data_file_path, use_memory_mapping=True):
+#     with get_file_handle(data_file_path, use_memory_mapping) as file_handle:
+#         file_map_length_string = file_handle.readline()
+#         file_map_length = fast_int(file_map_length_string.rstrip(b"\n"))
+#         file_map_dict = deserialize(mmap_handle[len(file_map_length_string):(len(file_map_length_string) + file_map_length)])
+#
+#         cache_dict = {}
+#         cache_dict["ccml"] = fast_int(mmap_handle[file_map_dict["ccml"][0]:file_map_dict["ccml"][1]])
+#         cache_dict["num_cols"] = fast_int((file_map_dict["cc"][1] - file_map_dict["cc"][0]) / cache_dict["ccml"]) - 1
+#
+#         decompression_type = None
+#         decompressor = None
+#
+#         if "cmpr" in file_map_dict:
+#             decompression_text = mmap_handle[file_map_dict["cmpr"][0]:file_map_dict["cmpr"][1]]
+#
+#             if decompression_text == b"z":
+#                 decompression_type = "zstd"
+#                 decompressor = ZstdDecompressor()
+#
+#                 # TODO: For super tall files, this gets too large to fit in memory.
+#                 #       If we continue to support zstd compression, you may need to incorporate
+#                 #       the idea of row chunks when building the file and then retrieve
+#                 #       the row_starts just for those.
+#                 #       However, the custom compression approach would avoid this problem.
+#                 # row_lengths = deserialize(mmap_handle[file_map_dict["rl"][0]:file_map_dict["rl"][1]])
+#                 # cache_dict["row_starts"] = [file_map_dict[""][0]]
+#                 # for i, row_length in enumerate(row_lengths):
+#                 #     cache_dict["row_starts"].append(cache_dict["row_starts"][-1] + row_length)
+#                 cache_dict["mrel"] = fast_int(mmap_handle[file_map_dict["mrel"][0]:file_map_dict["mrel"][1]])
+#
+#                 cache_dict["ll"] = fast_int(mmap_handle[file_map_dict["ll"][0]:file_map_dict["ll"][1]])
+#                 cache_dict["num_rows"] = fast_int(mmap_handle[file_map_dict["nrow"][0]:file_map_dict["nrow"][1]])
+#             # else:
+#             #     decompression_type = "dictionary"
+#             #     decompressor = deserialize(decompression_text)
+#         else:
+#             last_cc = file_map_dict["cc"][1]
+#             cache_dict["ll"] = fast_int(mmap_handle[(last_cc - cache_dict["ccml"]):last_cc])
+#             cache_dict["num_rows"] = fast_int((file_map_dict[""][1] - file_map_dict[""][0]) / cache_dict["ll"])
+#
+#         # Calculate line length based on last "cnicc" value.
+#         cache_dict["cniccml"] = fast_int(mmap_handle[file_map_dict["cniccml"][0]:file_map_dict["cniccml"][1]])
+#         cache_dict["cnill"] = fast_int(mmap_handle[(file_map_dict["cnicc"][1] - cache_dict["cniccml"]):file_map_dict["cnicc"][1]])
+#
+#         if "i" in file_map_dict:
+#             cache_dict["i"] = deserialize(mmap_handle[file_map_dict["i"][0]:file_map_dict["i"][1]])
+#
+#             for key in file_map_dict:
+#                 if key.endswith("ccml"):
+#                     cache_dict[key] = fast_int(mmap_handle[file_map_dict[key][0]:file_map_dict[key][1]])
+#
+#                     last_cc = file_map_dict[key[:-2]][1]
+#                     cache_dict[key.replace("ccml", "ll")] = fast_int(mmap_handle[(last_cc - cache_dict[key]):last_cc])
+#
+#         ver = mmap_handle[file_map_dict["ver"][0]:file_map_dict["ver"][1]]
+#
+#         yield FileData(data_file_path, mmap_handle, file_map_dict, cache_dict, ver, decompression_type, decompressor)
+
+@contextmanager
+def get_file_handle(data_file_path, use_memory_mapping):
+    if use_memory_mapping:
+        with open(data_file_path, 'rb') as file_handle:
+            with mmap(file_handle.fileno(), 0, prot=PROT_READ) as mmap_handle:
+                yield mmap_handle
+    else:
+        with open(data_file_path, 'rb') as file_handle:
+            yield file_handle
 
 def get_column_index_from_name(file_data, column_name):
     position = get_identifier_row_index(file_data, "cni", column_name, file_data.cache_dict["num_cols"])
@@ -764,9 +846,10 @@ def _get_column_index_chunk_from_names(file_data, name_index_coords, column_name
 def get_column_type_from_index(file_data, column_index):
     return next(parse_data_values_from_file(file_data, "ct", column_index, 1, [[0, 1]])).decode()
 
-def get_value_from_single_column_file(file_handle, content_start_index, segment_length, row_index):
-    start_search_position = content_start_index + row_index * segment_length
-    return file_handle[start_search_position:(start_search_position + segment_length)].rstrip(b" ")
+# def get_value_from_single_column_file(file_handle, content_start_index, segment_length, row_index):
+#     start_search_position = content_start_index + row_index * segment_length
+#     # return file_handle[start_search_position:(start_search_position + segment_length)].rstrip(b" ")
+#     return read_from_file(file_handle, start_search_position, (start_search_position + segment_length), use_memory_mapping).rstrip(b" ")
 
 def parse_data_coord(file_data, data_file_key, index):
     ccml = file_data.cache_dict[data_file_key + "ccml"]
@@ -816,7 +899,8 @@ def parse_data_coords(file_data, data_file_key, indices):
 
 def parse_data_value_from_file(file_data, data_file_key, start_element, segment_length, coords):
     start_pos = start_element * segment_length + file_data.file_map_dict[data_file_key][0]
-    return file_data.file_handle[(start_pos + coords[0]):(start_pos + coords[1])]
+    # return file_data.file_handle[(start_pos + coords[0]):(start_pos + coords[1])]
+    return read_from_file(file_data.file_handle, start_pos + coords[0], start_pos + coords[1], file_data.use_memory_mapping)
 
 def parse_data_value_from_string(coords, string):
     return string[(coords[0]):(coords[1])].rstrip(b" ")
@@ -829,7 +913,8 @@ def parse_data_values_from_file(file_data, data_file_key, start_element, segment
     start_pos = start_element * segment_length + file_data.file_map_dict[data_file_key][0]
 
     for coords in data_coords:
-        yield file_data.file_handle[(start_pos + coords[0]):(start_pos + coords[1])].rstrip(b" ")
+        # yield file_data.file_handle[(start_pos + coords[0]):(start_pos + coords[1])].rstrip(b" ")
+        yield read_from_file(file_data.file_handle, start_pos + coords[0], start_pos + coords[1], file_data.use_memory_mapping).rstrip(b" ")
 
 def get_parse_row_value_function(file_data):
     if not file_data.decompression_type:
@@ -871,14 +956,17 @@ def get_zstd_compressed_row(file_data, row_index):
     else:
         row_start_start = re_overall_start + (row_index - 1) * mrel
         row_start_end = row_start_start + mrel
-        row_start = int(file_data.file_handle[row_start_start:row_start_end].rstrip(b' '))
+        # row_start = int(file_data.file_handle[row_start_start:row_start_end].rstrip(b' '))
+        row_start = int(read_from_file(file_data.file_handle, row_start_start, row_start_end, file_data.use_memory_mapping).rstrip(b' '))
 
     row_end_start = re_overall_start + row_index * mrel
     row_end_end = row_end_start + mrel
-    row_end = int(file_data.file_handle[row_end_start:row_end_end].rstrip(b' '))
+    # row_end = int(file_data.file_handle[row_end_start:row_end_end].rstrip(b' '))
+    row_end = int(read_from_file(file_data.file_handle, row_end_start, row_end_end, file_data.use_memory_mapping).rstrip(b' '))
 
     data_start = file_data.file_map_dict[""][0]
-    return file_data.decompressor.decompress(file_data.file_handle[(data_start + row_start):(data_start + row_end)])
+    # return file_data.decompressor.decompress(file_data.file_handle[(data_start + row_start):(data_start + row_end)])
+    return file_data.decompressor.decompress(read_from_file(file_data.file_handle, data_start + row_start, data_start + row_end, file_data.use_memory_mapping))
 
 # def parse_dictionary_compressed_row_value(file_data, data_file_key, row_index, column_coords, bigram_size_dict=None, column_name=None):
 #     value = parse_data_value_from_file(file_data, data_file_key, row_index, file_data.cache_dict["ll"], column_coords).rstrip(b" ")
@@ -939,8 +1027,8 @@ def get_write_object(out_file_path, mode="wb"):
     else:
         yield sys.stdout.buffer
 
-def save_output_rows(in_file_path, out_file_path, row_indices, column_indices):
-    with initialize(in_file_path) as file_data:
+def save_output_rows(in_file_path, use_memory_mapping, out_file_path, row_indices, column_indices):
+    with initialize(in_file_path, use_memory_mapping) as file_data:
         with get_write_object(out_file_path, "ab") as write_obj:
             select_column_coords = parse_data_coords(file_data, "", column_indices)
             parse_row_values_function = get_parse_row_values_function(file_data)
@@ -1177,8 +1265,8 @@ def find_matching_row_indices(file_data, data_file_key, position_coords, positio
 
 # This is the same as the function above it, but it needs to pass the file path
 # to work with joblib.
-def find_matching_row_indices_parallel(data_file_path, data_file_key, position_coords, positions):
-    with initialize(data_file_path) as file_data:
+def find_matching_row_indices_parallel(data_file_path, use_memory_mapping, data_file_key, position_coords, positions):
+    with initialize(data_file_path, use_memory_mapping) as file_data:
         matching_row_indices = set()
 
         for i in range(positions[0], positions[1]):
@@ -1200,7 +1288,7 @@ def retrieve_matching_row_indices(file_data, data_file_key, position_coords, pos
             position_chunks.append((i, min(positions[1], i + chunk_size)))
 
         return set(chain.from_iterable(joblib.Parallel(n_jobs=num_parallel)(
-            joblib.delayed(find_matching_row_indices_parallel)(file_data.data_file_path, data_file_key, position_coords, position_chunk)
+            joblib.delayed(find_matching_row_indices_parallel)(file_data.data_file_path, file_data.use_memory_mapping, data_file_key, position_coords, position_chunk)
             for position_chunk in position_chunks))
         )
 

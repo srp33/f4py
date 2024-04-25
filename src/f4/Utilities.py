@@ -30,6 +30,13 @@ def get_current_version():
 def get_current_version_major():
     return get_current_version().split(".")[0]
 
+def read_from_file(file_handle, start_position, end_position, use_memory_mapping):
+    if use_memory_mapping:
+        return file_handle[start_position:end_position]
+    else:
+        file_handle.seek(start_position)
+        return file_handle.read(end_position - start_position)
+
 def read_str_from_file(file_path, file_extension=""):
     with open_temp_file_compressed(file_path + file_extension) as the_file:
         return the_file.read()
