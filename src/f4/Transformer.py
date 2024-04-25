@@ -1,13 +1,14 @@
 from .Builder import *
 from .Parser import *
 
-def transpose(f4_src_file_path, f4_dest_file_path, src_column_for_names, index_columns=[], num_parallel=1, tmp_dir_path=None, verbose=False):
+# FYI: Memory mapping seems to use too much memory in this context with large files, so the default is False.
+def transpose(f4_src_file_path, f4_dest_file_path, src_column_for_names, index_columns=[], num_parallel=1, tmp_dir_path=None, use_memory_mapping=False, verbose=False):
     if src_column_for_names is None or not isinstance(src_column_for_names, str) or len(src_column_for_names) == 0:
         raise Exception(f"The value specified for src_column_for_names was invalid.")
 
     print_message(f"Finding max column width when transposing {f4_src_file_path} to {f4_dest_file_path}.", verbose)
 
-    with initialize(f4_src_file_path) as src_file_data:
+    with initialize(f4_src_file_path, use_memory_mapping) as src_file_data:
         num_cols = src_file_data.cache_dict["num_cols"]
         max_column_width = get_max_column_width(src_file_data)
 
@@ -15,7 +16,7 @@ def transpose(f4_src_file_path, f4_dest_file_path, src_column_for_names, index_c
     tmp_tsv_file_path = f"{tmp_dir_path2}transposed.tsv.zstd"
 
     if num_parallel == 1:
-        transpose_column_chunk(f4_src_file_path, src_column_for_names, 0, range(num_cols), max_column_width, tmp_tsv_file_path, verbose)
+        transpose_column_chunk(f4_src_file_path, use_memory_mapping, src_column_for_names, 0, range(num_cols), max_column_width, tmp_tsv_file_path, verbose)
     else:
         max_cols_per_chunk = 10001
 
@@ -25,6 +26,7 @@ def transpose(f4_src_file_path, f4_dest_file_path, src_column_for_names, index_c
         # Transpose the data in chunks.
         joblib.Parallel(n_jobs=num_parallel)(joblib.delayed(transpose_column_chunk)(
             f4_src_file_path,
+            use_memory_mapping,
             src_column_for_names,
             chunk_number,
             chunk_range,
@@ -76,10 +78,10 @@ def get_max_column_width(src_file_data):
 
     return max_column_width
 
-def transpose_column_chunk(f4_src_file_path, src_column_for_names, chunk_number, column_range, max_column_width, tmp_tsv_file_path, verbose):
+def transpose_column_chunk(f4_src_file_path, use_memory_mapping, src_column_for_names, chunk_number, column_range, max_column_width, tmp_tsv_file_path, verbose):
     tmp_fw_file_path = f"{tmp_tsv_file_path}.fw"
 
-    with initialize(f4_src_file_path) as src_file_data:
+    with initialize(f4_src_file_path, use_memory_mapping) as src_file_data:
         print_message(f"Parsing column coordinates for chunk {chunk_number} when transposing {f4_src_file_path}.", verbose)
         # Get basic meta information.
         num_rows = src_file_data.cache_dict["num_rows"]
@@ -134,9 +136,9 @@ def transpose_column_chunk(f4_src_file_path, src_column_for_names, chunk_number,
 
                     cn_current, column_name = get_next_column_name(src_file_data, cn_current, cn_end)
                     row_start = chunk_column_index * new_row_width
-                    # fw_handle[row_start:(row_start + len(column_name))] = column_name
-                    fw_file.seek(row_start)
-                    fw_file.write(column_name)
+                    fw_handle[row_start:(row_start + len(column_name))] = column_name
+                    # fw_file.seek(row_start)
+                    # fw_file.write(column_name)
 
                 # Save values in transposed orientation.
                 for row_index in range(num_rows):
@@ -154,15 +156,14 @@ def transpose_column_chunk(f4_src_file_path, src_column_for_names, chunk_number,
                         row_start = chunk_column_index * new_row_width
                         value_start = row_start + (row_index + 1) * (max_column_width + 1)
 
-                        # fw_handle[value_start:(value_start + len(value))] = value
-                        fw_file.seek(value_start)
-                        fw_file.write(value)
+                        fw_handle[value_start:(value_start + len(value))] = value
+                        # fw_file.seek(value_start)
+                        # fw_file.write(value)
 
         # Convert the temporary fixed-width file to TSV and compress so it doesn't take up so much disk space for temp files.
         print_message(f"Converting fixed-width temp file at {tmp_fw_file_path} to compressed TSV when transposing {f4_src_file_path}.", verbose)
         with open(tmp_fw_file_path, "rb") as fw_file:
             with open_temp_file_to_compress(tmp_tsv_file_path) as tsv_file:
-            # with open(tmp_tsv_file_path, "wb") as tsv_file:
                 for line in fw_file:
                     line_items = line.rstrip(b"\n").split(b"\t")
                     line_items = [x.rstrip(b" ") for x in line_items]
@@ -176,7 +177,8 @@ def advance_to_column_names(src_file_data, first_col_index):
 
     # Advance to the first column name for this chunk range.
     for column_index in range(first_col_index):
-        while src_file_data.file_handle[cn_current:(cn_current + 1)] != b"\n":
+        # while src_file_data.file_handle[cn_current:(cn_current + 1)] != b"\n":
+        while read_from_file(src_file_data.file_handle, cn_current, cn_current + 1, src_file_data.use_memory_mapping) != b"\n":
             cn_current += 1
         cn_current += 1
 
@@ -185,14 +187,15 @@ def advance_to_column_names(src_file_data, first_col_index):
 def get_next_column_name(src_file_data, cn_current, cn_end):
     # Parse the column name, one character at a time.
     column_name = b""
-    while cn_current < cn_end and (next_char := src_file_data.file_handle[cn_current:(cn_current + 1)]) != b"\n":
+    # while cn_current < cn_end and (next_char := src_file_data.file_handle[cn_current:(cn_current + 1)]) != b"\n":
+    while cn_current < cn_end and (next_char := read_from_file(src_file_data.file_handle, cn_current, cn_current + 1, src_file_data.use_memory_mapping)) != b"\n":
         column_name += next_char
         cn_current += 1
 
     return cn_current + 1, column_name
 
 #TODO: This function is not yet designed for files with 1000000+ columns.
-def inner_join(f4_left_src_file_path, f4_right_src_file_path, join_column, f4_dest_file_path, index_columns=[], num_parallel=1, tmp_dir_path=None, verbose=False):
+def inner_join(f4_left_src_file_path, f4_right_src_file_path, join_column, f4_dest_file_path, index_columns=[], num_parallel=1, tmp_dir_path=None, use_memory_mapping=True, verbose=False):
     #TODO: Add error checking to make sure join_column is present in left and right.
     print_message(f"Inner joining {f4_left_src_file_path} and {f4_right_src_file_path} based on the {join_column} column, saving to {f4_dest_file_path}.", verbose)
 
@@ -206,8 +209,8 @@ def inner_join(f4_left_src_file_path, f4_right_src_file_path, join_column, f4_de
     tmp_dir_path = fix_dir_path_ending(tmp_dir_path)
     tmp_tsv_file_path = f"{tmp_dir_path}tmp.tsv.zstd"
 
-    with initialize(f4_left_src_file_path) as left_file_data:
-        with initialize(f4_right_src_file_path) as right_file_data:
+    with initialize(f4_left_src_file_path, use_memory_mapping) as left_file_data:
+        with initialize(f4_right_src_file_path, use_memory_mapping) as right_file_data:
             # Determine which functions are suitable for parsing the join column info.
             left_parse_row_value_function = get_parse_row_value_function(left_file_data)
             right_parse_row_value_function = get_parse_row_value_function(right_file_data)
