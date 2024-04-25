@@ -885,8 +885,8 @@ for compression_type in [None]:
     #verbose = False
     check_outputs = True
     #check_outputs = False
-    #use_memory_mapping=True
-    use_memory_mapping=False
+    use_memory_mapping=True
+    #use_memory_mapping=False
 
     # Medium tests
     run_larger_tests(num_parallel=num_parallel, size="medium", extension="", discrete1_index=11, numeric1_index=21, build_outputs=build_outputs, compression_type=compression_type, check_outputs=check_outputs, verbose=verbose, tmp_dir_path="/tmp/medium", use_memory_mapping=use_memory_mapping)
