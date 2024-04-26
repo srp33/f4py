@@ -127,38 +127,38 @@ def transpose_column_chunk(f4_src_file_path, use_memory_mapping, src_column_for_
         cn_current, column_name = get_next_column_name(src_file_data, cn_current, cn_end)
 
         # We can't compress this file because we have to navigate within it.
-        with open(tmp_fw_file_path, "rb+") as fw_file:
-            with mmap(fw_file.fileno(), 0, prot=PROT_WRITE) as fw_handle:
-                # Save new row names.
+        with open(tmp_fw_file_path, "r+b") as fw_file:
+            # with mmap(fw_file.fileno(), 0, prot=PROT_WRITE) as fw_handle:
+            # Save new row names.
+            for chunk_column_index, overall_column_index in enumerate(column_range):
+                if overall_column_index == src_column_for_names_index:
+                    continue
+
+                cn_current, column_name = get_next_column_name(src_file_data, cn_current, cn_end)
+                row_start = chunk_column_index * new_row_width
+                # fw_handle[row_start:(row_start + len(column_name))] = column_name
+                fw_file.seek(row_start)
+                fw_file.write(column_name)
+
+            # Save values in transposed orientation.
+            for row_index in range(num_rows):
+                print_message(f"Saving data to temp file {tmp_fw_file_path} for chunk {chunk_number} and original row {row_index} when transposing {f4_src_file_path}.", verbose, row_index)
+
+                #FYI: Retrieving all values in a row is much faster than one at a time.
+                values = parse_row_values_function(src_file_data, "", row_index, all_column_coords)
+
                 for chunk_column_index, overall_column_index in enumerate(column_range):
                     if overall_column_index == src_column_for_names_index:
                         continue
 
-                    cn_current, column_name = get_next_column_name(src_file_data, cn_current, cn_end)
+                    value = values[chunk_column_index]
+
                     row_start = chunk_column_index * new_row_width
-                    fw_handle[row_start:(row_start + len(column_name))] = column_name
-                    # fw_file.seek(row_start)
-                    # fw_file.write(column_name)
+                    value_start = row_start + (row_index + 1) * (max_column_width + 1)
 
-                # Save values in transposed orientation.
-                for row_index in range(num_rows):
-                    print_message(f"Saving data to temp file {tmp_fw_file_path} for chunk {chunk_number} and original row {row_index} when transposing {f4_src_file_path}.", verbose, row_index)
-
-                    #FYI: Retrieving all values in a row is much faster than one at a time.
-                    values = parse_row_values_function(src_file_data, "", row_index, all_column_coords)
-
-                    for chunk_column_index, overall_column_index in enumerate(column_range):
-                        if overall_column_index == src_column_for_names_index:
-                            continue
-
-                        value = values[chunk_column_index]
-
-                        row_start = chunk_column_index * new_row_width
-                        value_start = row_start + (row_index + 1) * (max_column_width + 1)
-
-                        fw_handle[value_start:(value_start + len(value))] = value
-                        # fw_file.seek(value_start)
-                        # fw_file.write(value)
+                    # fw_handle[value_start:(value_start + len(value))] = value
+                    fw_file.seek(value_start)
+                    fw_file.write(value)
 
         # Convert the temporary fixed-width file to TSV and compress so it doesn't take up so much disk space for temp files.
         print_message(f"Converting fixed-width temp file at {tmp_fw_file_path} to compressed TSV when transposing {f4_src_file_path}.", verbose)
