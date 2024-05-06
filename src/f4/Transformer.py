@@ -95,7 +95,7 @@ def transpose_column_chunk(f4_src_file_path, use_memory_mapping, src_column_for_
         # We can't compress this file because we have to navigate around it later.
         with open(tmp_fw_file_path, "wb") as fw_file:
             if chunk_number == 0:
-                print_message(f"Filling temp file {tmp_fw_file_path} with new column names for chunk {chunk_number} when transposing {f4_src_file_path}.", verbose)
+                print_message(f"Filling temp file {tmp_fw_file_path} with lnew column names for chunk {chunk_number} when transposing {f4_src_file_path}.", verbose)
                 # Write the value to the top-left cell.
                 fw_file.write(format_string_as_fixed_width(src_column_for_names.encode(), max_column_width) + b"\t")
 
@@ -211,6 +211,8 @@ def inner_join(f4_left_src_file_path, f4_right_src_file_path, join_column, f4_de
 
     with initialize(f4_left_src_file_path, use_memory_mapping) as left_file_data:
         with initialize(f4_right_src_file_path, use_memory_mapping) as right_file_data:
+            print_message(f"Getting join column info when inner joining {f4_left_src_file_path} and {f4_right_src_file_path} and saving to {f4_dest_file_path}.", verbose)
+
             # Determine which functions are suitable for parsing the join column info.
             left_parse_row_value_function = get_parse_row_value_function(left_file_data)
             right_parse_row_value_function = get_parse_row_value_function(right_file_data)
@@ -224,6 +226,7 @@ def inner_join(f4_left_src_file_path, f4_right_src_file_path, join_column, f4_de
             right_join_column_coord = parse_data_coord(right_file_data, "", right_join_column_index)
 
             # Determine which column values overlap for the join column between the two files.
+            print_message(f"Finding overlapping values in join column when inner joining {f4_left_src_file_path} and {f4_right_src_file_path} and saving to {f4_dest_file_path}.", verbose)
             left_join_column_values = []
             for row_index in range(left_file_data.cache_dict["num_rows"]):
                 value = left_parse_row_value_function(left_file_data, "", row_index, left_join_column_coord)
@@ -237,6 +240,7 @@ def inner_join(f4_left_src_file_path, f4_right_src_file_path, join_column, f4_de
             common_join_values = set(left_join_column_values) & set(right_join_column_values)
 
             # Get column names from the left file.
+            print_message(f"Getting column names from the left file when inner joining {f4_left_src_file_path} and {f4_right_src_file_path} and saving to {f4_dest_file_path}.", verbose)
             left_cn_current, left_cn_end = advance_to_column_names(left_file_data, -1)
             left_columns = []
             for column_index in range(left_file_data.cache_dict["num_cols"]):
@@ -244,6 +248,7 @@ def inner_join(f4_left_src_file_path, f4_right_src_file_path, join_column, f4_de
                 left_columns.append(column_name)
 
             # Get column names from the right file (excluding the join column).
+            print_message(f"Getting column names from the right file when inner joining {f4_left_src_file_path} and {f4_right_src_file_path} and saving to {f4_dest_file_path}.", verbose)
             right_cn_current, right_cn_end = advance_to_column_names(right_file_data, -1)
             right_columns = []
             for column_index in range(right_file_data.cache_dict["num_cols"]):
@@ -252,10 +257,12 @@ def inner_join(f4_left_src_file_path, f4_right_src_file_path, join_column, f4_de
                     right_columns.append(column_name)
 
             # Parse the column coordinates for all columns that will be saved.
+            print_message(f"Parsing column coordinatates for all columns when inner joining {f4_left_src_file_path} and {f4_right_src_file_path} and saving to {f4_dest_file_path}.", verbose)
             left_column_coords = [parse_data_coord(left_file_data, "", get_column_index_from_name(left_file_data, name)) for name in left_columns]
             right_column_coords = [parse_data_coord(right_file_data, "", get_column_index_from_name(right_file_data, name)) for name in right_columns]
 
             # Rename columns that are duplicated between left (x) and right (y).
+            print_message(f"Renaming duplicated columns when inner joining {f4_left_src_file_path} and {f4_right_src_file_path} and saving to {f4_dest_file_path}.", verbose)
             for left_i, column_name in enumerate(left_columns):
                 if column_name in right_columns:
                     right_i = right_columns.index(column_name)
@@ -263,6 +270,7 @@ def inner_join(f4_left_src_file_path, f4_right_src_file_path, join_column, f4_de
                     right_columns[right_i] = (f"{right_columns[right_i].decode()}.y").encode()
 
             # Create a cache of the right row index for each join value. This speeds up a later step.
+            print_message(f"Creating a cache of the right row index when inner joining {f4_left_src_file_path} and {f4_right_src_file_path} and saving to {f4_dest_file_path}.", verbose)
             right_index_dict = {}
             for i, value in enumerate(right_join_column_values):
                 if value in common_join_values:
@@ -277,6 +285,7 @@ def inner_join(f4_left_src_file_path, f4_right_src_file_path, join_column, f4_de
                 tmp_tsv_file.write(b"\t".join(left_columns + right_columns) + b"\n")
 
                 for left_row_index, left_value in enumerate(left_join_column_values):
+                    print_message(f"Joining rows and saving to temp file when inner joining {f4_left_src_file_path} and {f4_right_src_file_path} and saving to {f4_dest_file_path}.", verbose, left_row_index)
                     if left_value in common_join_values:
                         for right_row_index in right_index_dict[left_value]:
                             left_save_values = left_parse_row_values_function(left_file_data, "", left_row_index, left_column_coords)
