@@ -12,7 +12,8 @@ def transpose(f4_src_file_path, f4_dest_file_path, src_column_for_names, index_c
         num_cols = src_file_data.cache_dict["num_cols"]
         max_column_width = get_max_column_width(src_file_data)
 
-    tmp_dir_path2 = prepare_tmp_dir(tmp_dir_path)
+    # TODO: Support checkpoints.
+    tmp_dir_path2, use_checkpoints = prepare_tmp_dir(tmp_dir_path)
     tmp_tsv_file_path = f"{tmp_dir_path2}transposed.tsv.zstd"
 
     if num_parallel == 1:
@@ -46,12 +47,12 @@ def transpose(f4_src_file_path, f4_dest_file_path, src_column_for_names, index_c
                 for line in read_compressed_file_line_by_line(chunk_file_path):
                     tmp_tsv_file.write(line + b"\n")
 
-                remove(chunk_file_path)
+                remove_tmp_file(chunk_file_path)
 
     print_message(f"Converting temp file at {tmp_tsv_file_path} when transposing {f4_src_file_path} to {f4_dest_file_path}.", verbose)
     convert_delimited_file(tmp_tsv_file_path, f4_dest_file_path, comment_prefix=None, compression_type=src_file_data.decompression_type, index_columns=index_columns, num_parallel=num_parallel, verbose=verbose)
 
-    remove(tmp_tsv_file_path)
+    remove_tmp_file(tmp_tsv_file_path)
     rmtree(tmp_dir_path2)
 
 def generate_column_ranges(max_cols_per_chunk, num_cols, num_parallel):
@@ -169,7 +170,7 @@ def transpose_column_chunk(f4_src_file_path, use_memory_mapping, src_column_for_
                     line_items = [x.rstrip(b" ") for x in line_items]
                     tsv_file.write(b"\t".join(line_items) + b"\n")
 
-        remove(tmp_fw_file_path)
+        remove_tmp_file(tmp_fw_file_path)
 
 def advance_to_column_names(src_file_data, first_col_index):
     cn_current = src_file_data.file_map_dict["cn"][0]
@@ -301,5 +302,5 @@ def inner_join(f4_left_src_file_path, f4_right_src_file_path, join_column, f4_de
             print_message(f"Converting temp file at {tmp_tsv_file_path} to {f4_dest_file_path}.", verbose)
             convert_delimited_file(tmp_tsv_file_path, f4_dest_file_path, compression_type=compression_type, index_columns=index_columns, num_parallel=num_parallel, comment_prefix=None, verbose=verbose)
 
-    remove(tmp_tsv_file_path)
+    remove_tmp_file(tmp_tsv_file_path)
     rmtree(tmp_dir_path)

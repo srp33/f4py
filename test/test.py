@@ -85,7 +85,7 @@ def run_small_tests(in_file_path, f4_file_path, out_file_path, num_parallel=1, c
     for file_path in glob.glob(f"{f4_file_path}*"):
         os.unlink(file_path)
 
-    f4.convert_delimited_file(in_file_path, f4_file_path, compression_type=compression_type, num_parallel=num_parallel, index_columns=index_columns)
+    f4.convert_delimited_file(in_file_path, f4_file_path, compression_type=compression_type, num_parallel=num_parallel, index_columns=index_columns, tmp_dir_path="/tmp/f4_small_tests")
 
     try:
         f4.query("bogus_file_path")
@@ -93,6 +93,8 @@ def run_small_tests(in_file_path, f4_file_path, out_file_path, num_parallel=1, c
     except:
         pass_test("Invalid file path.")
 
+    print("version:")
+    print(f4.get_version(f4_file_path))
     check_result("Version", "Version number - major", f4.get_version(f4_file_path), "1")
     check_result("Dimensions", "Number of rows", f4.get_num_rows(f4_file_path, use_memory_mapping), 5)
     check_result("Dimensions", "Number of columns", f4.get_num_cols(f4_file_path, use_memory_mapping), 9)
@@ -873,12 +875,12 @@ def run_super_test(description, fltr, select_columns, num_parallel, tmp_dir_path
 #run_all_small_tests()
 #sys.exit()
 
-for compression_type in [None]:
+#for compression_type in [None]:
 #for compression_type in ["zstd"]:
-#for compression_type in [None, "zstd"]:
+for compression_type in [None, "zstd"]:
 #    num_parallel = 1
-#    num_parallel = 4
-    num_parallel = 16
+    num_parallel = 4
+#    num_parallel = 16
     build_outputs = True
     #build_outputs = False
     verbose = True
@@ -889,7 +891,7 @@ for compression_type in [None]:
     use_memory_mapping=False
 
     # Medium tests
-#    run_larger_tests(num_parallel=num_parallel, size="medium", extension="", discrete1_index=11, numeric1_index=21, build_outputs=build_outputs, compression_type=compression_type, check_outputs=check_outputs, verbose=verbose, tmp_dir_path="/tmp/medium", use_memory_mapping=use_memory_mapping)
+    run_larger_tests(num_parallel=num_parallel, size="medium", extension="", discrete1_index=11, numeric1_index=21, build_outputs=build_outputs, compression_type=compression_type, check_outputs=check_outputs, verbose=verbose, tmp_dir_path="/tmp/medium", use_memory_mapping=use_memory_mapping)
 
     # Large tests
 #    run_larger_tests(num_parallel=num_parallel, size="large_tall", extension="", discrete1_index=251, numeric1_index=501, build_outputs=build_outputs, compression_type=compression_type, check_outputs=check_outputs, verbose=verbose, tmp_dir_path="/tmp/large_tall", use_memory_mapping=use_memory_mapping)
@@ -913,7 +915,7 @@ for compression_type in [None]:
     #Attempt this? https://community.hpe.com/t5/servers-systems-the-right/cray-graph-engine-takes-on-a-trillion-triples/ba-p/7096770
 
 #    f4.transpose("data/medium.f4", "/tmp/medium_transposed.f4", src_column_for_names="ID", num_parallel=num_parallel, verbose=verbose, use_memory_mapping=use_memory_mapping)
-    f4.transpose("data/large_tall.f4", "/tmp/large_tall_transposed.f4", src_column_for_names="ID", num_parallel=num_parallel, verbose=verbose, use_memory_mapping=use_memory_mapping)
+#    f4.transpose("data/large_tall.f4", "/tmp/large_tall_transposed.f4", src_column_for_names="ID", num_parallel=num_parallel, verbose=verbose, use_memory_mapping=use_memory_mapping)
 
 #    f4.inner_join("data/medium.f4", "data/medium.f4", "ID", "/tmp/medium_joined.f4", num_parallel=num_parallel, verbose=verbose, use_memory_mapping=use_memory_mapping)
 #    f4.inner_join("data/large_tall.f4", "data/large_wide.f4", "ID", "/tmp/large_joined.f4", num_parallel=num_parallel, verbose=verbose, use_memory_mapping=use_memory_mapping)
