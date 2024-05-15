@@ -313,6 +313,8 @@ def save_formatted_data(delimited_file_path, f4_file_path, comment_prefix, delim
 
     write_str_to_file(get_data_path(tmp_dir_path, "ll", chunk_number), str(line_length).encode(), False)
 
+    num_rows = 0
+
     with get_delimited_file_handle(delimited_file_path) as in_file:
         skip_comments(in_file, comment_prefix)
         skip_line(in_file)  # Header line
@@ -333,8 +335,6 @@ def save_formatted_data(delimited_file_path, f4_file_path, comment_prefix, delim
                     column_size_cache[column_index] = cursor.fetchone()["size"]
 
             for column_index, value in iterate_delimited_file_column_indices(in_file, delimiter, file_read_chunk_size, start_column_index, end_column_index):
-                # print_message(f"Saving formatted data for when converting {delimited_file_path} to {f4_file_path}.", verbose, column_index)
-
                 if len(column_size_cache) == 0:
                     if column_index == start_column_index:
                         cursor.close()
@@ -347,6 +347,9 @@ def save_formatted_data(delimited_file_path, f4_file_path, comment_prefix, delim
                     column_size = column_size_cache[column_index]
 
                 out_list.append(format_string_as_fixed_width(value, column_size))
+
+                num_rows += 1
+                print_message(f"Saving formatted data for when converting {delimited_file_path} to {f4_file_path} for columns {start_column_index} - {end_column_index - 1}.", verbose, num_rows)
 
                 if len(out_list) == out_items_chunk_size:
                     data_file.write(b"".join(out_list))
