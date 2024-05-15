@@ -261,8 +261,9 @@ def parse_column_info(delimited_file_path, f4_file_path, comment_prefix, delimit
             if column_index == start_column_index:
                 num_rows += 1
 
+                print_message(f"Parsing column names, sizes, and types when converting {delimited_file_path} to {f4_file_path} for columns {start_column_index} - {end_column_index - 1}.", verbose, num_rows)
+
             if start_column_index <= column_index < end_column_index:
-                print_message(f"Parsing column names, sizes, and types when converting {delimited_file_path} to {f4_file_path}.", verbose, column_index)
                 this_size = len(value)
                 i, f, s = infer_type(value)
 
@@ -332,7 +333,7 @@ def save_formatted_data(delimited_file_path, f4_file_path, comment_prefix, delim
                     column_size_cache[column_index] = cursor.fetchone()["size"]
 
             for column_index, value in iterate_delimited_file_column_indices(in_file, delimiter, file_read_chunk_size, start_column_index, end_column_index):
-                print_message(f"Saving formatted data for when converting {delimited_file_path} to {f4_file_path}.", verbose, column_index)
+                # print_message(f"Saving formatted data for when converting {delimited_file_path} to {f4_file_path}.", verbose, column_index)
 
                 if len(column_size_cache) == 0:
                     if column_index == start_column_index:
