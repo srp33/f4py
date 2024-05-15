@@ -313,7 +313,8 @@ def save_formatted_data(delimited_file_path, f4_file_path, comment_prefix, delim
 
     write_str_to_file(get_data_path(tmp_dir_path, "ll", chunk_number), str(line_length).encode(), False)
 
-    num_rows = 0
+    num_columns_to_parse = end_column_index - start_column_index
+    data_value_count = 0
 
     with get_delimited_file_handle(delimited_file_path) as in_file:
         skip_comments(in_file, comment_prefix)
@@ -322,7 +323,6 @@ def save_formatted_data(delimited_file_path, f4_file_path, comment_prefix, delim
         # Save data.
         with open_temp_file_to_compress(get_data_path(tmp_dir_path, "data", chunk_number)) as data_file:
             out_list = []
-            num_columns_to_parse = end_column_index - start_column_index
 
             column_size_cache = {}
             if num_columns_to_parse <= 1000:
@@ -348,8 +348,8 @@ def save_formatted_data(delimited_file_path, f4_file_path, comment_prefix, delim
 
                 out_list.append(format_string_as_fixed_width(value, column_size))
 
-                num_rows += 1
-                print_message(f"Saving formatted data for when converting {delimited_file_path} to {f4_file_path} for columns {start_column_index} - {end_column_index - 1}.", verbose, num_rows)
+                data_value_count += 1
+                print_message(f"Saving formatted data for when converting {delimited_file_path} to {f4_file_path} for columns {start_column_index} - {end_column_index - 1}.", verbose, data_value_count / num_columns_to_parse)
 
                 if len(out_list) == out_items_chunk_size:
                     data_file.write(b"".join(out_list))
