@@ -586,7 +586,7 @@ def query(data_file_path, fltr=NoFilter(), select_columns=[], out_file_path=None
 
             for row_chunk_number in range(num_row_index_chunks):
                 for column_chunk_number in range(num_select_column_chunks):
-                    remove(f"{tmp_dir_path}{row_chunk_number}_{column_chunk_number}")
+                    remove_tmp_file(f"{tmp_dir_path}{row_chunk_number}_{column_chunk_number}")
 
     # TODO: Use the RangeSet or intervaltree packages to store discrete
     #         indices more compactly (and quickly)?

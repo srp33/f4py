@@ -39,37 +39,54 @@ def convert_delimited_file(delimited_file_path, f4_file_path, index_columns=[], 
     column_chunk_indices = generate_column_chunk_ranges(num_cols, num_cols_per_chunk, num_parallel)
 
     # Create temp directory.
-    tmp_dir_path2 = prepare_tmp_dir(tmp_dir_path)
+    tmp_dir_path2, use_checkpoints = prepare_tmp_dir(tmp_dir_path)
+
+    # Compare the arguments passed to this function against any that
+    # were saved. This code gives me a dictionary with the parameter
+    # names and values.
+    if use_checkpoints:
+        checkpoint_info = locals().copy()
+        checkpoint_file_path = f"{tmp_dir_path2}checkpoint__info"
+        if path.exists(checkpoint_file_path):
+            prior_checkpoint_info = deserialize(read_str_from_file(checkpoint_file_path))
+
+            if prior_checkpoint_info != checkpoint_info:
+                print_message(f"Checkpoint information was found at {checkpoint_file_path}, but it cannot be used because it does not match the arguments specified here.", verbose)
+                for file_path in glob(f"{tmp_dir_path2}checkpoint__*"):
+                    remove_tmp_file(file_path)
+
+                print_message(f"Saving checkpoint information to {checkpoint_file_path}.")
+                write_str_to_file(checkpoint_file_path, serialize(checkpoint_info), False)
 
     # Parse column info into a database for each chunk.
-    joblib.Parallel(n_jobs=num_parallel)(joblib.delayed(parse_column_info)(delimited_file_path, f4_file_path, comment_prefix, delimiter, file_read_chunk_size, chunk_number, chunk_indices[0], chunk_indices[1], tmp_dir_path2, out_items_chunk_size, verbose) for chunk_number, chunk_indices in enumerate(column_chunk_indices))
+    joblib.Parallel(n_jobs=num_parallel)(joblib.delayed(parse_column_info)(delimited_file_path, f4_file_path, comment_prefix, delimiter, file_read_chunk_size, chunk_number, chunk_indices[0], chunk_indices[1], tmp_dir_path2, out_items_chunk_size, use_checkpoints, verbose) for chunk_number, chunk_indices in enumerate(column_chunk_indices))
 
     # Save and format data to a temp file for each column chunk.
-    joblib.Parallel(n_jobs=num_parallel)(joblib.delayed(save_formatted_data)(delimited_file_path, f4_file_path, comment_prefix, delimiter, file_read_chunk_size, chunk_number, chunk_indices[0], chunk_indices[1], tmp_dir_path2, out_items_chunk_size, verbose) for chunk_number, chunk_indices in enumerate(column_chunk_indices))
+    joblib.Parallel(n_jobs=num_parallel)(joblib.delayed(save_formatted_data)(delimited_file_path, f4_file_path, comment_prefix, delimiter, file_read_chunk_size, chunk_number, chunk_indices[0], chunk_indices[1], tmp_dir_path2, out_items_chunk_size, use_checkpoints, verbose) for chunk_number, chunk_indices in enumerate(column_chunk_indices))
 
     # Combine column databases across the chunks.
-    combine_column_databases(delimited_file_path, f4_file_path, column_chunk_indices, tmp_dir_path2, verbose)
+    combine_column_databases(delimited_file_path, f4_file_path, column_chunk_indices, tmp_dir_path2, use_checkpoints, verbose)
 
     # Create meta files for all columns.
-    save_column_name_info(delimited_file_path, f4_file_path, out_items_chunk_size, tmp_dir_path2, verbose)
-    save_column_types(delimited_file_path, f4_file_path, out_items_chunk_size, tmp_dir_path2, verbose)
-    save_column_coordinates(delimited_file_path, f4_file_path, out_items_chunk_size, tmp_dir_path2, verbose)
+    save_column_name_info(delimited_file_path, f4_file_path, out_items_chunk_size, tmp_dir_path2, use_checkpoints, verbose)
+    save_column_types(delimited_file_path, f4_file_path, out_items_chunk_size, tmp_dir_path2, use_checkpoints, verbose)
+    save_column_coordinates(delimited_file_path, f4_file_path, out_items_chunk_size, tmp_dir_path2, use_checkpoints, verbose)
 
     # Merge the saved/formatted data across the column chunks.
-    # Get number of rows.
-    num_rows, line_length = combine_data_for_column_chunks(delimited_file_path, f4_file_path, column_chunk_indices, tmp_dir_path2, verbose)
+    combine_data_for_column_chunks(delimited_file_path, f4_file_path, column_chunk_indices, tmp_dir_path2, use_checkpoints, verbose)
+
+    num_rows = int(read_str_from_file(f"{tmp_dir_path2}num_rows"))
+    line_length_total = int(read_str_from_file(f"{tmp_dir_path2}line_length_total"))
 
     if num_rows == 0:
         raise Exception(f"A header row but no data rows were detected in {delimited_file_path}.")
 
     if index_columns:
-        build_indexes(f4_file_path, tmp_dir_path2, index_columns, num_rows, line_length, num_parallel, get_columns_database_file_path(tmp_dir_path2), verbose)
-
-    remove(get_columns_database_file_path(tmp_dir_path2))
+        build_indexes(f4_file_path, tmp_dir_path2, index_columns, num_rows, line_length_total, num_parallel, get_columns_database_file_path(tmp_dir_path2), use_checkpoints, verbose)
 
     #TODO: Parallelize this by row chunks.
     if compression_type:
-        compress_data(tmp_dir_path2, compression_type, num_rows, line_length)
+        compress_data(delimited_file_path, f4_file_path, tmp_dir_path2, compression_type, num_rows, line_length_total, use_checkpoints, verbose)
     # else:
     #     # The combined file will be compressed, so we need to decompress it.
     #     rename(get_data_path(tmp_dir_path2, "data"), get_data_path(tmp_dir_path2, "datacmpr"))
@@ -84,10 +101,20 @@ def convert_delimited_file(delimited_file_path, f4_file_path, index_columns=[], 
     #                     break
     #
     #                 data_file.write(content)
-
     combine_into_single_file(delimited_file_path, f4_file_path, tmp_dir_path2, file_read_chunk_size, verbose)
 
-    rmtree(tmp_dir_path2)
+    remove_tmp_file(get_columns_database_file_path(tmp_dir_path2))
+
+    # Remove checkpoint files because we successfully built the file.
+    for file_path in glob(f"{tmp_dir_path2}checkpoint__*"):
+        remove_tmp_file(file_path)
+
+    remove_tmp_file(f"{tmp_dir_path2}num_rows")
+    remove_tmp_file(f"{tmp_dir_path2}line_length_total")
+
+    # Only remove the temp directory if we created it.
+    if not tmp_dir_path:
+        rmtree(tmp_dir_path2)
 
     print_message(f"Done converting {delimited_file_path} to {f4_file_path}.", verbose)
 
@@ -203,7 +230,10 @@ def populate_database_with_column_names(delimited_file_path, comment_prefix, del
         cursor.executemany(sql, save_tuples)
 
 # This function is executed in parallel.
-def parse_column_info(delimited_file_path, f4_file_path, comment_prefix, delimiter, file_read_chunk_size, chunk_number, start_column_index, end_column_index, tmp_dir_path, out_items_chunk_size, verbose):
+def parse_column_info(delimited_file_path, f4_file_path, comment_prefix, delimiter, file_read_chunk_size, chunk_number, start_column_index, end_column_index, tmp_dir_path, out_items_chunk_size, use_checkpoints, verbose):
+    if has_checkpoint_been_reached_previously(use_checkpoints, tmp_dir_path, chunk_number, verbose):
+        return
+
     print_message(f"Parsing column names, sizes, and types when converting {delimited_file_path} to {f4_file_path} for columns {start_column_index} - {end_column_index - 1}.", verbose)
 
     columns_file_path = get_columns_database_file_path(tmp_dir_path, chunk_number)
@@ -228,6 +258,8 @@ def parse_column_info(delimited_file_path, f4_file_path, comment_prefix, delimit
         # Loop through the file for the specified columns and update the dictionaries.
         save_tuples = []
         for column_index, value in iterate_delimited_file_column_indices(in_file, delimiter, file_read_chunk_size, start_column_index, end_column_index):
+            print_message(f"Parsing column names, sizes, and types for column_index {column_index} when converting {delimited_file_path} to {f4_file_path} for columns {start_column_index} - {end_column_index - 1}.", verbose, column_index)
+
             if column_index == start_column_index:
                 num_rows += 1
 
@@ -259,10 +291,15 @@ def parse_column_info(delimited_file_path, f4_file_path, comment_prefix, delimit
     cursor.close()
     conn.close()
 
+    record_checkpoint_reached(use_checkpoints, tmp_dir_path, chunk_number)
+
     print_message(f"Done parsing column names, sizes, and types when converting {delimited_file_path} to {f4_file_path} for columns {start_column_index} - {end_column_index - 1}.", verbose)
 
 # This function is executed in parallel.
-def save_formatted_data(delimited_file_path, f4_file_path, comment_prefix, delimiter, file_read_chunk_size, chunk_number, start_column_index, end_column_index, tmp_dir_path, out_items_chunk_size, verbose):
+def save_formatted_data(delimited_file_path, f4_file_path, comment_prefix, delimiter, file_read_chunk_size, chunk_number, start_column_index, end_column_index, tmp_dir_path, out_items_chunk_size, use_checkpoints, verbose):
+    if has_checkpoint_been_reached_previously(use_checkpoints, tmp_dir_path, chunk_number, verbose):
+        return
+
     print_message(f"Saving formatted data when converting {delimited_file_path} to {f4_file_path} for columns {start_column_index} - {end_column_index - 1}.", verbose)
 
     columns_file_path = get_columns_database_file_path(tmp_dir_path, chunk_number)
@@ -274,7 +311,7 @@ def save_formatted_data(delimited_file_path, f4_file_path, comment_prefix, delim
                       WHERE column_index BETWEEN ? AND ?''', (start_column_index, end_column_index,))
     line_length = cursor.fetchone()["size"]
 
-    write_str_to_file(get_data_path(tmp_dir_path, "ll", chunk_number), str(line_length).encode())
+    write_str_to_file(get_data_path(tmp_dir_path, "ll", chunk_number), str(line_length).encode(), False)
 
     with get_delimited_file_handle(delimited_file_path) as in_file:
         skip_comments(in_file, comment_prefix)
@@ -296,6 +333,8 @@ def save_formatted_data(delimited_file_path, f4_file_path, comment_prefix, delim
                     column_size_cache[column_index] = cursor.fetchone()["size"]
 
             for column_index, value in iterate_delimited_file_column_indices(in_file, delimiter, file_read_chunk_size, start_column_index, end_column_index):
+                print_message(f"Saving formatted data for column index {column_index} when converting {delimited_file_path} to {f4_file_path} for columns {start_column_index} - {end_column_index - 1}.", verbose, column_index)
+
                 if len(column_size_cache) == 0:
                     if column_index == start_column_index:
                         cursor.close()
@@ -319,9 +358,14 @@ def save_formatted_data(delimited_file_path, f4_file_path, comment_prefix, delim
     cursor.close()
     conn.close()
 
+    record_checkpoint_reached(use_checkpoints, tmp_dir_path, chunk_number)
+
     print_message(f"Done saving formatted data when converting {delimited_file_path} to {f4_file_path} for columns {start_column_index} - {end_column_index - 1}.", verbose)
 
-def combine_column_databases(delimited_file_path, f4_file_path, column_chunk_indices, tmp_dir_path, verbose):
+def combine_column_databases(delimited_file_path, f4_file_path, column_chunk_indices, tmp_dir_path, use_checkpoints, verbose):
+    if has_checkpoint_been_reached_previously(use_checkpoints, tmp_dir_path, 0, verbose):
+        return
+
     # Combine the column sizes and types across the chunks.
     # We won't add the num_* columns to the combined file because they are no longer necessary.
     print_message(f"Combining column databases when converting {delimited_file_path} to {f4_file_path}.", verbose)
@@ -334,12 +378,16 @@ def combine_column_databases(delimited_file_path, f4_file_path, column_chunk_ind
         cursor_0.execute(f"ATTACH DATABASE '{chunk_file_path}' AS db_chunk")
         cursor_0.execute(f"INSERT INTO columns (column_index, column_name, size, inferred_type) SELECT column_index, column_name, size, inferred_type FROM db_chunk.columns")
         cursor_0.execute("DETACH DATABASE db_chunk")
-        remove(chunk_file_path)
 
     cursor_0.close()
     conn_0.close()
 
+    record_checkpoint_reached(use_checkpoints, tmp_dir_path, 0)
+
     rename(get_columns_database_file_path(tmp_dir_path, 0), get_columns_database_file_path(tmp_dir_path))
+
+    for chunk_number in range(1, len(column_chunk_indices)):
+        remove_tmp_file(get_columns_database_file_path(tmp_dir_path, chunk_number))
 
 def get_max_column_length(cursor, column_name):
     sql = f'''SELECT MAX(LENGTH(CAST({column_name} AS TEXT))) AS max_length
@@ -348,7 +396,10 @@ def get_max_column_length(cursor, column_name):
     cursor.execute(sql)
     return cursor.fetchone()["max_length"]
 
-def save_column_name_info(delimited_file_path, f4_file_path, out_items_chunk_size, tmp_dir_path, verbose):
+def save_column_name_info(delimited_file_path, f4_file_path, out_items_chunk_size, tmp_dir_path, use_checkpoints, verbose):
+    if has_checkpoint_been_reached_previously(use_checkpoints, tmp_dir_path, 0, verbose):
+        return
+
     print_message(f"Saving column name info when converting {delimited_file_path} to {f4_file_path}.", verbose)
 
     conn = connect_sql(get_columns_database_file_path(tmp_dir_path))
@@ -420,7 +471,12 @@ def save_column_name_info(delimited_file_path, f4_file_path, out_items_chunk_siz
 
     write_temp_file_original_size(get_data_path(tmp_dir_path, "cn"), cn_file_original_size)
 
-def save_column_types(delimited_file_path, f4_file_path, out_items_chunk_size, tmp_dir_path, verbose):
+    record_checkpoint_reached(use_checkpoints, tmp_dir_path, 0)
+
+def save_column_types(delimited_file_path, f4_file_path, out_items_chunk_size, tmp_dir_path, use_checkpoints, verbose):
+    if has_checkpoint_been_reached_previously(use_checkpoints, tmp_dir_path, 0, verbose):
+        return
+
     print_message(f"Saving column type and size info when converting {delimited_file_path} to {f4_file_path}.", verbose)
 
     conn = connect_sql(get_columns_database_file_path(tmp_dir_path))
@@ -452,7 +508,12 @@ def save_column_types(delimited_file_path, f4_file_path, out_items_chunk_size, t
 
     write_temp_file_original_size(get_data_path(tmp_dir_path, "ct"), ct_file_original_size)
 
-def save_column_coordinates(delimited_file_path, f4_file_path, out_items_chunk_size, tmp_dir_path, verbose):
+    record_checkpoint_reached(use_checkpoints, tmp_dir_path, 0)
+
+def save_column_coordinates(delimited_file_path, f4_file_path, out_items_chunk_size, tmp_dir_path, use_checkpoints, verbose):
+    if has_checkpoint_been_reached_previously(use_checkpoints, tmp_dir_path, 0, verbose):
+        return
+
     print_message(f"Saving column coordinates when converting {delimited_file_path} to {f4_file_path}.", verbose)
 
     conn = connect_sql(get_columns_database_file_path(tmp_dir_path))
@@ -494,7 +555,12 @@ def save_column_coordinates(delimited_file_path, f4_file_path, out_items_chunk_s
 
     write_str_to_file(get_data_path(tmp_dir_path, "ccml"), str(max_coord_length).encode())
 
-def combine_data_for_column_chunks(delimited_file_path, f4_file_path, column_chunk_indices, tmp_dir_path, verbose):
+    record_checkpoint_reached(use_checkpoints, tmp_dir_path, 0)
+
+def combine_data_for_column_chunks(delimited_file_path, f4_file_path, column_chunk_indices, tmp_dir_path, use_checkpoints, verbose):
+    if has_checkpoint_been_reached_previously(use_checkpoints, tmp_dir_path, 0, verbose):
+        return
+
     print_message(f"Combining data for column chunks when converting {delimited_file_path} to {f4_file_path}.", verbose)
 
     file_handles = {}
@@ -505,7 +571,6 @@ def combine_data_for_column_chunks(delimited_file_path, f4_file_path, column_chu
     for chunk_number in range(len(column_chunk_indices)):
         line_length_file_path = get_data_path(tmp_dir_path, "ll", chunk_number)
         line_lengths[chunk_number] = int(read_str_from_file(line_length_file_path))
-        remove(line_length_file_path)
 
     line_length_total = sum(line_lengths.values())
 
@@ -521,80 +586,20 @@ def combine_data_for_column_chunks(delimited_file_path, f4_file_path, column_chu
 
     write_temp_file_original_size(get_data_path(tmp_dir_path, "data"), out_file_original_size)
 
+    record_checkpoint_reached(use_checkpoints, tmp_dir_path, 0)
+
     for chunk_number in range(len(column_chunk_indices)):
-        file_handles[chunk_number].close()
-        remove(get_data_path(tmp_dir_path, "data", chunk_number))
+        remove_tmp_file(get_data_path(tmp_dir_path, "ll", chunk_number))
+        remove_tmp_file(get_data_path(tmp_dir_path, "data", chunk_number))
 
-    return num_rows, line_length_total
+    # We save these numbers to files so we can retrieve them when checkpoints are used.
+    write_str_to_file(f"{tmp_dir_path}num_rows", str(num_rows).encode(), False)
+    write_str_to_file(f"{tmp_dir_path}line_length_total", str(line_length_total).encode(), False)
 
-def compress_data(tmp_dir_path, compression_type, num_rows, line_length):
-    # For now, we assume z-standard compression.
-    compressor = ZstdCompressor(level=1)
+def build_indexes(f4_file_path, tmp_dir_path, index_columns, num_rows, line_length, num_parallel, columns_database_file_path, use_checkpoints, verbose=False):
+    if has_checkpoint_been_reached_previously(use_checkpoints, tmp_dir_path, 0, verbose):
+        return
 
-    # Compress the data.
-    # TODO: If necessary, chunk the compression so we can handle extremely wide files.
-    compressed_row_ends = []
-    current_compressed_row_end = 0
-    compressed_lines_to_save = []
-    compressed_chars_not_saved = 0
-
-    with open_temp_file_compressed(get_data_path(tmp_dir_path, "data")) as file_handle:
-        cmpr_file_original_size = 0
-
-        with open_temp_file_to_compress(get_data_path(tmp_dir_path, "cmpr")) as cmpr_file:
-            with open_temp_file_to_compress(get_data_path(tmp_dir_path, "re_tmp")) as re_tmp_file:
-                for row_i in range(num_rows):
-                    row_start = row_i * line_length
-                    row_end = (row_i + 1) * line_length
-
-                    file_handle.seek(row_start)
-                    row = file_handle.read(row_end - row_start)
-                    compressed_line = compressor.compress(row)
-                    compressed_row_length = len(compressed_line)
-
-                    current_compressed_row_end += compressed_row_length
-                    compressed_row_ends.append(current_compressed_row_end)
-                    compressed_lines_to_save.append(compressed_line)
-                    compressed_chars_not_saved += compressed_row_length
-
-                    if compressed_chars_not_saved >= 1000000:
-                        cmpr_file_original_size += cmpr_file.write(b"".join(compressed_lines_to_save))
-
-                        re_tmp_file.write(b"\n".join([str(rl).encode() for rl in compressed_row_ends]))
-                        if row_i != (num_rows - 1):
-                            re_tmp_file.write(b"\n")
-
-                        mrel = len(str(compressed_row_ends[-1]))
-                        compressed_row_ends = []
-                        compressed_lines_to_save = []
-                        compressed_chars_not_saved = 0
-
-                if compressed_chars_not_saved > 0:
-                    cmpr_file_original_size += cmpr_file.write(b"".join(compressed_lines_to_save))
-                    re_tmp_file.write(b"\n".join([str(rl).encode() for rl in compressed_row_ends]))
-
-    rename(get_data_path(tmp_dir_path, "cmpr"), get_data_path(tmp_dir_path, "data"))
-    write_temp_file_original_size(get_data_path(tmp_dir_path, "data"), cmpr_file_original_size)
-
-    if len(compressed_row_ends) > 0:
-        mrel = len(str(compressed_row_ends[-1]))
-
-    write_str_to_file(get_data_path(tmp_dir_path, "mrel"), str(mrel).encode())
-
-    re_file_original_size = 0
-    with open_temp_file_to_compress(get_data_path(tmp_dir_path, "re")) as re_file:
-        for line in read_compressed_file_line_by_line(get_data_path(tmp_dir_path, "re_tmp")):
-            row_end = line.rstrip(b"\n")
-            re_file_original_size += re_file.write(format_string_as_fixed_width(row_end, mrel))
-
-    write_temp_file_original_size(get_data_path(tmp_dir_path, "re"), re_file_original_size)
-    remove(get_data_path(tmp_dir_path, "re_tmp"))
-
-    write_str_to_file(get_data_path(tmp_dir_path, "ll"), str(line_length).encode())
-    write_str_to_file(get_data_path(tmp_dir_path, "nrow"), str(num_rows).encode())
-    write_str_to_file(get_data_path(tmp_dir_path, "cmpr"), b"z")
-
-def build_indexes(f4_file_path, tmp_dir_path, index_columns, num_rows, line_length, num_parallel, columns_database_file_path, verbose=False):
     index_info_dict = {}
 
     if isinstance(index_columns, str):
@@ -623,6 +628,8 @@ def build_indexes(f4_file_path, tmp_dir_path, index_columns, num_rows, line_leng
         raise Exception("When specifying index columns, they must either be a string or a list.")
 
     write_str_to_file(f"{tmp_dir_path}i", serialize(index_info_dict))
+
+    record_checkpoint_reached(use_checkpoints, tmp_dir_path, 0)
 
 def build_index(f4_file_path, tmp_dir_path, index_number, index_columns, reverse_status_dict, num_rows, line_length, columns_database_file_path, verbose):
     out_index_file_path_prefix = f"{tmp_dir_path}i{index_number}"
@@ -778,7 +785,7 @@ def build_index(f4_file_path, tmp_dir_path, index_number, index_columns, reverse
         cc += format_string_as_fixed_width(x, ccml)
     write_str_to_file(f"{out_index_file_path_prefix}cc", cc)
 
-    remove(index_database_file_path)
+    remove_tmp_file(index_database_file_path)
 
     print_message(f"Done building index for {', '.join(index_columns)} column(s) in {f4_file_path}.", verbose)
 
@@ -806,31 +813,6 @@ def check_index_column_reverse_status(index_columns):
 
     return index_columns, reverse_status_dict
 
-# def get_column_index_and_type(tmp_dir_path, index_column_name):
-#     columns_file_path = get_columns_database_file_path(tmp_dir_path)
-#
-#     conn = connect_sql(columns_file_path)
-#     cursor = conn.cursor()
-#
-#     cursor.execute('''SELECT column_index, inferred_type
-#                       FROM columns
-#                       WHERE TRIM(column_name) = ?''', (index_column_name, ))
-#
-#     row = cursor.fetchone()
-#
-#     if not row:
-#         raise Exception(f"No column exists with the name '{index_column_name}.'")
-#         cursor.close()
-#         conn.close()
-#
-#     index_column_index = row["column_index"]
-#     index_column_type = row["inferred_type"]
-#
-#     cursor.close()
-#     conn.close()
-#
-#     return index_column_index, index_column_type
-
 def get_column_index_coords(tmp_dir_path, index_column_index, ccml):
     with open_temp_file_compressed(get_data_path(tmp_dir_path, "cc")) as file_handle:
         # with mmap(file_handle.fileno(), 0, prot=PROT_READ) as mmap_handle:
@@ -845,6 +827,81 @@ def get_column_index_coords(tmp_dir_path, index_column_index, ccml):
         coord2 = file_handle.read(pos_c - pos_b)
 
         return fast_int(coord1), fast_int(coord2)
+
+def compress_data(delimited_file_path, f4_file_path, tmp_dir_path, compression_type, num_rows, line_length, use_checkpoints, verbose):
+    if has_checkpoint_been_reached_previously(use_checkpoints, tmp_dir_path, 0, verbose):
+        return
+
+    print_message(f"Compressing data for {delimited_file_path} to {f4_file_path}.", verbose)
+
+    # For now, we assume z-standard compression.
+    compressor = ZstdCompressor(level=1)
+
+    # Compress the data.
+    # TODO: If necessary, chunk the compression so we can handle extremely wide files.
+    compressed_row_ends = []
+    current_compressed_row_end = 0
+    compressed_lines_to_save = []
+    compressed_chars_not_saved = 0
+
+    with open_temp_file_compressed(get_data_path(tmp_dir_path, "data")) as file_handle:
+        cmpr_file_original_size = 0
+
+        with open_temp_file_to_compress(get_data_path(tmp_dir_path, "cmpr")) as cmpr_file:
+            with open_temp_file_to_compress(get_data_path(tmp_dir_path, "re_tmp")) as re_tmp_file:
+                for row_i in range(num_rows):
+                    row_start = row_i * line_length
+                    row_end = (row_i + 1) * line_length
+
+                    file_handle.seek(row_start)
+                    row = file_handle.read(row_end - row_start)
+                    compressed_line = compressor.compress(row)
+                    compressed_row_length = len(compressed_line)
+
+                    current_compressed_row_end += compressed_row_length
+                    compressed_row_ends.append(current_compressed_row_end)
+                    compressed_lines_to_save.append(compressed_line)
+                    compressed_chars_not_saved += compressed_row_length
+
+                    if compressed_chars_not_saved >= 1000000:
+                        cmpr_file_original_size += cmpr_file.write(b"".join(compressed_lines_to_save))
+
+                        re_tmp_file.write(b"\n".join([str(rl).encode() for rl in compressed_row_ends]))
+                        if row_i != (num_rows - 1):
+                            re_tmp_file.write(b"\n")
+
+                        mrel = len(str(compressed_row_ends[-1]))
+                        compressed_row_ends = []
+                        compressed_lines_to_save = []
+                        compressed_chars_not_saved = 0
+
+                if compressed_chars_not_saved > 0:
+                    cmpr_file_original_size += cmpr_file.write(b"".join(compressed_lines_to_save))
+                    re_tmp_file.write(b"\n".join([str(rl).encode() for rl in compressed_row_ends]))
+
+    if len(compressed_row_ends) > 0:
+        mrel = len(str(compressed_row_ends[-1]))
+
+    write_str_to_file(get_data_path(tmp_dir_path, "mrel"), str(mrel).encode())
+
+    re_file_original_size = 0
+    with open_temp_file_to_compress(get_data_path(tmp_dir_path, "re")) as re_file:
+        for line in read_compressed_file_line_by_line(get_data_path(tmp_dir_path, "re_tmp")):
+            row_end = line.rstrip(b"\n")
+            re_file_original_size += re_file.write(format_string_as_fixed_width(row_end, mrel))
+
+    write_temp_file_original_size(get_data_path(tmp_dir_path, "re"), re_file_original_size)
+
+    record_checkpoint_reached(use_checkpoints, tmp_dir_path, 0)
+
+    rename(get_data_path(tmp_dir_path, "cmpr"), get_data_path(tmp_dir_path, "data"))
+    write_temp_file_original_size(get_data_path(tmp_dir_path, "data"), cmpr_file_original_size)
+
+    write_str_to_file(get_data_path(tmp_dir_path, "ll"), str(line_length).encode())
+    write_str_to_file(get_data_path(tmp_dir_path, "nrow"), str(num_rows).encode())
+    write_str_to_file(get_data_path(tmp_dir_path, "cmpr"), b"z")
+
+    remove_tmp_file(get_data_path(tmp_dir_path, "re_tmp"))
 
 def combine_into_single_file(delimited_file_path, f4_file_path, tmp_dir_path, read_chunk_size, verbose):
     def _create_file_map(start_end_positions):
@@ -864,7 +921,8 @@ def combine_into_single_file(delimited_file_path, f4_file_path, tmp_dir_path, re
 
     start_end_positions = []
     for file_path in sorted(glob(f"{tmp_dir_path}*")):
-        if file_path.endswith("__original_size"):
+        file_name = path.basename(file_path)
+        if file_path.endswith("__original_size") or file_name.startswith("checkpoint__") or file_name == "columns.db" or file_name == "num_rows" or file_name == "line_length_total":
             continue
 
         extension = path.basename(file_path)
@@ -903,6 +961,7 @@ def combine_into_single_file(delimited_file_path, f4_file_path, tmp_dir_path, re
 
         for file_start_end in start_end_positions:
             file_path = f"{tmp_dir_path}{file_start_end[0]}"
+
             if file_start_end[0] == "":
                 file_path += "data"
 
@@ -910,7 +969,8 @@ def combine_into_single_file(delimited_file_path, f4_file_path, tmp_dir_path, re
                 while chunk := component_file.read(read_chunk_size):
                     f4_file.write(chunk)
 
-            remove(file_path)
+            remove_tmp_file(file_path)
+            remove_tmp_file(f"{file_path}__original_size")
 
 def skip_comments(in_file, comment_prefix):
     if comment_prefix is None:
