@@ -52,8 +52,7 @@ def write_str_to_file(file_path, the_string, save_original_size=True):
 def print_message(message, verbose=False, count=None):
     if verbose:
         if count:
-            log_count = log(count, 10)
-            if log_count == int(count):
+            if log(count, 10) % 1 == 0:
                 sys.stderr.write(f"{message} - count = {int(count)} - {datetime.now().strftime('%d/%m/%Y %H:%M:%S.%f')}\n")
                 sys.stderr.flush()
 
