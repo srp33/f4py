@@ -7,7 +7,7 @@ import gzip
 from fastnumbers import isint, isfloat, fast_int, fast_float
 from inspect import stack
 from itertools import chain
-from math import ceil, log
+from math import ceil, floor, log
 from mmap import mmap, PROT_READ, PROT_WRITE
 from msgspec import msgpack
 from operator import eq, ge, gt, le, lt, ne, itemgetter
@@ -52,8 +52,8 @@ def write_str_to_file(file_path, the_string, save_original_size=True):
 def print_message(message, verbose=False, count=None):
     if verbose:
         if count:
-            log_count = math.log(count, 10)
-            thresholds = [10**power for power in range(math.ceil(log_count), math.floor(log_count) - 1, -1)]
+            log_count = log(count, 10)
+            thresholds = [10**power for power in range(ceil(log_count), floor(log_count) - 1, -1)]
 
             for i, threshold in enumerate(thresholds):
                 if count % threshold == 0:
