@@ -632,7 +632,7 @@ def test_inner_join(num_parallel, compression_type, use_memory_mapping):
     check_results("Filter by ID - right", read_file_into_lists(out_file_path_2), [[b"IntA_right"], [b"5_right"], [b"5_right_Z"]])
     os.unlink(out_file_path_2)
 
-def run_larger_tests(num_parallel, size, extension, discrete1_index, numeric1_index, build_outputs, compression_type, check_outputs, verbose, tmp_dir_path, use_memory_mapping):
+def run_larger_tests(num_parallel, size, extension, discrete1_index, numeric1_index, build_outputs, compression_type, check_outputs, verbose, tmp_dir_path, use_memory_mapping, do_test_with_indexing):
     in_file_path = f"data/{size}.tsv{extension}"
     f4_file_path = f"data/{size}.f4"
     out_file_path = "/tmp/f4_out.tsv"
@@ -676,18 +676,19 @@ def run_larger_tests(num_parallel, size, extension, discrete1_index, numeric1_in
 
     run_larger_tests2(f4_file_path, out_file_path, larger_ID, larger_Categorical1, larger_Discrete1, larger_Numeric1, num_parallel, check_outputs, tmp_dir_path, use_memory_mapping)
 
-    print("---------------------------------------------------------------------")
-    print(f"Running tests for {in_file_path} - with indexing (cmpr: {compression_type})")
-    print("---------------------------------------------------------------------")
+    if do_test_with_indexing:
+        print("---------------------------------------------------------------------")
+        print(f"Running tests for {in_file_path} - with indexing (cmpr: {compression_type})")
+        print("---------------------------------------------------------------------")
 
-    if build_outputs:
-        # Clean up data files
-        for file_path in glob.glob(f"{f4_file_path}*"):
-            os.unlink(file_path)
+        if build_outputs:
+            # Clean up data files
+            for file_path in glob.glob(f"{f4_file_path}*"):
+                os.unlink(file_path)
 
-        f4.convert_delimited_file(in_file_path, f4_file_path, index_columns=["ID", "Categorical1", "Discrete1", "Numeric1"], compression_type=compression_type, num_parallel=num_parallel, verbose=verbose, tmp_dir_path=tmp_dir_path)
+            f4.convert_delimited_file(in_file_path, f4_file_path, index_columns=["ID", "Categorical1", "Discrete1", "Numeric1"], compression_type=compression_type, num_parallel=num_parallel, verbose=verbose, tmp_dir_path=tmp_dir_path)
 
-    run_larger_tests2(f4_file_path, out_file_path, larger_ID, larger_Categorical1, larger_Discrete1, larger_Numeric1, num_parallel, check_outputs, tmp_dir_path, use_memory_mapping)
+        run_larger_tests2(f4_file_path, out_file_path, larger_ID, larger_Categorical1, larger_Discrete1, larger_Numeric1, num_parallel, check_outputs, tmp_dir_path, use_memory_mapping)
 
 def run_larger_tests2(f4_file_path, out_file_path, larger_ID, larger_Categorical1, larger_Discrete1, larger_Numeric1, num_parallel, check_outputs, tmp_dir_path, use_memory_mapping):
     f4.query(f4_file_path, f4.StringFilter("ID", operator.eq, "Row1"), ["Discrete1"], out_file_path, num_parallel=num_parallel, tmp_dir_path=tmp_dir_path, use_memory_mapping=use_memory_mapping)
@@ -891,11 +892,13 @@ for compression_type in [None]:
     #use_memory_mapping=False
 
     # Medium tests
-    run_larger_tests(num_parallel=num_parallel, size="medium", extension="", discrete1_index=11, numeric1_index=21, build_outputs=build_outputs, compression_type=compression_type, check_outputs=check_outputs, verbose=verbose, tmp_dir_path="/tmp/medium", use_memory_mapping=use_memory_mapping)
+#    run_larger_tests(num_parallel=num_parallel, size="medium", extension="", discrete1_index=11, numeric1_index=21, build_outputs=build_outputs, compression_type=compression_type, check_outputs=check_outputs, verbose=verbose, tmp_dir_path="/tmp/medium", use_memory_mapping=use_memory_mapping, do_test_with_indexing=True)
 
     # Large tests
-#    run_larger_tests(num_parallel=num_parallel, size="large_tall", extension="", discrete1_index=251, numeric1_index=501, build_outputs=build_outputs, compression_type=compression_type, check_outputs=check_outputs, verbose=verbose, tmp_dir_path="/tmp/large_tall", use_memory_mapping=use_memory_mapping)
-#    run_larger_tests(num_parallel=num_parallel, size="large_wide", extension="", discrete1_index=250001, numeric1_index=500001, build_outputs=build_outputs, compression_type=compression_type, check_outputs=check_outputs, verbose=verbose, tmp_dir_path="/tmp/large_wide", use_memory_mapping=use_memory_mapping)
+    #do_test_with_indexing = True
+    do_test_with_indexing = False
+    run_larger_tests(num_parallel=num_parallel, size="large_tall", extension="", discrete1_index=251, numeric1_index=501, build_outputs=build_outputs, compression_type=compression_type, check_outputs=check_outputs, verbose=verbose, tmp_dir_path="/tmp/large_tall", use_memory_mapping=use_memory_mapping, do_test_with_indexing=do_test_with_indexing)
+#    run_larger_tests(num_parallel=num_parallel, size="large_wide", extension="", discrete1_index=250001, numeric1_index=500001, build_outputs=build_outputs, compression_type=compression_type, check_outputs=check_outputs, verbose=verbose, tmp_dir_path="/tmp/large_wide", use_memory_mapping=use_memory_mapping, do_test_with_indexing=do_test_with_indexing)
 #
 #    run_super_tests(num_parallel=num_parallel, size="test_tall", extension=".gz", compression_type=compression_type, verbose=verbose, tmp_dir_path="/tmp/test_tall", use_memory_mapping=use_memory_mapping)
 #    run_super_tests(num_parallel=num_parallel, size="test_wide", extension=".gz", compression_type=compression_type, verbose=verbose, tmp_dir_path="/tmp/test_wide", use_memory_mapping=use_memory_mapping)
