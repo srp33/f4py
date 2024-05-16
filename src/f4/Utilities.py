@@ -52,11 +52,17 @@ def write_str_to_file(file_path, the_string, save_original_size=True):
 def print_message(message, verbose=False, count=None):
     if verbose:
         if count:
-            for y in range(20, 0, -1):
-                if count <= 10**y and count % 10**(y - 1) == 0:
-                    sys.stderr.write(f"{message} - count = {int(count)} - {datetime.now().strftime('%d/%m/%Y %H:%M:%S.%f')}\n")
-                    sys.stderr.flush()
+            # for y in range(20, 0, -1):
+            #     if count <= 10**y and count % 10**(y - 1) == 0:
+            #         sys.stderr.write(f"{message} - count = {int(count)} - {datetime.now().strftime('%d/%m/%Y %H:%M:%S.%f')}\n")
+            #         sys.stderr.flush()
+            #         break
+            power = 20
+            while power > 0:
+                if count % 10**power == 0:
+                    sys.stderr.write(f"{message} - count = {int(count)} - {datetime.now():%d/%m/%Y %H:%M:%S.%f}\n")
                     break
+                power -= 1
         else:
             sys.stderr.write(f"{message} - {datetime.now().strftime('%d/%m/%Y %H:%M:%S.%f')}\n")
             sys.stderr.flush()
