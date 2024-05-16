@@ -7,7 +7,7 @@ import gzip
 from fastnumbers import isint, isfloat, fast_int, fast_float
 from inspect import stack
 from itertools import chain
-from math import ceil, floor, log
+from math import ceil, log
 from mmap import mmap, PROT_READ, PROT_WRITE
 from msgspec import msgpack
 from operator import eq, ge, gt, le, lt, ne, itemgetter
@@ -53,15 +53,22 @@ def print_message(message, verbose=False, count=None):
     if verbose:
         if count:
             log_count = log(count, 10)
-            thresholds = [10**power for power in range(ceil(log_count), floor(log_count) - 1, -1)]
+            if log_count == int(count):
+                sys.stderr.write(f"{message} - count = {int(count)} - {datetime.now().strftime('%d/%m/%Y %H:%M:%S.%f')}\n")
+                sys.stderr.flush()
 
-            for i, threshold in enumerate(thresholds):
-                if count % threshold == 0:
-                    sys.stderr.write(f"{message} - count = {int(count)} - {datetime.now().strftime('%d/%m/%Y %H:%M:%S.%f')}\n")
-                    sys.stderr.flush()
-                    break
-                elif count > threshold:
-                    break
+            # log_count = log(count, 10)
+            # These calculations take a while, so you could find a way to reduce the number
+            # of times they are done.
+            # thresholds = [10**power for power in range(ceil(log_count), floor(log_count) - 1, -1)]
+            #
+            # for i, threshold in enumerate(thresholds):
+            #     if count % threshold == 0:
+            #         sys.stderr.write(f"{message} - count = {int(count)} - {datetime.now().strftime('%d/%m/%Y %H:%M:%S.%f')}\n")
+            #         sys.stderr.flush()
+            #         break
+            #     elif count > threshold:
+            #         break
         else:
             sys.stderr.write(f"{message} - {datetime.now().strftime('%d/%m/%Y %H:%M:%S.%f')}\n")
             sys.stderr.flush()
