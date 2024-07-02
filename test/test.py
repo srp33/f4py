@@ -873,15 +873,15 @@ def run_super_test(description, fltr, select_columns, num_parallel, tmp_dir_path
 
     print(f"  {elapsed_time:.2f} seconds, {num_lines} lines in output file")
 
-#run_all_small_tests()
+run_all_small_tests()
 #sys.exit()
 
-for compression_type in [None]:
+#for compression_type in [None]:
 #for compression_type in ["zstd"]:
-#for compression_type in [None, "zstd"]:
+for compression_type in [None, "zstd"]:
 #    num_parallel = 1
-#    num_parallel = 4
-    num_parallel = 16
+    num_parallel = 4
+#    num_parallel = 16
     build_outputs = True
     #build_outputs = False
     #verbose = True
@@ -894,10 +894,10 @@ for compression_type in [None]:
     do_test_with_indexing = False
 
     # Medium tests
-#    run_larger_tests(num_parallel=num_parallel, size="medium", extension="", discrete1_index=11, numeric1_index=21, build_outputs=build_outputs, compression_type=compression_type, check_outputs=check_outputs, verbose=verbose, tmp_dir_path="/tmp/medium", use_memory_mapping=use_memory_mapping, do_test_with_indexing=do_test_with_indexing)
+    run_larger_tests(num_parallel=num_parallel, size="medium", extension="", discrete1_index=11, numeric1_index=21, build_outputs=build_outputs, compression_type=compression_type, check_outputs=check_outputs, verbose=verbose, tmp_dir_path="/tmp/medium", use_memory_mapping=use_memory_mapping, do_test_with_indexing=do_test_with_indexing)
 
     # Large tests
-    run_larger_tests(num_parallel=num_parallel, size="large_tall", extension="", discrete1_index=251, numeric1_index=501, build_outputs=build_outputs, compression_type=compression_type, check_outputs=check_outputs, verbose=verbose, tmp_dir_path="/tmp/large_tall", use_memory_mapping=use_memory_mapping, do_test_with_indexing=do_test_with_indexing)
+#    run_larger_tests(num_parallel=num_parallel, size="large_tall", extension="", discrete1_index=251, numeric1_index=501, build_outputs=build_outputs, compression_type=compression_type, check_outputs=check_outputs, verbose=verbose, tmp_dir_path="/tmp/large_tall", use_memory_mapping=use_memory_mapping, do_test_with_indexing=do_test_with_indexing)
 #    run_larger_tests(num_parallel=num_parallel, size="large_wide", extension="", discrete1_index=250001, numeric1_index=500001, build_outputs=build_outputs, compression_type=compression_type, check_outputs=check_outputs, verbose=verbose, tmp_dir_path="/tmp/large_wide", use_memory_mapping=use_memory_mapping, do_test_with_indexing=do_test_with_indexing)
 #
 #    run_super_tests(num_parallel=num_parallel, size="test_tall", extension=".gz", compression_type=compression_type, verbose=verbose, tmp_dir_path="/tmp/test_tall", use_memory_mapping=use_memory_mapping)

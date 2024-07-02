@@ -1175,7 +1175,7 @@ def find_positions_g(file_data, data_file_key, value_coords, fltr, start_search_
     if largest_value == b"":
         return start_search_position, start_search_position
 
-    matching_position = search(file_data, data_file_key, value_coords, fltr, 0, end_search_position, end_search_position, all_false_operator)
+    matching_position = search(file_data, data_file_key, value_coords, fltr, start_search_position, end_search_position, end_search_position, all_false_operator)
 
     return matching_position + 1, end_search_position
 
@@ -1194,7 +1194,7 @@ def find_positions_l(file_data, data_file_key, value_coords, fltr, start_search_
     if all_true_operator(fltr._get_conversion_function()(largest_value), fltr.value):
         return start_search_position, end_search_position
 
-    matching_position = search(file_data, data_file_key, value_coords, fltr, 0, end_search_position, end_search_position, all_true_operator)
+    matching_position = search(file_data, data_file_key, value_coords, fltr, start_search_position, end_search_position, end_search_position, all_true_operator)
 
     return start_search_position, matching_position + 1
 
